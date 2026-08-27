@@ -1,0 +1,28 @@
+server:
+  port: 8084
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+spring:
+  application:
+    name: approval-service
+  config.import: optional:file:../.env[.properties],optional:file:.env[.properties],optional:nacos:approval-service.yaml?group=LAB_BOOKING
+  cloud.nacos:
+    discovery:
+      server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      group: LAB_BOOKING
+      service: approval-service
+    config:
+      server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      group: LAB_BOOKING
+      file-extension: yaml
+  datasource:
+    url: jdbc:mysql://localhost:3306/lab_approval?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD}
+  jpa.hibernate.ddl-auto: update
+security:
+  jwt-secret: ${JWT_SECRET}
+  internal-token: ${INTERNAL_SERVICE_TOKEN}

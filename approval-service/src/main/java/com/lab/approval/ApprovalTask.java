@@ -1,0 +1,17 @@
+package com.lab.approval;
+import jakarta.persistence.*;
+import java.time.LocalDateTime;
+@Entity public class ApprovalTask{
+    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
+    public Long bookingId;
+    public Long applicantUserId;
+    public int level;
+    public String approverRole;
+    public Long assignedUserId;
+    public String status="PENDING";
+    public LocalDateTime deadline;
+    public LocalDateTime completedAt;
+    public String comment;
+    @Version public int version;
+    public LocalDateTime createdAt=LocalDateTime.now();
+}
