@@ -138,6 +138,79 @@ CREATE TABLE IF NOT EXISTS resource_manager (
   UNIQUE KEY uk_resource_manager(resource_id, user_id, manager_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS asset_category (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(100) NOT NULL UNIQUE,
+  serialized BOOLEAN NOT NULL DEFAULT TRUE,
+  high_value BOOLEAN NOT NULL DEFAULT FALSE,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  description VARCHAR(500) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  version INT NOT NULL DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS asset (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  asset_no VARCHAR(50) NOT NULL UNIQUE,
+  name VARCHAR(100) NOT NULL,
+  category_id BIGINT NOT NULL,
+  resource_id BIGINT NULL,
+  serial_no VARCHAR(100) NULL UNIQUE,
+  brand VARCHAR(100) NULL,
+  model VARCHAR(100) NULL,
+  specification VARCHAR(500) NULL,
+  status VARCHAR(30) NOT NULL DEFAULT 'IN_STOCK',
+  location VARCHAR(200) NULL,
+  custodian_user_id BIGINT NULL,
+  purchase_date DATE NULL,
+  warranty_until DATE NULL,
+  original_cost DECIMAL(14,2) NULL,
+  remark VARCHAR(1000) NULL,
+  deleted BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  version INT NOT NULL DEFAULT 0,
+  KEY idx_asset_status_category(status, category_id),
+  KEY idx_asset_resource(resource_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS asset_status_history (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  asset_id BIGINT NOT NULL,
+  from_status VARCHAR(30) NULL,
+  to_status VARCHAR(30) NOT NULL,
+  reason VARCHAR(500) NULL,
+  operator_id BIGINT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  KEY idx_asset_history(asset_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS maintenance_ticket (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  ticket_no VARCHAR(32) NOT NULL UNIQUE,
+  asset_id BIGINT NOT NULL,
+  reported_by BIGINT NULL,
+  previous_asset_status VARCHAR(30) NULL,
+  report_type VARCHAR(30) NOT NULL DEFAULT 'MALFUNCTION',
+  severity VARCHAR(20) NOT NULL DEFAULT 'MEDIUM',
+  description VARCHAR(2000) NOT NULL,
+  status VARCHAR(30) NOT NULL DEFAULT 'REPORTED',
+  assigned_to BIGINT NULL,
+  estimated_cost DECIMAL(14,2) NULL,
+  actual_cost DECIMAL(14,2) NULL,
+  resolution VARCHAR(2000) NULL,
+  processed_by BIGINT NULL,
+  reported_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  processed_at DATETIME(3) NULL,
+  closed_at DATETIME(3) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  version INT NOT NULL DEFAULT 0,
+  KEY idx_maintenance_status(status, created_at),
+  KEY idx_maintenance_asset(asset_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 USE lab_booking;
 CREATE TABLE IF NOT EXISTS booking (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -292,6 +365,12 @@ CREATE TABLE IF NOT EXISTS approval_node (
 CREATE TABLE IF NOT EXISTS approval_task (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   booking_id BIGINT NOT NULL,
+  applicant_user_id BIGINT NULL,
+  applicant_name VARCHAR(50) NULL,
+  resource_id BIGINT NULL,
+  resource_name VARCHAR(100) NULL,
+  start_time DATETIME(3) NULL,
+  end_time DATETIME(3) NULL,
   flow_version INT NOT NULL DEFAULT 1,
   level TINYINT NOT NULL,
   sequence_no INT NOT NULL DEFAULT 1,

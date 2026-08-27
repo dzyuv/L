@@ -402,8 +402,9 @@ header {
 .approve-btn, .reject-btn { border: 0; border-radius: 5px; padding: 8px 12px; font-size: 12px; }
 .approve-btn { background: #1b5548; color: #fff; }
 .reject-btn { background: #f3e8e5; color: #a15f55; }
-.teacher-resource-row { cursor: default; }
-.teacher-resource-row:hover { background: #fff; }
+.teacher-resource-row { cursor: pointer; width: 100%; text-align: left; border: 0; }
+.teacher-resource-row:hover { background: #f4faf7; }
+.teacher-book-action { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; color: #3d7a63; font-size: 11px; white-space: nowrap; }
 @media (max-width: 800px) {
   .approval-row { align-items: flex-start; flex-direction: column; }
   .approval-actions { width: 100%; }

@@ -9,8 +9,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     @ExceptionHandler(BusinessException.class) ResponseEntity<ApiResponse<Void>> business(BusinessException e, HttpServletRequest r){
         return ResponseEntity.status(e.status()).body(ApiResponse.error(e.code(), e.getMessage(), id(r)));
     }
@@ -23,6 +26,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiResponse.error("INVALID_ARGUMENT","Request format is invalid",id(r)));
     }
     @ExceptionHandler(Exception.class) ResponseEntity<ApiResponse<Void>> other(Exception e, HttpServletRequest r){
+        log.error("Unhandled request failure: {} {}", r.getMethod(), r.getRequestURI(), e);
         return ResponseEntity.internalServerError().body(ApiResponse.error("INTERNAL_ERROR", "Internal server error", id(r)));
     }
     private String id(HttpServletRequest r){

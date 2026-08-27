@@ -25,7 +25,9 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
     @Override
     public List<ApprovalTask> mine(HttpServletRequest request) {
         Long userId = currentUser(request);
-        return tasks.findByAssignedUserIdAndStatus(userId, "PENDING");
+        return tasks.findByAssignedUserIdAndStatus(userId, "PENDING").stream()
+                .filter(task -> !Objects.equals(task.applicantUserId, userId))
+                .toList();
     }
 
     @Override

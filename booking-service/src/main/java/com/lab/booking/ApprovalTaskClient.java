@@ -20,16 +20,17 @@ public class ApprovalTaskClient {
         internalToken=token;
     }
 
-    public void create(Long bookingId,Long applicantUserId,int level,Long approverUserId,String authorization){
+    public void create(Booking booking,Long approverUserId,String authorization){
         try{
             client.post().uri("/api/v1/internal/approvals/tasks")
                 .header(HttpHeaders.AUTHORIZATION,authorization==null?"":authorization)
                 .header(InternalServiceGuard.HEADER,internalToken)
-                .body(new CreateTask(bookingId,applicantUserId,level,approverUserId)).retrieve().toBodilessEntity();
+                .body(new CreateTask(booking.id,booking.userId,booking.applicantNameSnapshot,booking.resourceId,booking.resourceNameSnapshot,booking.startTime,booking.endTime,booking.approvalLevelSnapshot,approverUserId)).retrieve().toBodilessEntity();
         }catch(RestClientException exception){
             throw new BusinessException("APPROVAL_SERVICE_UNAVAILABLE","Approval service is unavailable",HttpStatus.SERVICE_UNAVAILABLE);
         }
     }
 
-    private record CreateTask(Long bookingId,Long applicantUserId,int level,Long assignedUserId){}
+    private record CreateTask(Long bookingId,Long applicantUserId,String applicantName,Long resourceId,String resourceName,
+                              java.time.LocalDateTime startTime,java.time.LocalDateTime endTime,int level,Long assignedUserId){}
 }

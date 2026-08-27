@@ -17,7 +17,10 @@ public class InternalApprovalController {
     private final ApprovalInternalService service;
     public InternalApprovalController(ApprovalInternalService service) { this.service = service; }
 
-    public record CreateTask(@NotNull Long bookingId, @NotNull Long applicantUserId, @Min(1) int level, @NotNull Long assignedUserId) {}
+    public record CreateTask(@NotNull Long bookingId, @NotNull Long applicantUserId, String applicantName,
+                             @NotNull Long resourceId, String resourceName,
+                             @NotNull java.time.LocalDateTime startTime, @NotNull java.time.LocalDateTime endTime,
+                             @Min(1) int level, @NotNull Long assignedUserId) {}
 
     @PostMapping("/tasks")
     public ApiResponse<ApprovalTask> create(@Valid @RequestBody CreateTask request, HttpServletRequest servletRequest) {

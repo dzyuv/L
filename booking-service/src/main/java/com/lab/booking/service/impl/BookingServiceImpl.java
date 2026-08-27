@@ -77,7 +77,7 @@ public class BookingServiceImpl implements BookingService {
             throw new BusinessException("BOOKING_CONFLICT", "The selected time is already occupied", HttpStatus.CONFLICT);
         }
         if (rule.approvalLevel() > 0) {
-            approvalTasks.create(booking.id, userId, rule.approvalLevel(), rule.approverUserId(), servletRequest.getHeader("Authorization"));
+            approvalTasks.create(booking, rule.approverUserId(), servletRequest.getHeader("Authorization"));
         }
         return booking;
     }

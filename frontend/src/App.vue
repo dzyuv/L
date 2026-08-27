@@ -2,8 +2,10 @@
 import { ref, computed, onMounted } from "vue";
 import axios from "axios";
 import AdminDashboard from "./AdminDashboard.vue";
+import UserMaintenance from "./UserMaintenance.vue";
 import {
   CalendarDays,
+  ChevronRight,
   ClipboardList,
   LogIn,
   LogOut,
@@ -239,9 +241,9 @@ async function load() {
     if (isTeacher.value) {
       const approvalResponse = await axios.get("/api/v1/approvals/mine");
       approvals.value = approvalResponse.data?.data || [];
-    } else {
-      await loadAvailability(resources.value);
     }
+    // Teachers retain the complete booking workflow, including calendar slots.
+    await loadAvailability(resources.value);
   } catch (e) {
     notice.value = e.response?.data?.message || "服务暂不可用";
   } finally {
@@ -491,10 +493,10 @@ onMounted(() => {
       </section>
       <div class="content-grid">
         <section class="panel">
-          <div class="panel-head"><div><h2>待审批预约</h2><p>审核学生提交的资源使用申请</p></div><button class="ghost" @click="load"><RefreshCw :size="16" />刷新</button></div>
+          <div class="panel-head"><div><h2>待审批预约</h2><p>审核授权资源范围内、由其他用户提交的申请</p></div><button class="ghost" @click="load"><RefreshCw :size="16" />刷新</button></div>
           <div class="approval-list">
             <article v-for="task in approvals" :key="task.id" class="approval-row">
-              <div><b>预约 #{{ task.bookingId }}</b><span>申请人：{{ task.applicantName || task.userName || '学生' }}</span><small>{{ task.resourceName || '资源申请' }} · {{ task.startTime || '' }} - {{ task.endTime || '' }}</small></div>
+              <div><b>预约 #{{ task.bookingId }}</b><span>申请人：{{ task.applicantName || task.userName || `用户 ${task.applicantUserId}` }}</span><small>{{ task.resourceName || '资源申请' }} · {{ task.startTime?.replace('T', ' ') || '' }} - {{ task.endTime?.replace('T', ' ') || '' }}</small></div>
               <div class="approval-actions"><button class="approve-btn" @click="processApproval(task, 'approve')">通过</button><button class="reject-btn" @click="processApproval(task, 'reject')">驳回</button></div>
             </article>
             <div v-if="!approvals.length" class="empty">暂无待审批预约</div>
@@ -503,12 +505,13 @@ onMounted(() => {
         <section class="panel">
           <div class="panel-head"><div><h2>资源概览</h2><p>实验室和设备的当前容量</p></div><CalendarDays :size="20" /></div>
           <div class="resource-list teacher-resource-list">
-            <div v-for="r in resources" :key="r.id" class="resource-row teacher-resource-row"><div class="resource-icon"><CalendarDays :size="20" /></div><div class="resource-info"><b>{{ r.name }}</b><span>{{ r.location }} · 容量 {{ r.capacity }} 人</span></div><span class="resource-status">{{ r.status === 'ACTIVE' ? '正常' : r.status }}</span></div>
+            <button v-for="r in resources" :key="r.id" class="resource-row teacher-resource-row" @click="selectResource(r)"><div class="resource-icon"><CalendarDays :size="20" /></div><div class="resource-info"><b>{{ r.name }}</b><span>{{ r.location }} · 容量 {{ r.capacity }} 人</span></div><span class="resource-status">{{ r.status === 'ACTIVE' ? '正常' : r.status }}</span><span class="teacher-book-action">申请预约 <ChevronRight :size="15" /></span></button>
             <div v-if="!resources.length" class="empty">暂无资源数据</div>
           </div>
         </section>
       </div>
       <section class="panel history"><div class="panel-head"><div><h2>我的预约</h2><p>教师账号提交的预约记录</p></div></div><div class="table"><div class="tr th"><span>预约编号</span><span>资源</span><span>时间</span><span>状态</span><span></span></div><div v-for="b in bookings" :key="b.id" class="tr"><span class="mono">{{ b.bookingNo }}</span><span>{{ b.resourceNameSnapshot }}</span><span>{{ b.startTime?.replace('T', ' ') }} - {{ b.endTime?.slice(11) }}</span><span>{{ b.status }}</span><span></span></div><div v-if="!bookings.length" class="empty">暂无预约记录</div></div></section>
+      <UserMaintenance :key="`teacher-maintenance-${user?.id}`" />
       <div class="notice" v-if="notice">{{ notice }}</div>
     </main>
     <main v-else class="dashboard">
@@ -642,6 +645,7 @@ onMounted(() => {
           <div v-if="!bookings.length" class="empty">还没有预约记录</div>
         </div>
       </section>
+      <UserMaintenance :key="`student-maintenance-${user?.id}`" />
     </main>
     <div v-if="bookingModalOpen" class="booking-modal-backdrop" @click.self="closeBookingModal">
       <section class="booking-modal" role="dialog" aria-modal="true">

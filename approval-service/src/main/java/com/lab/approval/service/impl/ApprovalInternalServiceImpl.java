@@ -32,6 +32,11 @@ public class ApprovalInternalServiceImpl implements ApprovalInternalService {
         }
         task.bookingId = request.bookingId();
         task.applicantUserId = request.applicantUserId();
+        task.applicantName = request.applicantName();
+        task.resourceId = request.resourceId();
+        task.resourceName = request.resourceName();
+        task.startTime = request.startTime();
+        task.endTime = request.endTime();
         task.level = request.level();
         task.approverRole = "RESOURCE_MANAGER";
         task.assignedUserId = request.assignedUserId();

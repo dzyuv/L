@@ -16,6 +16,8 @@ public interface ResourceManagementService {
     Resource update(Long id, ResourceController.ResourceRequest request, HttpServletRequest servletRequest);
     List<?> schedule(Long id, List<ResourceController.ScheduleRequest> requests, HttpServletRequest servletRequest);
     Object addManager(Long id, ResourceController.ManagerRequest request, HttpServletRequest servletRequest);
+    List<?> listManagers(Long id, HttpServletRequest servletRequest);
+    void removeManager(Long id, Long managerId, HttpServletRequest servletRequest);
     Map<String, Object> calendar(Long id, LocalDate start, LocalDate end);
     ResourceController.BookingRule bookingRule(Long id, LocalDateTime startTime, LocalDateTime endTime, int participants, HttpServletRequest servletRequest);
 }
