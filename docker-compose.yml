@@ -1,0 +1,22 @@
+services:
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in the environment}
+      MYSQL_DATABASE: lab_user
+    ports: ["3306:3306"]
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes: ["mysql_data:/var/lib/mysql"]
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    environment:
+      MODE: standalone
+      NACOS_AUTH_ENABLE: "false"
+      JVM_XMS: 256m
+      JVM_XMX: 256m
+    ports: ["8848:8848", "9848:9848", "9849:9849"]
+# Named volume: MySQL data survives container recreation.
+volumes: { mysql_data: {} }
