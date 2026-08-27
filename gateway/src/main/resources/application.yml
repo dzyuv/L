@@ -1,0 +1,49 @@
+server: { port: 8080 }
+spring:
+  application.name: gateway
+  config.import: optional:file:../.env[.properties],optional:file:.env[.properties],optional:nacos:gateway.yaml?group=LAB_BOOKING
+  cloud.nacos:
+    discovery:
+      server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      group: LAB_BOOKING
+      service: gateway
+    config:
+      server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      group: LAB_BOOKING
+      file-extension: yaml
+  cloud.gateway.routes:
+    - id: user-service
+      uri: lb://user-service
+      predicates:
+        - Path=/api/v1/user/**
+
+    - id: resource-service
+      uri: lb://resource-service
+      predicates:
+        - Path=/api/v1/resources/**,/api/v1/admin/resources/**,/api/v1/admin/resource-types/**
+
+    - id: booking-service
+      uri: lb://booking-service
+      predicates:
+      - Path=/api/v1/bookings/**
+
+
+    - id: approval-service
+      uri: lb://approval-service
+      predicates:
+        - Path=/api/v1/approvals/**
+
+    - id: notification-service
+      uri: lb://notification-service
+      predicates:
+        - Path=/api/v1/notifications/**
+
+    - id: statistics-service
+      uri: lb://statistics-service
+      predicates:
+        - Path=/api/v1/statistics/**
+
+    - id: system-service
+      uri: lb://system-service
+      predicates:
+        - Path=/api/v1/admin/configs/**
