@@ -1,0 +1,20 @@
+package com.lab.common.api;
+
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.filter.CharacterEncodingFilter;
+
+@Configuration
+public class Utf8Config {
+    @Bean
+    public FilterRegistrationBean<CharacterEncodingFilter> utf8EncodingFilter() {
+        CharacterEncodingFilter filter = new CharacterEncodingFilter();
+        filter.setEncoding("UTF-8");
+        filter.setForceEncoding(true);
+        FilterRegistrationBean<CharacterEncodingFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.addUrlPatterns("/*");
+        registration.setOrder(Integer.MIN_VALUE);
+        return registration;
+    }
+}
