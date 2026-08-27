@@ -1,0 +1,62 @@
+package com.lab.resource.service.impl;
+
+import com.lab.common.api.*;
+import com.lab.common.exception.BusinessException;
+import com.lab.resource.*;
+import com.lab.resource.controller.ResourceController;
+import com.lab.resource.service.ResourceManagementService;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import java.time.*;
+import java.util.*;
+
+@Service
+public class ResourceManagementServiceImpl implements ResourceManagementService {
+    private final ResourceRepository resources; private final ResourceTypeRepository types; private final ScheduleRepository schedules;
+    private final ClosureRepository closures; private final ResourceManagerRepository managers; private final RoleGuard roleGuard; private final InternalServiceGuard internalServices;
+    public ResourceManagementServiceImpl(ResourceRepository resources, ResourceTypeRepository types, ScheduleRepository schedules, ClosureRepository closures, ResourceManagerRepository managers, RoleGuard roleGuard, InternalServiceGuard internalServices) {
+        this.resources=resources; this.types=types; this.schedules=schedules; this.closures=closures; this.managers=managers; this.roleGuard=roleGuard; this.internalServices=internalServices;
+    }
+    public List<Resource> list() { return resources.findAll(); }
+    public Resource get(Long id) { return resource(id); }
+    public Object createType(ResourceController.TypeRequest request, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); ResourceType type=new ResourceType(); type.name=request.name(); type.defaultApprovalLevel=request.defaultApprovalLevel(); return types.save(type); }
+    public Resource create(ResourceController.ResourceRequest request, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); requireType(request.typeId()); Resource resource=new Resource(); apply(resource,request); return resources.save(resource); }
+    public Resource update(Long id, ResourceController.ResourceRequest request, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); requireType(request.typeId()); Resource resource=resource(id); apply(resource,request); return resources.save(resource); }
+    public List<?> schedule(Long id, List<ResourceController.ScheduleRequest> requests, HttpServletRequest servletRequest) {
+        roleGuard.requireAdmin(servletRequest); resource(id); schedules.findAll().stream().filter(item -> item.resourceId.equals(id)).forEach(schedules::delete);
+        List<ResourceSchedule> result=new ArrayList<>();
+        for (ResourceController.ScheduleRequest request:requests) {
+            if (!request.openTime().isBefore(request.closeTime())) throw new BusinessException("INVALID_SCHEDULE", "Open time must be before close time", HttpStatus.BAD_REQUEST);
+            ResourceSchedule schedule=new ResourceSchedule(); schedule.resourceId=id; schedule.weekday=request.weekday(); schedule.openTime=request.openTime(); schedule.closeTime=request.closeTime(); schedule.slotMinutes=request.slotMinutes(); schedule.maxDurationMinutes=request.maxDurationMinutes(); result.add(schedule);
+        }
+        return schedules.saveAll(result);
+    }
+    public Object addManager(Long id, ResourceController.ManagerRequest request, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); resource(id); ResourceManager manager=new ResourceManager(); manager.resourceId=id; manager.userId=request.userId(); manager.managerType=request.managerType(); return managers.save(manager); }
+    public Map<String,Object> calendar(Long id, LocalDate start, LocalDate end) {
+        Resource resource=resource(id); List<Map<String,Object>> days=new ArrayList<>();
+        for(LocalDate date=start;!date.isAfter(end);date=date.plusDays(1)) days.add(Map.of("date",date,"open",schedules.findByResourceIdAndWeekdayAndEnabledTrue(id,date.getDayOfWeek().getValue())));
+        return Map.of("resource",resource,"days",days,"calculatedUntil",Instant.now());
+    }
+    public ResourceController.BookingRule bookingRule(Long id, LocalDateTime startTime, LocalDateTime endTime, int participants, HttpServletRequest servletRequest) {
+        internalServices.require(servletRequest);
+        if(!startTime.isBefore(endTime)||!startTime.toLocalDate().equals(endTime.toLocalDate())) throw new BusinessException("INVALID_TIME","Booking interval must be within one day",HttpStatus.BAD_REQUEST);
+        if(!startTime.isAfter(LocalDateTime.now())) throw new BusinessException("INVALID_TIME","Booking start time must be in the future",HttpStatus.BAD_REQUEST);
+        Resource resource=resource(id); if(resource.deleted||!"ACTIVE".equals(resource.status)) throw new BusinessException("RESOURCE_UNAVAILABLE","Resource is not available",HttpStatus.UNPROCESSABLE_ENTITY);
+        ResourceType type=types.findById(resource.typeId).orElseThrow(()->new BusinessException("TYPE_NOT_FOUND","Resource type does not exist",HttpStatus.NOT_FOUND));
+        if(type.deleted||!type.enabled) throw new BusinessException("RESOURCE_UNAVAILABLE","Resource type is not available",HttpStatus.UNPROCESSABLE_ENTITY);
+        if(participants>resource.capacity) throw new BusinessException("CAPACITY_EXCEEDED","Participants exceed resource capacity",HttpStatus.BAD_REQUEST);
+        ResourceSchedule schedule=schedules.findByResourceIdAndWeekdayAndEnabledTrue(id,startTime.getDayOfWeek().getValue()).stream().filter(item->effective(item,startTime.toLocalDate())).filter(item->contains(item,startTime.toLocalTime(),endTime.toLocalTime())).findFirst().orElseThrow(()->new BusinessException("OUTSIDE_OPEN_HOURS","Booking interval is outside open hours",HttpStatus.UNPROCESSABLE_ENTITY));
+        long minutes=Duration.between(startTime,endTime).toMinutes();
+        if(startTime.getSecond()!=0||startTime.getNano()!=0||endTime.getSecond()!=0||endTime.getNano()!=0||minutes%schedule.slotMinutes!=0||Duration.between(startTime.toLocalDate().atTime(schedule.openTime),startTime).toMinutes()%schedule.slotMinutes!=0||minutes>Math.min(resource.maxDurationMinutes,schedule.maxDurationMinutes)) throw new BusinessException("INVALID_TIME","Booking interval does not match resource rules",HttpStatus.BAD_REQUEST);
+        if(closures.findByResourceIdAndStatusNot(id,"CANCELED").stream().anyMatch(item->item.startTime.isBefore(endTime)&&item.endTime.isAfter(startTime))) throw new BusinessException("RESOURCE_CLOSED","Resource is closed during this interval",HttpStatus.UNPROCESSABLE_ENTITY);
+        int approvalLevel=resource.approvalLevelOverride!=null?resource.approvalLevelOverride:type.defaultApprovalLevel;
+        Long approver=approvalLevel==0?null:managers.findFirstByResourceIdAndManagerTypeOrderByIdAsc(id,"APPROVER").map(item->item.userId).orElseThrow(()->new BusinessException("APPROVER_NOT_CONFIGURED","Resource has no configured approver",HttpStatus.UNPROCESSABLE_ENTITY));
+        return new ResourceController.BookingRule(resource.name,resource.capacity,schedule.slotMinutes,Math.min(resource.maxDurationMinutes,schedule.maxDurationMinutes),resource.needCheckin,approvalLevel,approver);
+    }
+    private Resource resource(Long id) { return resources.findById(id).orElseThrow(()->new BusinessException("NOT_FOUND","Resource does not exist",HttpStatus.NOT_FOUND)); }
+    private void requireType(Long id) { if(!types.existsById(id)) throw new BusinessException("TYPE_NOT_FOUND","Resource type does not exist",HttpStatus.NOT_FOUND); }
+    private void apply(Resource resource, ResourceController.ResourceRequest request) { resource.typeId=request.typeId(); resource.name=request.name(); resource.location=request.location(); resource.capacity=request.capacity(); resource.description=request.description(); resource.maxDurationMinutes=request.maxDurationMinutes(); resource.needCheckin=request.needCheckin(); }
+    private boolean effective(ResourceSchedule schedule,LocalDate date) { return (schedule.effectiveFrom==null||!date.isBefore(schedule.effectiveFrom))&&(schedule.effectiveTo==null||!date.isAfter(schedule.effectiveTo)); }
+    private boolean contains(ResourceSchedule schedule,LocalTime start,LocalTime end) { return !start.isBefore(schedule.openTime)&&!end.isAfter(schedule.closeTime); }
+}
