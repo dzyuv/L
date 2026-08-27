@@ -18,8 +18,13 @@ public class AuthController {
         this.userService = userService;
     }
 
-    public record Register(@NotBlank String employeeNo, @NotBlank String realName, @Size(min = 8) String password, @Email String email, String phone) {}
+    public record Register(@NotBlank @Size(max=50) String employeeNo,
+                           @NotBlank @Size(max=50) String realName,
+                           @NotBlank @Size(min=8,max=72) String password,
+                           @NotBlank @Email @Size(max=100) String email,
+                           @NotBlank @Size(max=30) String phone) {}
     public record Login(@NotBlank String username, @NotBlank String password) {}
+    public record Refresh(@NotBlank String refreshToken) {}
 
     @PostMapping("/register")
     public ApiResponse<?> register(@Valid @RequestBody Register request, HttpServletRequest servletRequest) {
@@ -29,6 +34,16 @@ public class AuthController {
     @PostMapping("/login")
     public ApiResponse<?> login(@Valid @RequestBody Login request, HttpServletRequest servletRequest) {
         return ApiResponse.success(userService.login(request), requestId(servletRequest));
+    }
+
+    @PostMapping("/token/refresh")
+    public ApiResponse<?> refresh(@Valid @RequestBody Refresh request,HttpServletRequest servletRequest){
+        return ApiResponse.success(userService.refresh(request.refreshToken()),requestId(servletRequest));
+    }
+
+    @PostMapping("/logout")
+    public ApiResponse<?> logout(@Valid @RequestBody Refresh request,HttpServletRequest servletRequest){
+        return ApiResponse.success(userService.logout(request.refreshToken(),servletRequest),requestId(servletRequest));
     }
 
     @GetMapping("/me")

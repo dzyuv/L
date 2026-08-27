@@ -17,6 +17,11 @@ spring:
       predicates:
         - Path=/api/v1/user/**
 
+    - id: user-admin-service
+      uri: lb://user-service
+      predicates:
+        - Path=/api/v1/admin/users/**,/api/v1/admin/roles/**
+
     - id: resource-service
       uri: lb://resource-service
       predicates:
@@ -27,11 +32,21 @@ spring:
       predicates:
       - Path=/api/v1/bookings/**
 
+    - id: booking-admin-service
+      uri: lb://booking-service
+      predicates:
+      - Path=/api/v1/admin/bookings/**,/api/v1/admin/violations/**
+
 
     - id: approval-service
       uri: lb://approval-service
       predicates:
         - Path=/api/v1/approvals/**
+
+    - id: approval-admin-service
+      uri: lb://approval-service
+      predicates:
+        - Path=/api/v1/admin/approval-flows/**
 
     - id: notification-service
       uri: lb://notification-service

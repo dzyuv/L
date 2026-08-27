@@ -6,12 +6,17 @@ import com.lab.statistics.StatisticsSnapshotRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
 import java.util.*;
+import com.lab.common.exception.BusinessException;
+import org.springframework.http.HttpStatus;
+import com.lab.common.api.RoleGuard;
 
 @Service
 public class StatisticsServiceImpl implements StatisticsService {
     private final StatisticsSnapshotRepository snapshots;
-    public StatisticsServiceImpl(StatisticsSnapshotRepository snapshots) { this.snapshots = snapshots; }
+    private final RoleGuard roleGuard;
+    public StatisticsServiceImpl(StatisticsSnapshotRepository snapshots, RoleGuard roleGuard) { this.snapshots = snapshots; this.roleGuard = roleGuard; }
     public Map<String, Object> usage(HttpServletRequest request) {
+        roleGuard.requireSystemAdmin(request);
         List<StatisticsSnapshot> items = snapshots.findTop100ByOrderByPeriodEndDesc();
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("items", items);

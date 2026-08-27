@@ -18,7 +18,7 @@ public class BookingController {
 
     public BookingController(BookingService service) { this.service = service; }
 
-    public record Create(@NotNull Long resourceId, @NotNull LocalDateTime startTime, @NotNull LocalDateTime endTime, @NotBlank String purpose, @Min(1) int participants) {}
+    public record Create(@NotNull Long resourceId, @NotNull LocalDateTime startTime, @NotNull LocalDateTime endTime, @NotBlank @Size(max = 500) String purpose, @Min(1) int participants) {}
 
     @PostMapping
     public ApiResponse<?> create(@Valid @RequestBody Create request, @RequestHeader(value = "Idempotency-Key", required = false) String key, HttpServletRequest servletRequest) {

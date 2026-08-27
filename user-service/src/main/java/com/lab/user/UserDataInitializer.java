@@ -23,6 +23,12 @@ public class UserDataInitializer {
         Role teacher=roles.findByCode("TEACHER").orElseGet(() -> {
             Role role=new Role(); role.code="TEACHER"; role.name="Teacher"; return roles.save(role);
         });
+        Role labAdmin=roles.findByCode("LAB_ADMIN").orElseGet(() -> {
+            Role role=new Role(); role.code="LAB_ADMIN"; role.name="Laboratory administrator"; return roles.save(role);
+        });
+        Role systemAdmin=roles.findByCode("SYSTEM_ADMIN").orElseGet(() -> {
+            Role role=new Role(); role.code="SYSTEM_ADMIN"; role.name="System administrator"; return roles.save(role);
+        });
         List.of(
             new String[]{"resource:read","查看资源"},
             new String[]{"booking:create","创建预约"},
@@ -56,5 +62,20 @@ public class UserDataInitializer {
             demo.roles.add(teacher);
             users.save(demo);
         }
+        createAdminIfMissing(users, encoder, "LAB20260001", "实验室管理员", "lab-admin@example.com", labAdmin, teacher);
+        createAdminIfMissing(users, encoder, "ADMIN20260001", "系统管理员", "system-admin@example.com", systemAdmin);
+    }
+
+    private void createAdminIfMissing(UserRepository users, PasswordEncoder encoder, String username,
+                                      String realName, String email, Role... assignedRoles) {
+        if (users.findByUsername(username).isPresent()) return;
+        User user = new User();
+        user.employeeNo = username;
+        user.username = username;
+        user.realName = realName;
+        user.passwordHash = encoder.encode("12345678");
+        user.email = email;
+        user.roles.addAll(List.of(assignedRoles));
+        users.save(user);
     }
 }

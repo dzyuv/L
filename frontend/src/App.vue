@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import axios from "axios";
+import AdminDashboard from "./AdminDashboard.vue";
 import {
   CalendarDays,
   ClipboardList,
@@ -37,6 +38,10 @@ const bookingForm = ref({
 });
 const loggedIn = computed(() => !!token.value);
 const isTeacher = computed(() => (user.value?.roles || []).includes("TEACHER"));
+const isSystemAdmin = computed(() => (user.value?.roles || []).includes("SYSTEM_ADMIN"));
+const isLabAdmin = computed(() => (user.value?.roles || []).includes("LAB_ADMIN"));
+const isAdmin = computed(() => isSystemAdmin.value || isLabAdmin.value);
+const roleLabel = computed(() => isSystemAdmin.value ? "系统管理员" : isLabAdmin.value ? "实验室管理员" : isTeacher.value ? "教师" : "学生");
 axios.defaults.baseURL = API_ORIGIN;
 axios.interceptors.request.use((c) => {
   if (token.value) c.headers.Authorization = `Bearer ${token.value}`;
@@ -216,14 +221,21 @@ async function login() {
 async function load() {
   loading.value = true;
   try {
-    const [r, b, m] = await Promise.all([
+    const m = await axios.get("/api/v1/user/me");
+    user.value = m.data.data;
+    if (isAdmin.value) {
+      const r = await axios.get("/api/v1/resources");
+      resources.value = r.data.data || [];
+      bookings.value = [];
+      approvals.value = [];
+      return;
+    }
+    const [r, b] = await Promise.all([
       axios.get("/api/v1/resources"),
       axios.get("/api/v1/bookings/my"),
-      axios.get("/api/v1/user/me"),
     ]);
     resources.value = r.data.data;
     bookings.value = b.data.data;
-    user.value = m.data.data;
     if (isTeacher.value) {
       const approvalResponse = await axios.get("/api/v1/approvals/mine");
       approvals.value = approvalResponse.data?.data || [];
@@ -417,7 +429,7 @@ onMounted(() => {
       <div class="header-actions">
         <span v-if="user" class="identity">
           <b>{{ user.realName || user.username || "当前用户" }}</b>
-          <small>学生</small>
+          <small>{{ roleLabel }}</small>
         </span>
         <button class="icon-btn" @click="load" title="刷新">
           <RefreshCw :size="18" />
@@ -462,6 +474,7 @@ onMounted(() => {
         </div>
       </aside>
     </main>
+    <AdminDashboard v-else-if="isAdmin" :user="user" :initial-resources="resources" />
     <main v-else-if="isTeacher" class="dashboard teacher-dashboard">
       <section class="intro">
         <div>

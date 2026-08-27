@@ -14,16 +14,20 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationRepository notifications;
     public NotificationServiceImpl(NotificationRepository notifications) { this.notifications = notifications; }
     public Map<String, Object> my(HttpServletRequest request) {
-        Long userId = request.getAttribute("userId") instanceof Long value ? value : null;
-        if (userId == null) return Map.of("items", List.of(), "page", 1, "size", 20, "total", 0);
+        Long userId = currentUser(request);
         List<Notification> items = notifications.findByUserIdOrderByCreatedAtDesc(userId);
         return Map.of("items", items, "page", 1, "size", items.size(), "total", items.size());
     }
     public Map<String, Object> markRead(Long id, HttpServletRequest request) {
-        Long userId = request.getAttribute("userId") instanceof Long value ? value : null;
+        Long userId = currentUser(request);
         Notification item = notifications.findById(id).orElseThrow(() -> new BusinessException("NOT_FOUND", "Notification does not exist", HttpStatus.NOT_FOUND));
         if (userId == null || !Objects.equals(item.userId, userId)) throw new BusinessException("FORBIDDEN", "Notification does not belong to current user", HttpStatus.FORBIDDEN);
         item.isRead = true; item.readAt = java.time.LocalDateTime.now(); notifications.save(item);
         return Map.of("id", item.id, "isRead", true);
+    }
+
+    private Long currentUser(HttpServletRequest request) {
+        if (request.getAttribute("userId") instanceof Long value) return value;
+        throw new BusinessException("UNAUTHORIZED", "Login required", HttpStatus.UNAUTHORIZED);
     }
 }

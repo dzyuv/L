@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
+import java.util.Objects;
 /** Validates the access token at every business service; identity headers are derived, never trusted. */
 public class JwtUserFilter extends OncePerRequestFilter {
     private final JwtKeyProvider keys;
@@ -21,18 +22,37 @@ public class JwtUserFilter extends OncePerRequestFilter {
     @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
         String header = request.getHeader("Authorization");
         if (header == null || !header.startsWith("Bearer ")) {
-            response.sendError(401, "缺少访问令牌");
+            unauthorized(request, response, "Access token is required");
             return;
         }
         try {
             Claims claims = Jwts.parser().verifyWith(keys.key()).build().parseSignedClaims(header.substring(7)).getPayload();
+            if(!"access".equals(claims.get("tokenType",String.class))){
+                unauthorized(request, response, "Access token is required");
+                return;
+            }
             request.setAttribute("userId", Long.valueOf(claims.getSubject()));
             request.setAttribute("username", claims.get("username", String.class));
+            request.setAttribute("realName", claims.get("realName", String.class));
             request.setAttribute("roles", claims.get("roles"));
             chain.doFilter(request, response);
         }
         catch (Exception ex) {
-            response.sendError(401, "访问令牌无效或已过期");
+            unauthorized(request, response, "Access token is invalid or expired");
         }
+    }
+
+    private void unauthorized(HttpServletRequest request, HttpServletResponse response, String message) throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setCharacterEncoding("UTF-8");
+        response.setContentType("application/json");
+        String requestId = Objects.toString(request.getAttribute(RequestIdFilter.HEADER), request.getHeader(RequestIdFilter.HEADER));
+        if (requestId == null) requestId = "";
+        response.getWriter().write("{\"code\":\"UNAUTHORIZED\",\"message\":\"" + escape(message)
+                + "\",\"data\":null,\"requestId\":\"" + escape(requestId) + "\"}");
+    }
+
+    private String escape(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

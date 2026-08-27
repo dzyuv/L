@@ -8,6 +8,8 @@ import java.util.*;
 
 public interface ResourceManagementService {
     List<Resource> list();
+    List<?> listTypes(HttpServletRequest servletRequest);
+    List<?> listSchedules(Long id, HttpServletRequest servletRequest);
     Resource get(Long id);
     Object createType(ResourceController.TypeRequest request, HttpServletRequest servletRequest);
     Resource create(ResourceController.ResourceRequest request, HttpServletRequest servletRequest);

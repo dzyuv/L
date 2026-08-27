@@ -8,6 +8,7 @@ import com.lab.resource.service.ResourceManagementService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import java.time.*;
 import java.util.*;
 
@@ -18,22 +19,30 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
     public ResourceManagementServiceImpl(ResourceRepository resources, ResourceTypeRepository types, ScheduleRepository schedules, ClosureRepository closures, ResourceManagerRepository managers, RoleGuard roleGuard, InternalServiceGuard internalServices) {
         this.resources=resources; this.types=types; this.schedules=schedules; this.closures=closures; this.managers=managers; this.roleGuard=roleGuard; this.internalServices=internalServices;
     }
-    public List<Resource> list() { return resources.findAll(); }
+    public List<Resource> list() { return resources.findAll().stream().filter(item -> !item.deleted && "ACTIVE".equals(item.status)).toList(); }
+    public List<?> listTypes(HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); return types.findAll().stream().filter(item -> !item.deleted).toList(); }
+    public List<?> listSchedules(Long id, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); resource(id); return schedules.findByResourceIdOrderByWeekdayAscOpenTimeAsc(id); }
     public Resource get(Long id) { return resource(id); }
     public Object createType(ResourceController.TypeRequest request, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); ResourceType type=new ResourceType(); type.name=request.name(); type.defaultApprovalLevel=request.defaultApprovalLevel(); return types.save(type); }
     public Resource create(ResourceController.ResourceRequest request, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); requireType(request.typeId()); Resource resource=new Resource(); apply(resource,request); return resources.save(resource); }
     public Resource update(Long id, ResourceController.ResourceRequest request, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); requireType(request.typeId()); Resource resource=resource(id); apply(resource,request); return resources.save(resource); }
+    @Transactional
     public List<?> schedule(Long id, List<ResourceController.ScheduleRequest> requests, HttpServletRequest servletRequest) {
-        roleGuard.requireAdmin(servletRequest); resource(id); schedules.findAll().stream().filter(item -> item.resourceId.equals(id)).forEach(schedules::delete);
+        roleGuard.requireAdmin(servletRequest); resource(id); schedules.findAll().stream().filter(item -> Objects.equals(item.resourceId, id)).forEach(schedules::delete);
         List<ResourceSchedule> result=new ArrayList<>();
+        Set<Integer> weekdays = new HashSet<>();
         for (ResourceController.ScheduleRequest request:requests) {
             if (!request.openTime().isBefore(request.closeTime())) throw new BusinessException("INVALID_SCHEDULE", "Open time must be before close time", HttpStatus.BAD_REQUEST);
+            if (!weekdays.add(request.weekday())) throw new BusinessException("INVALID_SCHEDULE", "Duplicate weekday schedule", HttpStatus.BAD_REQUEST);
+            long openMinutes = Duration.between(request.openTime(), request.closeTime()).toMinutes();
+            if (openMinutes % request.slotMinutes() != 0 || request.maxDurationMinutes() > openMinutes) throw new BusinessException("INVALID_SCHEDULE", "Schedule duration is incompatible with slots", HttpStatus.BAD_REQUEST);
             ResourceSchedule schedule=new ResourceSchedule(); schedule.resourceId=id; schedule.weekday=request.weekday(); schedule.openTime=request.openTime(); schedule.closeTime=request.closeTime(); schedule.slotMinutes=request.slotMinutes(); schedule.maxDurationMinutes=request.maxDurationMinutes(); result.add(schedule);
         }
         return schedules.saveAll(result);
     }
     public Object addManager(Long id, ResourceController.ManagerRequest request, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); resource(id); ResourceManager manager=new ResourceManager(); manager.resourceId=id; manager.userId=request.userId(); manager.managerType=request.managerType(); return managers.save(manager); }
     public Map<String,Object> calendar(Long id, LocalDate start, LocalDate end) {
+        if (start == null || end == null || start.isAfter(end)) throw new BusinessException("INVALID_DATE_RANGE", "Calendar start must not be after end", HttpStatus.BAD_REQUEST);
         Resource resource=resource(id); List<Map<String,Object>> days=new ArrayList<>();
         for(LocalDate date=start;!date.isAfter(end);date=date.plusDays(1)) days.add(Map.of("date",date,"open",schedules.findByResourceIdAndWeekdayAndEnabledTrue(id,date.getDayOfWeek().getValue())));
         return Map.of("resource",resource,"days",days,"calculatedUntil",Instant.now());
@@ -54,8 +63,8 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
         Long approver=approvalLevel==0?null:managers.findFirstByResourceIdAndManagerTypeOrderByIdAsc(id,"APPROVER").map(item->item.userId).orElseThrow(()->new BusinessException("APPROVER_NOT_CONFIGURED","Resource has no configured approver",HttpStatus.UNPROCESSABLE_ENTITY));
         return new ResourceController.BookingRule(resource.name,resource.capacity,schedule.slotMinutes,Math.min(resource.maxDurationMinutes,schedule.maxDurationMinutes),resource.needCheckin,approvalLevel,approver);
     }
-    private Resource resource(Long id) { return resources.findById(id).orElseThrow(()->new BusinessException("NOT_FOUND","Resource does not exist",HttpStatus.NOT_FOUND)); }
-    private void requireType(Long id) { if(!types.existsById(id)) throw new BusinessException("TYPE_NOT_FOUND","Resource type does not exist",HttpStatus.NOT_FOUND); }
+    private Resource resource(Long id) { return resources.findById(id).filter(item -> !item.deleted).orElseThrow(()->new BusinessException("NOT_FOUND","Resource does not exist",HttpStatus.NOT_FOUND)); }
+    private void requireType(Long id) { if(types.findById(id).filter(item -> !item.deleted && item.enabled).isEmpty()) throw new BusinessException("TYPE_NOT_FOUND","Resource type does not exist",HttpStatus.NOT_FOUND); }
     private void apply(Resource resource, ResourceController.ResourceRequest request) { resource.typeId=request.typeId(); resource.name=request.name(); resource.location=request.location(); resource.capacity=request.capacity(); resource.description=request.description(); resource.maxDurationMinutes=request.maxDurationMinutes(); resource.needCheckin=request.needCheckin(); }
     private boolean effective(ResourceSchedule schedule,LocalDate date) { return (schedule.effectiveFrom==null||!date.isBefore(schedule.effectiveFrom))&&(schedule.effectiveTo==null||!date.isAfter(schedule.effectiveTo)); }
     private boolean contains(ResourceSchedule schedule,LocalTime start,LocalTime end) { return !start.isBefore(schedule.openTime)&&!end.isAfter(schedule.closeTime); }

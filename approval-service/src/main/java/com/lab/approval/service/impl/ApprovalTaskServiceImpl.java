@@ -24,21 +24,21 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
 
     @Override
     public List<ApprovalTask> mine(HttpServletRequest request) {
-        Long userId = request.getAttribute("userId") instanceof Long value ? value : 1L;
+        Long userId = currentUser(request);
         return tasks.findByAssignedUserIdAndStatus(userId, "PENDING");
     }
 
     @Override
     @Transactional
     public ApprovalTask action(Long taskId, String action, String comment, HttpServletRequest request) {
-        Long userId = request.getAttribute("userId") instanceof Long value ? value : null;
+        Long userId = currentUser(request);
         ApprovalTask task = tasks.findById(taskId).orElseThrow(() -> new BusinessException("NOT_FOUND", "Approval task does not exist", HttpStatus.NOT_FOUND));
         if (userId == null || !Objects.equals(task.assignedUserId, userId)) throw new BusinessException("FORBIDDEN", "Approval task is not assigned to the current user", HttpStatus.FORBIDDEN);
         if (Objects.equals(task.applicantUserId, userId)) throw new BusinessException("SELF_APPROVAL_FORBIDDEN", "Approver cannot approve own booking", HttpStatus.FORBIDDEN);
         if (!"PENDING".equals(task.status)) throw new BusinessException("INVALID_STATUS", "Approval task has already been processed", HttpStatus.UNPROCESSABLE_ENTITY);
         if (!List.of("approve", "reject").contains(action)) throw new BusinessException("INVALID_ACTION", "Approval action is invalid", HttpStatus.BAD_REQUEST);
         String requestId = Objects.toString(request.getAttribute("X-Request-Id"), "");
-        if (!requestId.isBlank() && records.findByRequestId(requestId).isPresent()) return task;
+        if (!requestId.isBlank() && records.findByRequestIdAndTaskId(requestId, task.id).isPresent()) return task;
         task.status = "approve".equals(action) ? "APPROVED" : "REJECTED";
         task.comment = comment;
         task.completedAt = LocalDateTime.now();
@@ -53,5 +53,10 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         records.save(record);
         bookingDecisions.submit(saved.bookingId, saved.status, request.getHeader("Authorization"));
         return saved;
+    }
+
+    private Long currentUser(HttpServletRequest request) {
+        if (request.getAttribute("userId") instanceof Long value) return value;
+        throw new BusinessException("UNAUTHORIZED", "Login required", HttpStatus.UNAUTHORIZED);
     }
 }

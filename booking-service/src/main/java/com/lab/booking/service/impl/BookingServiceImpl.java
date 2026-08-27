@@ -4,6 +4,7 @@ import com.lab.booking.*;
 import com.lab.booking.controller.BookingController;
 import com.lab.booking.service.BookingService;
 import com.lab.common.exception.BusinessException;
+import com.lab.common.api.RoleGuard;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -20,13 +21,17 @@ public class BookingServiceImpl implements BookingService {
     private final ResourceRuleClient resourceRules;
     private final ApprovalTaskClient approvalTasks;
     private final BookingLifecycleService lifecycle;
+    private final ViolationRecordRepository violations;
+    private final RoleGuard roleGuard;
 
-    public BookingServiceImpl(BookingRepository bookings, BookingSlotRepository slots, ResourceRuleClient resourceRules, ApprovalTaskClient approvalTasks, BookingLifecycleService lifecycle) {
+    public BookingServiceImpl(BookingRepository bookings, BookingSlotRepository slots, ResourceRuleClient resourceRules, ApprovalTaskClient approvalTasks, BookingLifecycleService lifecycle, ViolationRecordRepository violations, RoleGuard roleGuard) {
         this.bookings = bookings;
         this.slots = slots;
         this.resourceRules = resourceRules;
         this.approvalTasks = approvalTasks;
         this.lifecycle = lifecycle;
+        this.violations = violations;
+        this.roleGuard = roleGuard;
     }
 
     @Override
@@ -48,7 +53,7 @@ public class BookingServiceImpl implements BookingService {
         booking.userId = userId;
         booking.resourceId = request.resourceId();
         booking.resourceNameSnapshot = rule.resourceName();
-        booking.applicantNameSnapshot = "User" + userId;
+        booking.applicantNameSnapshot = Objects.toString(servletRequest.getAttribute("realName"), "User" + userId);
         booking.startTime = request.startTime();
         booking.endTime = request.endTime();
         booking.purpose = request.purpose();
@@ -85,7 +90,7 @@ public class BookingServiceImpl implements BookingService {
         if (start == null || end == null || !start.isBefore(end)) {
             throw new BusinessException("INVALID_TIME", "Start time must be before end time", HttpStatus.BAD_REQUEST);
         }
-        return slots.findByResourceIdAndSlotStartBetweenAndReleasedAtIsNull(resourceId, start, end).stream()
+        return slots.findByResourceIdAndSlotStartGreaterThanEqualAndSlotStartLessThanAndReleasedAtIsNull(resourceId, start, end).stream()
                 .map(slot -> slot.slotStart)
                 .sorted()
                 .toList();
@@ -155,6 +160,41 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private Booking find(Long bookingId) { return bookings.findById(bookingId).orElseThrow(() -> new BusinessException("NOT_FOUND", "Booking does not exist", HttpStatus.NOT_FOUND)); }
-    private Long currentUser(HttpServletRequest request) { return request.getAttribute("userId") instanceof Long userId ? userId : 1L; }
+    private Long currentUser(HttpServletRequest request) {
+        if (request.getAttribute("userId") instanceof Long userId) return userId;
+        throw new BusinessException("UNAUTHORIZED", "Login required", HttpStatus.UNAUTHORIZED);
+    }
+
+    @Override
+    public Map<String, Object> adminList(Long resourceId, Long userId, String status, HttpServletRequest servletRequest) {
+        roleGuard.requireAdmin(servletRequest);
+        List<Booking> items = bookings.findAll().stream()
+                .filter(item -> resourceId == null || Objects.equals(item.resourceId, resourceId))
+                .filter(item -> userId == null || Objects.equals(item.userId, userId))
+                .filter(item -> status == null || status.isBlank() || status.equals(item.status))
+                .sorted(Comparator.comparing((Booking item) -> item.startTime, Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+        return Map.of("items", items, "total", items.size());
+    }
+
+    @Override
+    public Map<String, Object> violations(HttpServletRequest servletRequest) {
+        roleGuard.requireAdmin(servletRequest);
+        List<ViolationRecord> items = violations.findAllByOrderByCreatedAtDesc();
+        return Map.of("items", items, "total", items.size());
+    }
+
+    @Override
+    @Transactional
+    public Object processViolation(Long violationId, String status, String comment, HttpServletRequest servletRequest) {
+        roleGuard.requireAdmin(servletRequest);
+        if (!Set.of("RESOLVED", "CONFIRMED", "DISMISSED").contains(status)) {
+            throw new BusinessException("INVALID_STATUS", "Violation status is invalid", HttpStatus.BAD_REQUEST);
+        }
+        ViolationRecord item = violations.findById(violationId)
+                .orElseThrow(() -> new BusinessException("NOT_FOUND", "Violation record does not exist", HttpStatus.NOT_FOUND));
+        item.status = status; item.comment = comment; item.processedBy = roleGuard.currentUserId(servletRequest); item.processedAt = LocalDateTime.now();
+        return violations.save(item);
+    }
     private String requestId(HttpServletRequest request) { return Objects.toString(request.getAttribute("X-Request-Id"), ""); }
 }

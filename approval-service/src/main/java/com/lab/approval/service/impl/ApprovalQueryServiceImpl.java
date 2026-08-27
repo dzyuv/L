@@ -6,6 +6,8 @@ import com.lab.approval.service.ApprovalQueryService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
 import java.util.*;
+import com.lab.common.exception.BusinessException;
+import org.springframework.http.HttpStatus;
 
 @Service
 public class ApprovalQueryServiceImpl implements ApprovalQueryService {
@@ -16,7 +18,7 @@ public class ApprovalQueryServiceImpl implements ApprovalQueryService {
     @Override
     public Map<String, Object> pending(HttpServletRequest request) {
         Long userId = request.getAttribute("userId") instanceof Long value ? value : null;
-        if (userId == null) return Map.of("items", List.of(), "page", 1, "size", 20, "total", 0);
+        if (userId == null) throw new BusinessException("UNAUTHORIZED", "Login required", HttpStatus.UNAUTHORIZED);
         List<ApprovalTask> items = tasks.findByAssignedUserIdAndStatus(userId, "PENDING");
         return Map.of("items", items, "page", 1, "size", items.size(), "total", items.size());
     }

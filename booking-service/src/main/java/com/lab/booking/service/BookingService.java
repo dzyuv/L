@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.List;
 import java.time.LocalDateTime;
+import java.util.Map;
 
 public interface BookingService {
     Booking create(BookingController.Create request, String idempotencyKey, HttpServletRequest servletRequest);
@@ -16,4 +17,7 @@ public interface BookingService {
     Booking checkin(Long bookingId, HttpServletRequest servletRequest);
     void autoComplete();
     void markNoShow();
+    Map<String, Object> adminList(Long resourceId, Long userId, String status, HttpServletRequest servletRequest);
+    Map<String, Object> violations(HttpServletRequest servletRequest);
+    Object processViolation(Long violationId, String status, String comment, HttpServletRequest servletRequest);
 }
