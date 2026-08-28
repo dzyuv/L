@@ -28,9 +28,10 @@ public class AssetController {
                                @Size(max = 1000) String remark) {}
     public record StatusRequest(@NotBlank @Size(max = 30) String status, @Size(max = 500) String reason) {}
     public record AssignRequest(Long custodianUserId, @Size(max = 200) String location, @Size(max = 500) String reason) {}
-    public record ReportRequest(@NotNull Long assetId, @NotBlank @Size(max = 30) String reportType,
+    public record ReportRequest(Long assetId, Long resourceId, @Size(max = 200) String location,
+                                @Size(max = 500) String assetClue, @NotBlank @Size(max = 30) String reportType,
                                 @NotBlank @Size(max = 2000) String description, @Size(max = 20) String severity) {}
-    public record TicketUpdateRequest(@NotBlank @Size(max = 30) String status, Long assignedTo,
+    public record TicketUpdateRequest(@NotBlank @Size(max = 30) String status, Long assetId, Long assignedTo,
                                       @Size(max = 2000) String resolution,
                                       @DecimalMin(value = "0.0", inclusive = true) BigDecimal estimatedCost,
                                       @DecimalMin(value = "0.0", inclusive = true) BigDecimal actualCost) {}

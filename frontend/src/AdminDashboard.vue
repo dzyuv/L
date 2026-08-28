@@ -253,6 +253,9 @@ async function saveSchedules() {
   catch (e) { show(e.response?.data?.message || "开放时间保存失败", true); }
 }
 async function createClosure() {
+  if (!closureForm.value.startTime || !closureForm.value.endTime) return show("请选择维护开始和结束时间", true);
+  if (new Date(closureForm.value.startTime) >= new Date(closureForm.value.endTime)) return show("维护结束时间必须晚于开始时间", true);
+  if (!closureForm.value.reason.trim()) return show("请填写维护或临时关闭原因", true);
   try { await axios.post(`/api/v1/admin/resources/${selectedResource.value.id}/closures`, closureForm.value); closureForm.value = { startTime: "", endTime: "", reason: "" }; show("维护时段已创建"); await manageResource(selectedResource.value); }
   catch (e) { show(e.response?.data?.message || "维护时段创建失败", true); }
 }
@@ -344,7 +347,7 @@ onMounted(loadAll);
       </template>
 
       <template v-else-if="activeTab === 'maintenance'">
-        <MaintenanceAdminPanel :tickets="maintenanceTickets" :assets="assets" :loading="loading" @refresh="loadAll" />
+        <MaintenanceAdminPanel :tickets="maintenanceTickets" :assets="assets" :resources="resources" :loading="loading" @refresh="loadAll" />
       </template>
 
       <template v-else-if="activeTab === 'bookings'">

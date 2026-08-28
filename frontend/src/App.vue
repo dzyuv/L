@@ -29,6 +29,7 @@ const onlyAvailableResources = ref(false);
 const availabilityByResource = ref({});
 const bookings = ref([]);
 const approvals = ref([]);
+const teacherActiveTab = ref("overview");
 const loading = ref(false);
 const notice = ref("");
 const bookingModalOpen = ref(false);
@@ -51,6 +52,13 @@ const bookingForm = ref({
   needCheckin: true,
   approvalLevel: 1,
 });
+const teacherTabs = [
+  { id: "overview", label: "工作概览", icon: ClipboardList },
+  { id: "approvals", label: "预约审批", icon: ShieldCheck },
+  { id: "resources", label: "资源预约", icon: CalendarDays },
+  { id: "bookings", label: "我的预约", icon: Clock3 },
+  { id: "maintenance", label: "故障报修", icon: CircleAlert },
+];
 const loggedIn = computed(() => !!token.value);
 const isTeacher = computed(() => (user.value?.roles || []).includes("TEACHER"));
 const isSystemAdmin = computed(() => (user.value?.roles || []).includes("SYSTEM_ADMIN"));
@@ -61,7 +69,6 @@ const resourceBookingCounts = computed(() => bookings.value.reduce((counts, item
   counts[item.resourceId] = (counts[item.resourceId] || 0) + 1;
   return counts;
 }, {}));
-const pendingBookingCount = computed(() => bookings.value.filter((item) => item.status === "PENDING_APPROVAL").length);
 const resourceTypeMap = computed(() => Object.fromEntries(resourceTypes.value.map((item) => [item.id, item])));
 const filteredResources = computed(() => {
   const query = resourceQuery.value.trim().toLowerCase();
@@ -72,6 +79,12 @@ const filteredResources = computed(() => {
     return matchesQuery && matchesType && (!onlyAvailableResources.value || hasAvailability);
   });
 });
+const teacherAvailableResourceCount = computed(() => resources.value.filter(resourceHasAvailability).length);
+const teacherPendingBookingCount = computed(() => bookings.value.filter((item) => item.status === "PENDING_APPROVAL").length);
+const teacherUpcomingBookings = computed(() => bookings.value
+  .filter((item) => ["APPROVED", "CHECKED_IN"].includes(item.status) && new Date(item.endTime) > new Date())
+  .sort((left, right) => String(left.startTime).localeCompare(String(right.startTime))));
+const teacherPageTitle = computed(() => teacherTabs.find((item) => item.id === teacherActiveTab.value)?.label || "教师工作台");
 watch(notice, (message) => {
   if (!message) return;
   const success = /成功|已通过|已完成|已取消|已退出/.test(message);
@@ -168,7 +181,7 @@ function applyBookableSlot(window) {
   bookingForm.value.maxDurationMinutes = slot.maxDurationMinutes;
 }
 function slotKey(date, time) { return `${date}T${time}`; }
-function buildSlots(windows, occupied = [], now = new Date()) {
+function buildSlots(windows, occupied = [], closures = [], now = new Date()) {
   const occupiedKeys = new Set(occupied.map((value) => String(value).replace(" ", "T").slice(0, 16)));
   return windows.flatMap((window) => {
     const open = new Date(`${window.date}T${window.openTime}`);
@@ -178,7 +191,14 @@ function buildSlots(windows, occupied = [], now = new Date()) {
     for (let start = open; start.getTime() + step * 60000 <= close.getTime(); start = new Date(start.getTime() + step * 60000)) {
       const startTime = start.toTimeString().slice(0, 5);
       const key = slotKey(window.date, startTime);
-      slots.push({ key, date: window.date, startTime, endTime: new Date(start.getTime() + step * 60000).toTimeString().slice(0, 5), slotMinutes: step, available: start > now && !occupiedKeys.has(key) });
+      const end = new Date(start.getTime() + step * 60000);
+      const matchingClosure = closures.find((closure) => {
+        const closureStart = new Date(closure.startTime);
+        const closureEnd = new Date(closure.endTime);
+        return closureStart < end && closureEnd > start;
+      });
+      const closed = Boolean(matchingClosure);
+      slots.push({ key, date: window.date, startTime, endTime: end.toTimeString().slice(0, 5), slotMinutes: step, available: start > now && !occupiedKeys.has(key) && !closed, closed, closureReason: matchingClosure?.reason || "维护关闭" });
     }
     return slots;
   });
@@ -186,7 +206,7 @@ function buildSlots(windows, occupied = [], now = new Date()) {
 const currentSlots = computed(() => {
   const entry = availabilityByResource.value[bookingForm.value.resourceId];
   if (!entry) return [];
-  return buildSlots(entry.windows || [], entry.occupied || []);
+  return buildSlots(entry.windows || [], entry.occupied || [], entry.closures || []);
 });
 const slotGroups = computed(() => currentSlots.value.reduce((groups, slot) => {
   (groups[slot.date] ||= []).push(slot);
@@ -393,9 +413,10 @@ async function loadAvailability(items) {
         slotMinutes: open.slotMinutes || 30,
         maxDurationMinutes: open.maxDurationMinutes || resource.maxDurationMinutes || 60,
       })));
+      const closures = (calendarResponse.data?.data?.days || []).flatMap((day) => day.closures || []);
       const occupied = occupiedResponse.data?.data || [];
-      const slots = buildSlots(windows, occupied, now);
-      return [resource.id, { windows, occupied, slots, next: slots.find((slot) => slot.available) || null }];
+      const slots = buildSlots(windows, occupied, closures, now);
+      return [resource.id, { windows, occupied, closures, slots, next: slots.find((slot) => slot.available) || null }];
     } catch {
       return [resource.id, { windows: [], next: null }];
     }
@@ -593,44 +614,101 @@ onMounted(() => {
       </aside>
     </main>
     <AdminDashboard v-else-if="isAdmin" :user="user" :initial-resources="resources" />
-    <main v-else-if="isTeacher" class="dashboard teacher-dashboard">
-      <section class="intro">
-        <div>
-          <div class="eyebrow">TEACHER WORKSPACE</div>
-          <h1>教师工作台</h1>
-          <p>集中查看待审批预约和近期教学资源使用情况。</p>
+    <main v-else-if="isTeacher" class="teacher-shell">
+      <aside class="teacher-sidebar">
+        <div class="teacher-workspace-mark"><ShieldCheck :size="20" /><div><b>教师工作台</b><small>{{ user?.realName || user?.username }}</small></div></div>
+        <nav aria-label="教师功能导航">
+          <button v-for="tab in teacherTabs" :key="tab.id" type="button" :class="{ active: teacherActiveTab === tab.id }" :title="tab.label" @click="teacherActiveTab = tab.id">
+            <component :is="tab.icon" :size="17" /><span>{{ tab.label }}</span><em v-if="tab.id === 'approvals' && approvals.length">{{ approvals.length }}</em><ChevronRight v-else :size="14" />
+          </button>
+        </nav>
+        <div class="teacher-scope"><span>当前审批范围</span><b>管理员授权的实验室资源</b><small>本人提交的预约自动转交其他审批人</small></div>
+      </aside>
+
+      <section class="teacher-content">
+        <div class="teacher-topline">
+          <div><span class="eyebrow">TEACHER WORKSPACE</span><h1>{{ teacherPageTitle }}</h1></div>
+          <button class="teacher-refresh" type="button" :disabled="loading" title="刷新教师工作台" @click="load"><RefreshCw :size="18" /></button>
         </div>
-        <div class="status-chip"><span></span>教师账号</div>
-      </section>
-      <section class="stats">
-        <div><span>待审批预约</span><strong>{{ approvals.length }}</strong><small>需要你处理的申请</small></div>
-        <div><span>资源总数</span><strong>{{ resources.length }}</strong><small>当前可管理资源</small></div>
-        <div><span>我的预约</span><strong>{{ bookings.length }}</strong><small>个人历史记录</small></div>
-      </section>
-      <div class="content-grid">
-        <section class="panel">
-          <div class="panel-head"><div><h2>待审批预约</h2><p>审核授权资源范围内、由其他用户提交的申请</p></div><button class="ghost" @click="load"><RefreshCw :size="16" />刷新</button></div>
-          <div class="approval-list">
-            <article v-for="task in approvals" :key="task.id" class="approval-row">
-              <div><b>预约 #{{ task.bookingId }}</b><span>申请人：{{ task.applicantName || task.userName || `用户 ${task.applicantUserId}` }}</span><small>{{ task.resourceName || '资源申请' }} · {{ task.startTime?.replace('T', ' ') || '' }} - {{ task.endTime?.replace('T', ' ') || '' }}</small></div>
-              <div class="approval-actions"><button class="approve-btn" @click="processApproval(task, 'approve')">通过</button><button class="reject-btn" @click="processApproval(task, 'reject')">驳回</button></div>
+
+        <template v-if="teacherActiveTab === 'overview'">
+          <section class="teacher-metrics">
+            <div><span>待审批预约</span><strong>{{ approvals.length }}</strong><small>仅限授权范围</small></div>
+            <div><span>可预约资源</span><strong>{{ teacherAvailableResourceCount }}</strong><small>未来 14 天有空闲</small></div>
+            <div><span>我的待审批</span><strong>{{ teacherPendingBookingCount }}</strong><small>由其他审批人处理</small></div>
+            <div><span>近期使用安排</span><strong>{{ teacherUpcomingBookings.length }}</strong><small>已通过且尚未结束</small></div>
+          </section>
+          <div class="teacher-overview-grid">
+            <section class="teacher-section">
+              <div class="teacher-section-title"><div><h2>待处理审批</h2><p>授权资源范围内的预约申请</p></div><button type="button" @click="teacherActiveTab = 'approvals'">查看全部 <ChevronRight :size="14" /></button></div>
+              <div class="teacher-approval-list compact">
+                <article v-for="task in approvals.slice(0, 5)" :key="task.id">
+                  <span class="teacher-level">L{{ task.level }}</span>
+                  <div><b>{{ task.resourceName || `预约 #${task.bookingId}` }}</b><span>{{ task.applicantName || `用户 ${task.applicantUserId}` }}</span><small>{{ task.startTime?.replace('T', ' ') }} - {{ task.endTime?.slice(11, 16) }}</small></div>
+                  <div class="teacher-approval-actions"><button class="reject" type="button" title="驳回预约" @click="processApproval(task, 'reject')"><X :size="15" /></button><button class="approve" type="button" title="通过预约" @click="processApproval(task, 'approve')"><CheckCircle2 :size="15" /></button></div>
+                </article>
+                <div v-if="!approvals.length" class="teacher-empty">暂无待审批任务</div>
+              </div>
+            </section>
+            <section class="teacher-section">
+              <div class="teacher-section-title"><div><h2>近期使用安排</h2><p>教师账号已获批的资源使用计划</p></div><button type="button" @click="teacherActiveTab = 'bookings'">查看记录 <ChevronRight :size="14" /></button></div>
+              <div class="teacher-schedule-list">
+                <article v-for="item in teacherUpcomingBookings.slice(0, 5)" :key="item.id">
+                  <div class="teacher-schedule-date"><strong>{{ bookingDay(item.startTime) }}</strong><span>{{ bookingMonth(item.startTime) }}</span></div>
+                  <div><b>{{ item.resourceNameSnapshot }}</b><span><Clock3 :size="13" />{{ item.startTime?.slice(11, 16) }} - {{ item.endTime?.slice(11, 16) }}</span><small>{{ item.purpose }}</small></div>
+                  <span class="teacher-status" :class="item.status.toLowerCase()">{{ bookingStatusText(item.status) }}</span>
+                </article>
+                <div v-if="!teacherUpcomingBookings.length" class="teacher-empty">近期没有已通过的使用安排</div>
+              </div>
+            </section>
+          </div>
+        </template>
+
+        <section v-else-if="teacherActiveTab === 'approvals'" class="teacher-section">
+          <div class="teacher-section-title"><div><h2>预约审批</h2><p>只能处理管理员授权给你的资源，自己的申请不会出现在这里</p></div><span>{{ approvals.length }} 项待处理</span></div>
+          <div class="teacher-approval-list">
+            <article v-for="task in approvals" :key="task.id">
+              <span class="teacher-level">L{{ task.level }}</span>
+              <div><b>{{ task.resourceName || `预约 #${task.bookingId}` }}</b><span>申请人：{{ task.applicantName || `用户 ${task.applicantUserId}` }}</span><small>{{ task.startTime?.replace('T', ' ') }} - {{ task.endTime?.replace('T', ' ') }}</small></div>
+              <span class="teacher-deadline">审批截止<small>{{ task.deadline?.replace('T', ' ').slice(0, 16) || '-' }}</small></span>
+              <div class="teacher-approval-actions labeled"><button class="reject" type="button" @click="processApproval(task, 'reject')"><X :size="15" />驳回</button><button class="approve" type="button" @click="processApproval(task, 'approve')"><CheckCircle2 :size="15" />通过</button></div>
             </article>
-            <div v-if="!approvals.length" class="empty">暂无待审批预约</div>
+            <div v-if="!approvals.length" class="teacher-empty">暂无待审批预约</div>
           </div>
         </section>
-        <section class="panel">
-          <div class="panel-head"><div><h2>资源概览</h2><p>实验室和设备的当前容量</p></div><CalendarDays :size="20" /></div>
-          <div class="resource-list teacher-resource-list">
-            <button v-for="r in resources" :key="r.id" class="resource-row teacher-resource-row" @click="selectResource(r)"><div class="resource-icon"><CalendarDays :size="20" /></div><div class="resource-info"><b>{{ r.name }}</b><span>{{ r.location }} · 容量 {{ r.capacity }} 人</span></div><span class="resource-status">{{ r.status === 'ACTIVE' ? '正常' : r.status }}</span><span class="teacher-book-action">申请预约 <ChevronRight :size="15" /></span></button>
-            <div v-if="!resources.length" class="empty">暂无资源数据</div>
+
+        <section v-else-if="teacherActiveTab === 'resources'" class="teacher-section teacher-resource-section">
+          <div class="teacher-section-title"><div><h2>资源预约</h2><p>教师可以按类别和空闲状态筛选实验室与设备</p></div><span>显示 {{ filteredResources.length }} / {{ resources.length }}</span></div>
+          <div class="resource-filters teacher-resource-filters">
+            <label class="resource-search"><Search :size="15" /><input v-model="resourceQuery" placeholder="搜索资源名称、位置或用途" /></label>
+            <select v-model="resourceTypeFilter"><option value="">全部类别</option><option v-for="type in resourceTypes" :key="type.id" :value="type.id">{{ type.name }}</option></select>
+            <label class="availability-filter"><input v-model="onlyAvailableResources" type="checkbox" />只看未来 14 天有空闲</label>
+            <button v-if="resourceQuery || resourceTypeFilter || onlyAvailableResources" class="clear-resource-filter" type="button" @click="resourceQuery = ''; resourceTypeFilter = ''; onlyAvailableResources = false">清除筛选</button>
+          </div>
+          <div class="resource-card-grid teacher-resource-grid">
+            <button v-for="r in filteredResources" :key="r.id" class="resource-card" :class="{ selected: bookingForm.resourceId === r.id }" type="button" @click="selectResource(r)">
+              <div class="resource-card-image" :class="{ 'resource-image-fallback': !resourceImage(r) }"><img v-if="resourceImage(r)" :src="resourceImage(r)" :alt="`${resourceDisplayName(r)} 场景图`" loading="lazy" @error="handleResourceImageError" /><span v-else class="resource-image-empty">暂无图片</span><span class="resource-card-kind">{{ resourceTypeName(r) }}</span><span class="resource-card-status" :class="{ unavailable: !resourceHasAvailability(r) }"><i></i>{{ resourceHasAvailability(r) ? '有空闲' : '暂无空闲' }}</span></div>
+              <div class="resource-card-body"><div class="resource-card-title"><strong>{{ resourceDisplayName(r) }}</strong><ChevronRight :size="16" /></div><p>{{ resourceDisplayDescription(r) }}</p><div class="resource-card-meta"><span><CalendarDays :size="14" />{{ r.location }}</span><span><UsersIcon :size="14" />{{ r.capacity }} 人</span></div><div class="resource-card-footer"><span v-if="availabilityByResource[r.id]?.next">最近开放 {{ availabilityByResource[r.id].next.date }} {{ availabilityByResource[r.id].next.startTime }}</span><span v-else>未来 14 天暂无开放时段</span><b>申请预约</b></div></div>
+            </button>
+            <div v-if="!filteredResources.length" class="teacher-empty resource-card-empty">{{ resources.length ? '没有符合筛选条件的资源' : '暂无可预约资源' }}</div>
           </div>
         </section>
-      </div>
-      <section class="panel history"><div class="panel-head"><div><h2>我的预约</h2><p>教师账号提交的预约记录</p></div></div><div class="table"><div class="tr th"><span>预约编号</span><span>资源</span><span>时间</span><span>状态</span><span></span></div><div v-for="b in bookings" :key="b.id" class="tr"><span class="mono">{{ b.bookingNo }}</span><span>{{ b.resourceNameSnapshot }}</span><span>{{ b.startTime?.replace('T', ' ') }} - {{ b.endTime?.slice(11) }}</span><span>{{ b.status }}</span><span></span></div><div v-if="!bookings.length" class="empty">暂无预约记录</div></div></section>
-      <UserMaintenance :key="`teacher-maintenance-${user?.id}`" />
-      <div class="notice" v-if="notice">{{ notice }}</div>
+
+        <section v-else-if="teacherActiveTab === 'bookings'" class="teacher-section">
+          <div class="teacher-section-title"><div><h2>我的预约</h2><p>教师本人提交的预约申请及处理状态</p></div><button type="button" @click="teacherActiveTab = 'resources'"><Plus :size="14" />新建预约</button></div>
+          <div class="teacher-booking-table">
+            <div class="teacher-booking-row head"><span>预约编号</span><span>资源</span><span>使用时间</span><span>用途</span><span>状态</span><span>操作</span></div>
+            <div v-for="item in bookings" :key="item.id" class="teacher-booking-row"><span class="mono">{{ item.bookingNo }}</span><span><b>{{ item.resourceNameSnapshot }}</b><small>{{ bookingResource(item)?.location }}</small></span><span>{{ item.startTime?.replace('T', ' ').slice(0, 16) }}<small>至 {{ item.endTime?.replace('T', ' ').slice(0, 16) }}</small></span><span>{{ item.purpose }}</span><span class="teacher-status" :class="item.status.toLowerCase()">{{ bookingStatusText(item.status) }}</span><span><button v-if="['APPROVED', 'PENDING_APPROVAL'].includes(item.status)" class="teacher-cancel" type="button" @click="cancel(item.id)">取消</button><em v-else>-</em></span></div>
+            <div v-if="!bookings.length" class="teacher-empty">暂无预约记录</div>
+          </div>
+        </section>
+
+        <div v-else-if="teacherActiveTab === 'maintenance'" class="teacher-tab-maintenance">
+          <UserMaintenance :key="`teacher-maintenance-${user?.id}`" internal :resources="resources" :bookings="bookings" />
+        </div>
+      </section>
     </main>
-    <main v-else class="dashboard">
+    <main v-else class="dashboard student-dashboard">
       <section class="intro">
         <div>
           <div class="eyebrow">WORKSPACE / OVERVIEW</div>
@@ -638,19 +716,6 @@ onMounted(() => {
           <p>今天也从一个清晰的预约开始。</p>
         </div>
         <div class="status-chip"><span></span>系统运行正常</div>
-      </section>
-      <section class="stats">
-        <div>
-          <span>可预约资源</span><strong>{{ resources.length }}</strong
-          ><small>实验室、设备与会议室</small>
-        </div>
-        <div>
-          <span>我的预约</span><strong>{{ bookings.length }}</strong
-          ><small>包含历史记录</small>
-        </div>
-        <div>
-          <span>待审批预约</span><strong>{{ pendingBookingCount }}</strong><small>{{ pendingBookingCount ? '正在等待管理员处理' : '当前没有待审批申请' }}</small>
-        </div>
       </section>
       <div class="student-content">
         <section class="panel student-resource-gallery">
@@ -706,7 +771,7 @@ onMounted(() => {
         </div>
       </section>
       <div class="notice student-notice" v-if="notice">{{ notice }}</div>
-      <UserMaintenance :key="`student-maintenance-${user?.id}`" />
+      <UserMaintenance :key="`student-maintenance-${user?.id}`" :resources="resources" :bookings="bookings" />
     </main>
     <div v-if="bookingModalOpen" class="booking-modal-backdrop" @click.self="closeBookingModal">
       <section class="booking-modal" role="dialog" aria-modal="true">
@@ -721,16 +786,16 @@ onMounted(() => {
         <div class="booking-modal-content">
           <div v-if="slotDates.length" class="slot-date-tabs" aria-label="选择预约日期">
             <button v-for="item in slotDates" :key="item.date" type="button" :class="{ active: activeSlotDate === item.date }" @click="selectSlotDate(item.date)">
-              <span>{{ slotDateWeek(item.date) }}</span><strong>{{ slotDateDay(item.date) }}</strong><small>{{ slotDateMonth(item.date) }} · {{ item.availableCount ? `${item.availableCount} 个可选` : '已约满' }}</small>
+              <span>{{ slotDateWeek(item.date) }}</span><strong>{{ slotDateDay(item.date) }}</strong><small>{{ slotDateMonth(item.date) }} · {{ item.availableCount ? `${item.availableCount} 个可选` : '暂无可约' }}</small>
             </button>
           </div>
-          <div class="slot-legend"><span class="legend available"></span>可预约 <span class="legend selected"></span>已选择 <span class="legend unavailable"></span>不可预约</div>
+          <div class="slot-legend"><span class="legend available"></span>可预约 <span class="legend selected"></span>已选择 <span class="legend maintenance"></span>维护关闭 <span class="legend unavailable"></span>不可预约</div>
           <div class="slot-days">
             <div v-if="activeDateSlots.length" class="slot-day">
               <div class="slot-date">{{ activeSlotDate }} · {{ slotDateWeek(activeSlotDate) }}</div>
               <div class="slot-grid">
-                <button v-for="slot in activeDateSlots" :key="slot.key" type="button" class="slot-button" :class="{ selected: selectedSlotKeys.includes(slot.key), unavailable: !slot.available }" :disabled="!slot.available" @click="toggleSlot(slot)">
-                  {{ slot.startTime }}-{{ slot.endTime }}
+                <button v-for="slot in activeDateSlots" :key="slot.key" type="button" class="slot-button" :class="{ selected: selectedSlotKeys.includes(slot.key), unavailable: !slot.available, maintenance: slot.closed }" :disabled="!slot.available" :title="slot.closed ? slot.closureReason : undefined" @click="toggleSlot(slot)">
+                  <span>{{ slot.startTime }}-{{ slot.endTime }}</span><small v-if="slot.closed">维护</small>
                 </button>
               </div>
             </div>

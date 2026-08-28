@@ -65,6 +65,10 @@ CALL lab_system.add_column_if_missing('lab_resource', 'resource_closure', 'updat
 CALL lab_system.add_column_if_missing('lab_resource', 'resource_closure', 'version', 'INT NOT NULL DEFAULT 0');
 CALL lab_system.add_column_if_missing('lab_resource', 'resource_manager', 'scope_type', "VARCHAR(30) NOT NULL DEFAULT 'RESOURCE'");
 CALL lab_system.add_column_if_missing('lab_resource', 'resource_manager', 'scope_value', "VARCHAR(100) NOT NULL DEFAULT ''");
+CALL lab_system.add_column_if_missing('lab_resource', 'maintenance_ticket', 'resource_id', 'BIGINT NULL');
+CALL lab_system.add_column_if_missing('lab_resource', 'maintenance_ticket', 'location_snapshot', 'VARCHAR(200) NULL');
+CALL lab_system.add_column_if_missing('lab_resource', 'maintenance_ticket', 'asset_clue', 'VARCHAR(500) NULL');
+ALTER TABLE lab_resource.maintenance_ticket MODIFY asset_id BIGINT NULL;
 CREATE TABLE IF NOT EXISTS lab_resource.asset_category (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(100) NOT NULL UNIQUE,
   serialized BOOLEAN NOT NULL DEFAULT TRUE, high_value BOOLEAN NOT NULL DEFAULT FALSE,

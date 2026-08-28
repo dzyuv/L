@@ -71,7 +71,27 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
     public Map<String,Object> calendar(Long id, LocalDate start, LocalDate end) {
         if (start == null || end == null || start.isAfter(end)) throw new BusinessException("INVALID_DATE_RANGE", "Calendar start must not be after end", HttpStatus.BAD_REQUEST);
         Resource resource=resource(id); List<Map<String,Object>> days=new ArrayList<>();
-        for(LocalDate date=start;!date.isAfter(end);date=date.plusDays(1)) days.add(Map.of("date",date,"open",schedules.findByResourceIdAndWeekdayAndEnabledTrue(id,date.getDayOfWeek().getValue())));
+        List<ResourceClosure> activeClosures=closures.findByResourceIdAndStatusNot(id,"CANCELED");
+        for(LocalDate date=start;!date.isAfter(end);date=date.plusDays(1)) {
+            LocalDateTime dayStart=date.atStartOfDay();
+            LocalDateTime dayEnd=date.plusDays(1).atStartOfDay();
+            List<Map<String,Object>> dayClosures=activeClosures.stream()
+                .filter(item->item.startTime.isBefore(dayEnd)&&item.endTime.isAfter(dayStart))
+                .map(item->{
+                    Map<String,Object> result=new LinkedHashMap<>();
+                    result.put("id",item.id);
+                    result.put("startTime",item.startTime);
+                    result.put("endTime",item.endTime);
+                    result.put("reason",item.reason);
+                    result.put("status",item.status);
+                    return result;
+                }).toList();
+            Map<String,Object> day=new LinkedHashMap<>();
+            day.put("date",date);
+            day.put("open",schedules.findByResourceIdAndWeekdayAndEnabledTrue(id,date.getDayOfWeek().getValue()));
+            day.put("closures",dayClosures);
+            days.add(day);
+        }
         return Map.of("resource",resource,"days",days,"calculatedUntil",Instant.now());
     }
     public ResourceController.BookingRule bookingRule(Long id, LocalDateTime startTime, LocalDateTime endTime, int participants, HttpServletRequest servletRequest) {

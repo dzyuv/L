@@ -177,7 +177,10 @@ CREATE TABLE IF NOT EXISTS asset (
 
 CREATE TABLE IF NOT EXISTS asset_status_history (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  asset_id BIGINT NOT NULL,
+  asset_id BIGINT NULL,
+  resource_id BIGINT NULL,
+  location_snapshot VARCHAR(200) NULL,
+  asset_clue VARCHAR(500) NULL,
   from_status VARCHAR(30) NULL,
   to_status VARCHAR(30) NOT NULL,
   reason VARCHAR(500) NULL,
@@ -208,7 +211,8 @@ CREATE TABLE IF NOT EXISTS maintenance_ticket (
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   version INT NOT NULL DEFAULT 0,
   KEY idx_maintenance_status(status, created_at),
-  KEY idx_maintenance_asset(asset_id, status)
+  KEY idx_maintenance_asset(asset_id, status),
+  KEY idx_maintenance_resource(resource_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 USE lab_booking;

@@ -9,7 +9,10 @@ import java.time.LocalDateTime;
 public class MaintenanceTicket {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
     @Column(nullable = false) public String ticketNo;
-    @Column(nullable = false) public Long assetId;
+    public Long assetId;
+    public Long resourceId;
+    public String locationSnapshot;
+    public String assetClue;
     public Long reportedBy;
     public String previousAssetStatus;
     public String reportType = "MALFUNCTION";
