@@ -1,10 +1,12 @@
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import axios from "axios";
 import AdminDashboard from "./AdminDashboard.vue";
 import UserMaintenance from "./UserMaintenance.vue";
 import {
   CalendarDays,
+  CheckCircle2,
+  CircleAlert,
   Clock3,
   ChevronRight,
   ClipboardList,
@@ -14,6 +16,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Users as UsersIcon,
+  X,
 } from "lucide-vue-next";
 const token = ref(localStorage.getItem("token") || "");
 const user = ref(null);
@@ -25,6 +28,9 @@ const loading = ref(false);
 const notice = ref("");
 const bookingModalOpen = ref(false);
 const selectedSlotKeys = ref([]);
+const activeSlotDate = ref("");
+const toast = ref({ visible: false, message: "", type: "info" });
+let toastTimer;
 const loginForm = ref({ username: "S20260001", password: "12345678" });
 const API_ORIGIN = import.meta.env.VITE_API_ORIGIN || "";
 const bookingForm = ref({
@@ -51,6 +57,14 @@ const resourceBookingCounts = computed(() => bookings.value.reduce((counts, item
   return counts;
 }, {}));
 const pendingBookingCount = computed(() => bookings.value.filter((item) => item.status === "PENDING_APPROVAL").length);
+watch(notice, (message) => {
+  if (!message) return;
+  const success = /成功|已通过|已完成|已取消|已退出/.test(message);
+  const failed = /失败|错误|失效|不可|不能|无法|驳回|请选择|请填写|必须|暂不|没有开放/.test(message);
+  toast.value = { visible: true, message, type: success ? "success" : failed ? "error" : "info" };
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.value.visible = false; }, 4500);
+});
 axios.defaults.baseURL = API_ORIGIN;
 axios.interceptors.request.use((c) => {
   if (token.value) c.headers.Authorization = `Bearer ${token.value}`;
@@ -168,7 +182,32 @@ const slotGroups = computed(() => currentSlots.value.reduce((groups, slot) => {
   (groups[slot.date] ||= []).push(slot);
   return groups;
 }, {}));
+const slotDates = computed(() => Object.entries(slotGroups.value)
+  .sort(([left], [right]) => left.localeCompare(right))
+  .map(([date, slots]) => ({ date, slots, availableCount: slots.filter((slot) => slot.available).length })));
+const activeDateSlots = computed(() => slotGroups.value[activeSlotDate.value] || []);
 const selectedSlots = computed(() => currentSlots.value.filter((slot) => selectedSlotKeys.value.includes(slot.key)));
+watch(slotDates, (dates) => {
+  if (!bookingModalOpen.value || !dates.length) return;
+  if (!dates.some((item) => item.date === activeSlotDate.value)) {
+    activeSlotDate.value = dates.find((item) => item.availableCount)?.date || dates[0].date;
+  }
+}, { deep: true });
+function slotDateDay(date) { return String(date || "").slice(8, 10); }
+function slotDateMonth(date) { return `${String(date || "").slice(5, 7)}月`; }
+function slotDateWeek(date) {
+  const index = new Date(`${date}T00:00:00`).getDay();
+  return `周${"日一二三四五六"[index]}`;
+}
+function selectSlotDate(date) {
+  if (activeSlotDate.value === date) return;
+  activeSlotDate.value = date;
+  if (selectedSlots.value.some((slot) => slot.date !== date)) {
+    selectedSlotKeys.value = [];
+    bookingForm.value.startTime = "";
+    bookingForm.value.endTime = "";
+  }
+}
 function toggleSlot(slot) {
   if (!slot.available) return;
   notice.value = "";
@@ -301,10 +340,10 @@ async function load() {
 async function processApproval(task, action) {
   try {
     await axios.post(`/api/v1/approvals/${task.id}/${action}`, { comment: action === "approve" ? "Approved by teacher" : "Rejected by teacher" });
-    notice.value = action === "approve" ? "Approval completed" : "Approval rejected";
+    notice.value = action === "approve" ? "审批已通过" : "预约申请已驳回";
     await load();
   } catch (e) {
-    notice.value = e.response?.data?.message || "Approval action failed";
+    notice.value = e.response?.data?.message || "审批操作失败";
   }
 }
 function selectResource(r) {
@@ -314,6 +353,7 @@ function selectResource(r) {
   bookingForm.value.maxDurationMinutes = r.maxDurationMinutes;
   bookingForm.value.needCheckin = r.needCheckin;
   selectedSlotKeys.value = [];
+  activeSlotDate.value = slotDates.value.find((item) => item.availableCount)?.date || slotDates.value[0]?.date || "";
   bookingModalOpen.value = true;
 }
 async function loadAvailability(items) {
@@ -447,6 +487,8 @@ async function createBooking() {
       headers: { "Idempotency-Key": crypto.randomUUID() },
     });
     notice.value = "预约提交成功";
+    bookingModalOpen.value = false;
+    selectedSlotKeys.value = [];
     await load();
   } catch (e) {
     notice.value = e.response?.data?.message || "预约失败";
@@ -489,6 +531,14 @@ onMounted(() => {
         </button>
       </div>
     </header>
+    <Transition name="toast">
+      <div v-if="toast.visible" class="app-toast" :class="toast.type" role="status" aria-live="polite">
+        <CheckCircle2 v-if="toast.type === 'success'" :size="20" />
+        <CircleAlert v-else :size="20" />
+        <span><b>{{ toast.type === 'success' ? '操作成功' : toast.type === 'error' ? '操作未完成' : '系统提示' }}</b><small>{{ toast.message }}</small></span>
+        <button title="关闭提示" @click="toast.visible = false"><X :size="16" /></button>
+      </div>
+    </Transition>
     <main v-if="!loggedIn" class="login-page">
       <section class="login-panel">
         <div class="eyebrow">LABORATORY ACCESS</div>
@@ -643,25 +693,33 @@ onMounted(() => {
           </div>
           <button class="icon-btn" type="button" @click="closeBookingModal" title="关闭">×</button>
         </div>
-        <div class="slot-legend"><span class="legend available"></span>可预约 <span class="legend selected"></span>已选择 <span class="legend unavailable"></span>不可预约</div>
-        <div class="slot-days">
-          <div v-for="(slots, date) in slotGroups" :key="date" class="slot-day">
-            <div class="slot-date">{{ date }}</div>
-            <div class="slot-grid">
-              <button v-for="slot in slots" :key="slot.key" type="button" class="slot-button" :class="{ selected: selectedSlotKeys.includes(slot.key), unavailable: !slot.available }" :disabled="!slot.available" @click="toggleSlot(slot)">
-                {{ slot.startTime }}-{{ slot.endTime }}
-              </button>
-            </div>
+        <div class="booking-modal-content">
+          <div v-if="slotDates.length" class="slot-date-tabs" aria-label="选择预约日期">
+            <button v-for="item in slotDates" :key="item.date" type="button" :class="{ active: activeSlotDate === item.date }" @click="selectSlotDate(item.date)">
+              <span>{{ slotDateWeek(item.date) }}</span><strong>{{ slotDateDay(item.date) }}</strong><small>{{ slotDateMonth(item.date) }} · {{ item.availableCount ? `${item.availableCount} 个可选` : '已约满' }}</small>
+            </button>
           </div>
-          <div v-if="!currentSlots.length" class="empty">未来14天没有配置开放时段</div>
+          <div class="slot-legend"><span class="legend available"></span>可预约 <span class="legend selected"></span>已选择 <span class="legend unavailable"></span>不可预约</div>
+          <div class="slot-days">
+            <div v-if="activeDateSlots.length" class="slot-day">
+              <div class="slot-date">{{ activeSlotDate }} · {{ slotDateWeek(activeSlotDate) }}</div>
+              <div class="slot-grid">
+                <button v-for="slot in activeDateSlots" :key="slot.key" type="button" class="slot-button" :class="{ selected: selectedSlotKeys.includes(slot.key), unavailable: !slot.available }" :disabled="!slot.available" @click="toggleSlot(slot)">
+                  {{ slot.startTime }}-{{ slot.endTime }}
+                </button>
+              </div>
+            </div>
+            <div v-else class="empty">未来14天没有配置开放时段</div>
+          </div>
+          <div class="modal-form">
+            <label>使用目的<input v-model="bookingForm.purpose" placeholder="请输入本次使用目的" /></label>
+            <label>参与人数<input v-model.number="bookingForm.participants" type="number" min="1" :max="bookingForm.capacity" /></label>
+          </div>
         </div>
-        <div class="modal-form">
-          <label>使用目的<input v-model="bookingForm.purpose" placeholder="请输入本次使用目的" /></label>
-          <label>参与人数<input v-model.number="bookingForm.participants" type="number" min="1" :max="bookingForm.capacity" /></label>
-        </div>
-        <div class="modal-summary" v-if="selectedSlots.length">已选择 {{ selectedSlots.length }} 个时段：{{ bookingForm.startTime.replace('T', ' ') }} - {{ bookingForm.endTime.slice(11) }}</div>
-        <button class="primary full" type="button" :disabled="!selectedSlots.length || loading" @click="createBooking">提交预约</button>
-        <div class="notice" v-if="notice">{{ notice }}</div>
+        <footer class="booking-modal-footer">
+          <div class="modal-summary" :class="{ empty: !selectedSlots.length }"><template v-if="selectedSlots.length"><b>已选 {{ selectedSlots.length }} 个时段</b><span>{{ bookingForm.startTime.replace('T', ' ') }} - {{ bookingForm.endTime.slice(11) }}</span></template><template v-else><b>请选择连续时段</b><span>提交前可确认日期和时间</span></template></div>
+          <button class="primary" type="button" :disabled="!selectedSlots.length || loading" @click="createBooking">提交预约</button>
+        </footer>
       </section>
     </div>
   </div>
