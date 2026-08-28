@@ -280,6 +280,157 @@ header {
 .resource-list {
   padding: 8px;
 }
+.student-content {
+  display: block;
+}
+.student-resource-gallery {
+  overflow: hidden;
+}
+.resource-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 18px;
+}
+.resource-card {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #dfe7e3;
+  border-radius: 7px;
+  background: #fff;
+  color: #1d3028;
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+.resource-card:hover,
+.resource-card.selected {
+  border-color: #75a690;
+  box-shadow: 0 9px 25px rgba(37, 75, 59, 0.12);
+  transform: translateY(-2px);
+}
+.resource-card-image {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #d9e4df;
+}
+.resource-card-image::after {
+  content: "";
+  position: absolute;
+  inset: 50% 0 0;
+  background: linear-gradient(transparent, rgba(16, 31, 25, 0.34));
+}
+.resource-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 260ms ease;
+}
+.resource-card:hover .resource-card-image img {
+  transform: scale(1.035);
+}
+.resource-image-fallback {
+  background: linear-gradient(135deg, #dce9e3, #bacdc4);
+}
+.resource-card-kind,
+.resource-card-status {
+  position: absolute;
+  z-index: 1;
+  top: 10px;
+  padding: 5px 8px;
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 1;
+}
+.resource-card-kind {
+  left: 10px;
+  color: #31443c;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(5px);
+}
+.resource-card-status {
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #fff;
+  background: rgba(27, 75, 61, 0.86);
+}
+.resource-card-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #c8ef6a;
+}
+.resource-card-body {
+  padding: 15px;
+}
+.resource-card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.resource-card-title strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+}
+.resource-card-title svg {
+  flex: 0 0 auto;
+  color: #568170;
+}
+.resource-card-body > p {
+  height: 34px;
+  margin: 8px 0 12px;
+  overflow: hidden;
+  color: #7c8983;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.resource-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 11px;
+  padding-bottom: 12px;
+  color: #586d64;
+  font-size: 11px;
+}
+.resource-card-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.resource-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 27px;
+  padding-top: 11px;
+  border-top: 1px solid #edf1ee;
+  font-size: 10px;
+}
+.resource-card-footer span {
+  min-width: 0;
+  overflow: hidden;
+  color: #487661;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.resource-card-footer b {
+  flex: 0 0 auto;
+  color: #8a9690;
+  font-weight: 500;
+}
+.resource-card-empty {
+  grid-column: 1 / -1;
+}
 .resource-row {
   width: 100%;
   border: 0;
@@ -438,6 +589,133 @@ header {
 .history {
   margin-top: 14px;
 }
+.student-bookings {
+  overflow: hidden;
+}
+.student-booking-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 16px 18px 18px;
+}
+.student-booking-card {
+  display: grid;
+  grid-template-columns: 54px 72px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 94px;
+  padding: 12px;
+  border: 1px solid #e1e9e5;
+  border-radius: 7px;
+  background: #fff;
+}
+.booking-date {
+  height: 58px;
+  border-right: 1px solid #e6ece9;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+.booking-date strong {
+  font-size: 25px;
+  line-height: 1;
+  color: #24483b;
+}
+.booking-date span {
+  margin-top: 5px;
+  color: #8a9791;
+  font-size: 9px;
+}
+.booking-resource-thumb {
+  width: 72px;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 5px;
+  background: #dce7e2;
+}
+.booking-resource-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.booking-card-info {
+  min-width: 0;
+}
+.booking-card-info .mono {
+  display: block;
+  overflow: hidden;
+  color: #8b9791;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.booking-card-info h3 {
+  margin: 5px 0 7px;
+  overflow: hidden;
+  color: #263b32;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.booking-card-info p {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  overflow: hidden;
+  color: #64766e;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.booking-card-info p span {
+  overflow: hidden;
+  margin-left: 4px;
+  color: #98a29d;
+  text-overflow: ellipsis;
+}
+.booking-card-status {
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
+  border-radius: 3px;
+  background: #fff0d8;
+  color: #8f6a2f;
+  font-size: 9px;
+  white-space: nowrap;
+}
+.booking-card-status i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.booking-card-status.approved,
+.booking-card-status.checked_in,
+.booking-card-status.completed {
+  background: #e4f3e9;
+  color: #347658;
+}
+.booking-card-status.rejected,
+.booking-card-status.canceled,
+.booking-card-status.no_show {
+  background: #f3e9e7;
+  color: #96574e;
+}
+.booking-cancel {
+  grid-column: 4;
+  align-self: end;
+  border: 0;
+  background: transparent;
+  color: #9a5a51;
+  font-size: 10px;
+}
+.student-notice {
+  padding: 12px 0 0;
+}
 .table {
   padding: 0 22px 18px;
 }
@@ -506,6 +784,12 @@ header {
   .content-grid {
     grid-template-columns: 1fr;
   }
+  .resource-card-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .student-booking-list {
+    grid-template-columns: 1fr;
+  }
   .stats {
     grid-template-columns: 1fr;
   }
@@ -519,5 +803,31 @@ header {
   }
   .tr > *:last-child {
     display: none;
+  }
+}
+@media (max-width: 560px) {
+  .resource-card-grid {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+  .student-booking-list {
+    padding: 12px;
+  }
+  .student-booking-card {
+    grid-template-columns: 46px 62px minmax(0, 1fr);
+    gap: 9px;
+  }
+  .booking-resource-thumb {
+    width: 62px;
+  }
+  .booking-card-status {
+    grid-column: 3;
+    grid-row: 2;
+    justify-self: start;
+  }
+  .booking-cancel {
+    grid-column: 3;
+    grid-row: 2;
+    justify-self: end;
   }
 }

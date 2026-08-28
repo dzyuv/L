@@ -5,6 +5,7 @@ import AdminDashboard from "./AdminDashboard.vue";
 import UserMaintenance from "./UserMaintenance.vue";
 import {
   CalendarDays,
+  Clock3,
   ChevronRight,
   ClipboardList,
   LogIn,
@@ -12,6 +13,7 @@ import {
   Plus,
   RefreshCw,
   ShieldCheck,
+  Users as UsersIcon,
 } from "lucide-vue-next";
 const token = ref(localStorage.getItem("token") || "");
 const user = ref(null);
@@ -44,6 +46,11 @@ const isSystemAdmin = computed(() => (user.value?.roles || []).includes("SYSTEM_
 const isLabAdmin = computed(() => (user.value?.roles || []).includes("LAB_ADMIN"));
 const isAdmin = computed(() => isSystemAdmin.value || isLabAdmin.value);
 const roleLabel = computed(() => isSystemAdmin.value ? "系统管理员" : isLabAdmin.value ? "实验室管理员" : isTeacher.value ? "教师" : "学生");
+const resourceBookingCounts = computed(() => bookings.value.reduce((counts, item) => {
+  counts[item.resourceId] = (counts[item.resourceId] || 0) + 1;
+  return counts;
+}, {}));
+const pendingBookingCount = computed(() => bookings.value.filter((item) => item.status === "PENDING_APPROVAL").length);
 axios.defaults.baseURL = API_ORIGIN;
 axios.interceptors.request.use((c) => {
   if (token.value) c.headers.Authorization = `Bearer ${token.value}`;
@@ -71,6 +78,47 @@ function formatDateTime(date) {
   const datePart = formatDate(date);
   const timePart = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
   return `${datePart}T${timePart}`;
+}
+function resourceImage(resource) {
+  const name = String(resource?.name || "");
+  if (name.includes("显微") || name.includes("材料") || name.includes("分析")) return "https://images.unsplash.com/photo-1576086213369-97a306d36557?auto=format&fit=crop&w=900&q=82";
+  if (name.includes("计算机") || name.includes("电脑") || name.includes("工作站")) return "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=900&q=82";
+  if (name.includes("电子") || name.includes("测量") || name.includes("示波")) return "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=900&q=82";
+  if (name.includes("会议") || name.includes("教室")) return "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=900&q=82";
+  return "https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=900&q=82";
+}
+function resourceDisplayName(resource) {
+  const value = String(resource?.name || "").trim();
+  return value && !/^\?+$/.test(value) ? value : `${resource?.location || "综合"}基础实验室`;
+}
+function resourceDisplayDescription(resource) {
+  const value = String(resource?.description || "").trim();
+  return value && !/^\?+$/.test(value) ? value : "适合课程实验、科研实践与设备操作";
+}
+function bookingResource(booking) {
+  return resources.value.find((item) => item.id === booking.resourceId) || { name: booking.resourceNameSnapshot };
+}
+function resourceKind(resource) {
+  const name = String(resource?.name || "");
+  if (name.includes("计算机") || name.includes("电脑") || name.includes("工作站")) return "计算设备";
+  if (name.includes("电子") || name.includes("测量") || name.includes("示波")) return "电子仪器";
+  if (name.includes("材料") || name.includes("显微") || name.includes("分析")) return "材料实验";
+  if (name.includes("会议") || name.includes("教室")) return "教学空间";
+  return "实验空间";
+}
+function bookingStatusText(status) {
+  return ({ PENDING_APPROVAL: "待审批", APPROVED: "已通过", REJECTED: "已驳回", CANCELED: "已取消", CHECKED_IN: "使用中", COMPLETED: "已完成", NO_SHOW: "未签到" })[status] || status;
+}
+function bookingDay(value) {
+  return value ? String(value).slice(8, 10) : "--";
+}
+function bookingMonth(value) {
+  if (!value) return "----.--";
+  return `${String(value).slice(0, 4)}.${String(value).slice(5, 7)}`;
+}
+function handleResourceImageError(event) {
+  event.currentTarget.style.display = "none";
+  event.currentTarget.parentElement.classList.add("resource-image-fallback");
 }
 function bookableSlot(window, now = new Date()) {
   const openAt = new Date(`${window.date}T${window.openTime}`);
@@ -261,7 +309,7 @@ async function processApproval(task, action) {
 }
 function selectResource(r) {
   bookingForm.value.resourceId = r.id;
-  bookingForm.value.resourceName = r.name;
+  bookingForm.value.resourceName = resourceDisplayName(r);
   bookingForm.value.capacity = r.capacity;
   bookingForm.value.maxDurationMinutes = r.maxDurationMinutes;
   bookingForm.value.needCheckin = r.needCheckin;
@@ -533,11 +581,11 @@ onMounted(() => {
           ><small>包含历史记录</small>
         </div>
         <div>
-          <span>待处理事项</span><strong>0</strong><small>当前无需审批</small>
+          <span>待审批预约</span><strong>{{ pendingBookingCount }}</strong><small>{{ pendingBookingCount ? '正在等待管理员处理' : '当前没有待审批申请' }}</small>
         </div>
       </section>
-      <div class="content-grid">
-        <section class="panel">
+      <div class="student-content">
+        <section class="panel student-resource-gallery">
           <div class="panel-head">
             <div>
               <h2>资源目录</h2>
@@ -547,104 +595,42 @@ onMounted(() => {
               <RefreshCw :size="16" />刷新
             </button>
           </div>
-          <div class="resource-list">
+          <div class="resource-card-grid">
             <button
               v-for="r in resources"
               :key="r.id"
-              class="resource-row"
+              class="resource-card"
               :class="{ selected: bookingForm.resourceId === r.id }"
               @click="selectResource(r)"
             >
-              <div class="resource-icon"><CalendarDays :size="20" /></div>
-              <div class="resource-info">
-                <b>{{ r.name }}</b
-                ><span>{{ r.location }} · 容量 {{ r.capacity }} 人</span>
-              </div>
-              <span class="resource-status">可预约</span>
-              <small v-if="availabilityByResource[r.id]?.next" class="availability-hint">{{ availabilityByResource[r.id].next.date }} {{ availabilityByResource[r.id].next.openTime }}-{{ availabilityByResource[r.id].next.closeTime }}</small>
-              <small v-else class="availability-hint unavailable">未来14天暂无开放时段</small>
+              <div class="resource-card-image"><img :src="resourceImage(r)" :alt="`${resourceDisplayName(r)} 场景图`" loading="lazy" @error="handleResourceImageError" /><span class="resource-card-kind">{{ resourceKind(r) }}</span><span class="resource-card-status"><i></i>可预约</span></div>
+              <div class="resource-card-body"><div class="resource-card-title"><strong>{{ resourceDisplayName(r) }}</strong><ChevronRight :size="16" /></div><p>{{ resourceDisplayDescription(r) }}</p><div class="resource-card-meta"><span><CalendarDays :size="14" />{{ r.location }}</span><span><UsersIcon :size="14" />{{ r.capacity }} 人</span></div><div class="resource-card-footer"><span v-if="availabilityByResource[r.id]?.next">最近开放 {{ availabilityByResource[r.id].next.date }} {{ availabilityByResource[r.id].next.openTime }}</span><span v-else>未来14天暂无开放时段</span><b>{{ resourceBookingCounts[r.id] || 0 }} 次我的预约</b></div></div>
             </button>
-            <div v-if="!resources.length" class="empty">
+            <div v-if="!resources.length" class="empty resource-card-empty">
               暂无资源，请先在资源服务中配置。
             </div>
           </div>
         </section>
-        <section class="panel booking-panel">
-          <div class="panel-head">
-            <div>
-              <h2>创建预约</h2>
-              <p>预约时间须按 {{ bookingForm.slotMinutes }} 分钟粒度</p>
-            </div>
-            <Plus :size="20" />
-          </div>
-          <div class="form-grid">
-            <label
-              >开始时间<input
-                v-model="bookingForm.startTime"
-                type="datetime-local" /></label
-            ><label
-              >结束时间<input
-                v-model="bookingForm.endTime"
-                type="datetime-local" /></label
-            ><label class="wide"
-              >使用目的<input
-                v-model="bookingForm.purpose"
-                placeholder="请填写本次使用目的" /></label
-            ><label
-              >参与人数<input
-                v-model.number="bookingForm.participants"
-                type="number"
-                min="1"
-            /></label>
-          </div>
-          <div v-if="bookingForm.resourceId && availabilityByResource[bookingForm.resourceId]?.windows?.length" class="availability-panel">
-            <div class="availability-title">可预约时间（未来14天）</div>
-            <div class="availability-list">
-              <button v-for="window in availabilityByResource[bookingForm.resourceId].windows" :key="`${window.date}-${window.openTime}`" type="button" class="availability-chip" @click="applyBookableSlot(window)">{{ window.date }} {{ window.openTime }}-{{ window.closeTime }}</button>
-            </div>
-          </div>
-          <button
-            class="primary full"
-            :disabled="!bookingForm.resourceId || loading"
-            @click="bookingModalOpen = true"
-          >
-            提交预约 <span>→</span>
-          </button>
-          <div class="notice" v-if="notice">{{ notice }}</div>
-        </section>
       </div>
-      <section class="panel history">
+      <section class="panel history student-bookings">
         <div class="panel-head">
           <div>
             <h2>我的预约</h2>
             <p>近期使用安排与状态</p>
           </div>
         </div>
-        <div class="table">
-          <div class="tr th">
-            <span>预约编号</span><span>资源</span><span>时间</span
-            ><span>状态</span><span></span>
-          </div>
-          <div v-for="b in bookings" :key="b.id" class="tr">
-            <span class="mono">{{ b.bookingNo }}</span
-            ><span>{{ b.resourceNameSnapshot }}</span
-            ><span
-              >{{ b.startTime?.replace("T", " ") }} -
-              {{ b.endTime?.slice(11) }}</span
-            ><span
-              ><i class="dot" :class="b.status.toLowerCase()"></i
-              >{{ b.status }}</span
-            ><button
-              v-if="['APPROVED', 'PENDING_APPROVAL'].includes(b.status)"
-              class="text-btn"
-              @click="cancel(b.id)"
-            >
-              取消</button
-            ><span v-else></span>
-          </div>
+        <div class="student-booking-list">
+          <article v-for="b in bookings" :key="b.id" class="student-booking-card">
+            <div class="booking-date"><strong>{{ bookingDay(b.startTime) }}</strong><span>{{ bookingMonth(b.startTime) }}</span></div>
+            <div class="booking-resource-thumb"><img :src="resourceImage(bookingResource(b))" alt="" loading="lazy" @error="handleResourceImageError" /></div>
+            <div class="booking-card-info"><span class="mono">{{ b.bookingNo }}</span><h3>{{ resourceDisplayName(bookingResource(b)) }}</h3><p><Clock3 :size="14" />{{ b.startTime?.slice(11, 16) }} - {{ b.endTime?.slice(11, 16) }}<span>{{ b.purpose }}</span></p></div>
+            <span class="booking-card-status" :class="b.status.toLowerCase()"><i></i>{{ bookingStatusText(b.status) }}</span>
+            <button v-if="['APPROVED', 'PENDING_APPROVAL'].includes(b.status)" class="booking-cancel" @click="cancel(b.id)">取消预约</button>
+          </article>
           <div v-if="!bookings.length" class="empty">还没有预约记录</div>
         </div>
       </section>
+      <div class="notice student-notice" v-if="notice">{{ notice }}</div>
       <UserMaintenance :key="`student-maintenance-${user?.id}`" />
     </main>
     <div v-if="bookingModalOpen" class="booking-modal-backdrop" @click.self="closeBookingModal">
