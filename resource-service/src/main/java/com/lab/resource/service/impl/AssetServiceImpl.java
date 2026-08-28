@@ -32,20 +32,20 @@ public class AssetServiceImpl implements AssetService {
     }
 
     public List<AssetCategory> categories(boolean admin, HttpServletRequest request) {
-        if (admin) roles.requireAdmin(request);
+        if (admin) roles.requireLabAdmin(request);
         return admin ? categories.findAll().stream().sorted(Comparator.comparing(item -> item.name, String.CASE_INSENSITIVE_ORDER)).toList() : categories.findByEnabledTrueOrderByNameAsc();
     }
     public AssetCategory createCategory(AssetController.CategoryRequest body, HttpServletRequest request) {
-        roles.requireAdmin(request); categories.findByNameIgnoreCase(body.name()).ifPresent(x -> { throw new BusinessException("CATEGORY_EXISTS", "Asset category already exists", HttpStatus.CONFLICT); });
+        roles.requireLabAdmin(request); categories.findByNameIgnoreCase(body.name()).ifPresent(x -> { throw new BusinessException("CATEGORY_EXISTS", "Asset category already exists", HttpStatus.CONFLICT); });
         AssetCategory item = new AssetCategory(); apply(item, body); return categories.save(item);
     }
     public AssetCategory updateCategory(Long id, AssetController.CategoryRequest body, HttpServletRequest request) {
-        roles.requireAdmin(request); AssetCategory item = categories.findById(id).orElseThrow(() -> notFound("Asset category does not exist"));
+        roles.requireLabAdmin(request); AssetCategory item = categories.findById(id).orElseThrow(() -> notFound("Asset category does not exist"));
         categories.findByNameIgnoreCase(body.name()).filter(x -> !Objects.equals(x.id, id)).ifPresent(x -> { throw new BusinessException("CATEGORY_EXISTS", "Asset category already exists", HttpStatus.CONFLICT); });
         apply(item, body); return categories.save(item);
     }
     public List<?> catalog(HttpServletRequest request) {
-        roles.requireAny(request, "TEACHER", "LAB_ADMIN", "SYSTEM_ADMIN");
+        roles.requireLabAdmin(request);
         return assets.findByDeletedFalseOrderByCreatedAtDesc().stream().filter(item -> !Set.of("SCRAPPED", "LOST").contains(item.status))
                 .map(item -> Map.of("id", item.id, "assetNo", item.assetNo, "name", item.name, "categoryId", item.categoryId,
                         "resourceId", item.resourceId == null ? "" : item.resourceId, "serialNo", Objects.toString(item.serialNo, ""),
@@ -54,39 +54,39 @@ public class AssetServiceImpl implements AssetService {
                 .toList();
     }
     public Map<String, Object> listAssets(String query, String status, Long categoryId, HttpServletRequest request) {
-        roles.requireAdmin(request);
+        roles.requireLabAdmin(request);
         List<Asset> items = assets.findByDeletedFalseOrderByCreatedAtDesc().stream()
                 .filter(item -> query == null || query.isBlank() || item.name.toLowerCase().contains(query.toLowerCase()) || item.assetNo.toLowerCase().contains(query.toLowerCase()) || Objects.toString(item.serialNo, "").toLowerCase().contains(query.toLowerCase()))
                 .filter(item -> status == null || status.isBlank() || status.equals(item.status))
                 .filter(item -> categoryId == null || Objects.equals(categoryId, item.categoryId)).toList();
         return Map.of("items", items, "total", items.size());
     }
-    public Asset getAsset(Long id, HttpServletRequest request) { roles.requireAdmin(request); return findAsset(id); }
+    public Asset getAsset(Long id, HttpServletRequest request) { roles.requireLabAdmin(request); return findAsset(id); }
     @Transactional
     public Asset createAsset(AssetController.AssetRequest body, HttpServletRequest request) {
-        roles.requireAdmin(request); validateCategory(body.categoryId()); validateResource(body.resourceId()); validateStatus(body.status());
+        roles.requireLabAdmin(request); validateCategory(body.categoryId()); validateResource(body.resourceId()); validateStatus(body.status());
         Asset item = new Asset(); apply(item, body); validateSerialized(item); Asset saved;
         try { saved = assets.saveAndFlush(item); } catch (DataIntegrityViolationException e) { throw new BusinessException("ASSET_EXISTS", "Asset number or serial number already exists", HttpStatus.CONFLICT); }
         record(saved, null, saved.status, "Asset created", roles.currentUserId(request)); return saved;
     }
     @Transactional
     public Asset updateAsset(Long id, AssetController.AssetRequest body, HttpServletRequest request) {
-        roles.requireAdmin(request); validateCategory(body.categoryId()); validateResource(body.resourceId()); validateStatus(body.status());
+        roles.requireLabAdmin(request); validateCategory(body.categoryId()); validateResource(body.resourceId()); validateStatus(body.status());
         Asset item = findAsset(id); String previous = item.status; apply(item, body); validateSerialized(item); Asset saved;
         try { saved = assets.saveAndFlush(item); } catch (DataIntegrityViolationException e) { throw new BusinessException("ASSET_EXISTS", "Asset number or serial number already exists", HttpStatus.CONFLICT); }
         if (!Objects.equals(previous, saved.status)) record(saved, previous, saved.status, "Asset updated", roles.currentUserId(request)); return saved;
     }
     @Transactional
     public Asset updateStatus(Long id, AssetController.StatusRequest body, HttpServletRequest request) {
-        roles.requireAdmin(request); validateStatus(body.status()); Asset item = findAsset(id); String previous = item.status;
+        roles.requireLabAdmin(request); validateStatus(body.status()); Asset item = findAsset(id); String previous = item.status;
         item.status = body.status(); Asset saved = assets.save(item); record(saved, previous, saved.status, Objects.toString(body.reason(), "Status changed"), roles.currentUserId(request)); return saved;
     }
     @Transactional
     public Asset assign(Long id, AssetController.AssignRequest body, HttpServletRequest request) {
-        roles.requireAdmin(request); Asset item = findAsset(id); item.custodianUserId = body.custodianUserId(); if (body.location() != null) item.location = body.location();
+        roles.requireLabAdmin(request); Asset item = findAsset(id); item.custodianUserId = body.custodianUserId(); if (body.location() != null) item.location = body.location();
         Asset saved = assets.save(item); record(saved, saved.status, saved.status, Objects.toString(body.reason(), "Custodian changed"), roles.currentUserId(request)); return saved;
     }
-    public List<AssetStatusHistory> history(Long id, HttpServletRequest request) { roles.requireAdmin(request); findAsset(id); return history.findByAssetIdOrderByCreatedAtDesc(id); }
+    public List<AssetStatusHistory> history(Long id, HttpServletRequest request) { roles.requireLabAdmin(request); findAsset(id); return history.findByAssetIdOrderByCreatedAtDesc(id); }
 
     @Transactional
     public MaintenanceTicket report(AssetController.ReportRequest body, HttpServletRequest request) {
@@ -103,11 +103,11 @@ public class AssetServiceImpl implements AssetService {
     }
     public List<MaintenanceTicket> myTickets(HttpServletRequest request) { return tickets.findByReportedByOrderByCreatedAtDesc(roles.currentUserId(request)); }
     public Map<String, Object> listTickets(String status, Long assetId, HttpServletRequest request) {
-        roles.requireAdmin(request); List<MaintenanceTicket> items = tickets.findAllByOrderByCreatedAtDesc().stream().filter(x -> status == null || status.isBlank() || status.equals(x.status)).filter(x -> assetId == null || Objects.equals(assetId, x.assetId)).toList(); return Map.of("items", items, "total", items.size());
+        roles.requireLabAdmin(request); List<MaintenanceTicket> items = tickets.findAllByOrderByCreatedAtDesc().stream().filter(x -> status == null || status.isBlank() || status.equals(x.status)).filter(x -> assetId == null || Objects.equals(assetId, x.assetId)).toList(); return Map.of("items", items, "total", items.size());
     }
     @Transactional
     public MaintenanceTicket updateTicket(Long id, AssetController.TicketUpdateRequest body, HttpServletRequest request) {
-        roles.requireAdmin(request); if (!TICKET_STATUSES.contains(body.status())) throw new BusinessException("INVALID_STATUS", "Maintenance ticket status is invalid", HttpStatus.BAD_REQUEST);
+        roles.requireLabAdmin(request); if (!TICKET_STATUSES.contains(body.status())) throw new BusinessException("INVALID_STATUS", "Maintenance ticket status is invalid", HttpStatus.BAD_REQUEST);
         MaintenanceTicket ticket = tickets.findById(id).orElseThrow(() -> notFound("Maintenance ticket does not exist"));
         validateTransition(ticket.status, body.status());
         if (ticket.assetId == null && body.assetId() != null) { Asset selected = findAsset(body.assetId()); if (tickets.existsByAssetIdAndStatusIn(selected.id, Set.of("REPORTED", "TRIAGED", "REPAIRING", "WAITING_ACCEPTANCE"))) throw new BusinessException("OPEN_TICKET_EXISTS", "This asset already has an open maintenance ticket", HttpStatus.CONFLICT); ticket.assetId = selected.id; ticket.previousAssetStatus = selected.status; if (ticket.resourceId == null) ticket.resourceId = selected.resourceId; if (ticket.locationSnapshot == null || ticket.locationSnapshot.isBlank()) ticket.locationSnapshot = selected.location; }

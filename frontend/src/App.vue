@@ -144,7 +144,7 @@ function resourceKind(resource) {
   return "实验空间";
 }
 function bookingStatusText(status) {
-  return ({ PENDING_APPROVAL: "待审批", APPROVED: "已通过", REJECTED: "已驳回", CANCELED: "已取消", CHECKED_IN: "使用中", COMPLETED: "已完成", NO_SHOW: "未签到" })[status] || status;
+  return ({ PENDING_APPROVAL: "待审批", APPROVED: "已通过", REJECTED: "已驳回", CANCELED: "已取消", CHECKED_IN: "使用中", COMPLETED: "已完成", NO_SHOW: "未签到", EXPIRED: "审批超时" })[status] || status;
 }
 function bookingDay(value) {
   return value ? String(value).slice(8, 10) : "--";
@@ -343,8 +343,12 @@ async function load() {
     const m = await axios.get("/api/v1/user/me");
     user.value = m.data.data;
     if (isAdmin.value) {
-      const r = await axios.get("/api/v1/resources");
-      resources.value = r.data.data || [];
+      if (isLabAdmin.value && !isSystemAdmin.value) {
+        const r = await axios.get("/api/v1/resources");
+        resources.value = r.data.data || [];
+      } else {
+        resources.value = [];
+      }
       bookings.value = [];
       approvals.value = [];
       return;
@@ -704,7 +708,7 @@ onMounted(() => {
         </section>
 
         <div v-else-if="teacherActiveTab === 'maintenance'" class="teacher-tab-maintenance">
-          <UserMaintenance :key="`teacher-maintenance-${user?.id}`" internal :resources="resources" :bookings="bookings" />
+          <UserMaintenance :key="`teacher-maintenance-${user?.id}`" :resources="resources" :bookings="bookings" />
         </div>
       </section>
     </main>

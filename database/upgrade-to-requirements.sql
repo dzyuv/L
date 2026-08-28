@@ -56,6 +56,7 @@ CALL lab_system.add_column_if_missing('lab_resource', 'resource_type', 'version'
 CALL lab_system.add_column_if_missing('lab_resource', 'resource_type', 'deleted', 'BOOLEAN NOT NULL DEFAULT FALSE');
 CALL lab_system.add_column_if_missing('lab_resource', 'resource', 'approval_required_override', 'BOOLEAN NULL');
 CALL lab_system.add_column_if_missing('lab_resource', 'resource', 'approval_level_override', 'TINYINT NULL');
+CALL lab_system.add_column_if_missing('lab_resource', 'resource', 'slot_minutes', 'INT NOT NULL DEFAULT 30');
 CALL lab_system.add_column_if_missing('lab_resource', 'resource_schedule', 'effective_from', 'DATE NULL');
 CALL lab_system.add_column_if_missing('lab_resource', 'resource_schedule', 'effective_to', 'DATE NULL');
 CALL lab_system.add_column_if_missing('lab_resource', 'resource_schedule', 'version', 'INT NOT NULL DEFAULT 0');
@@ -119,6 +120,9 @@ SET @drop_booking_idempotency_index = IF(@legacy_booking_idempotency_index IS NU
 PREPARE drop_booking_idempotency_stmt FROM @drop_booking_idempotency_index; EXECUTE drop_booking_idempotency_stmt; DEALLOCATE PREPARE drop_booking_idempotency_stmt;
 SET @add_booking_idempotency_index = (SELECT IF(COUNT(*) = 0, 'ALTER TABLE lab_booking.booking ADD UNIQUE KEY uk_booking_user_request(user_id, client_request_id)', 'SELECT 1') FROM information_schema.statistics WHERE table_schema='lab_booking' AND table_name='booking' AND index_name='uk_booking_user_request');
 PREPARE add_booking_idempotency_stmt FROM @add_booking_idempotency_index; EXECUTE add_booking_idempotency_stmt; DEALLOCATE PREPARE add_booking_idempotency_stmt;
+CREATE TABLE IF NOT EXISTS booking_quota_lock (
+  user_id BIGINT PRIMARY KEY
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CALL lab_system.add_column_if_missing('lab_booking', 'booking_slot', 'released_at', 'DATETIME(3) NULL');
 CALL lab_system.add_column_if_missing('lab_booking', 'booking_slot', 'release_reason', 'VARCHAR(100) NULL');
 CALL lab_system.add_column_if_missing('lab_booking', 'booking_slot', 'active_slot_key', "VARCHAR(128) GENERATED ALWAYS AS (CASE WHEN released_at IS NULL THEN CONCAT(resource_id, ':', DATE_FORMAT(slot_start, '%Y-%m-%d %H:%i:%s.%f')) ELSE NULL END) STORED");
@@ -235,6 +239,8 @@ CALL lab_system.add_column_if_missing('lab_approval', 'approval_task', 'resource
 CALL lab_system.add_column_if_missing('lab_approval', 'approval_task', 'resource_name', 'VARCHAR(100) NULL');
 CALL lab_system.add_column_if_missing('lab_approval', 'approval_task', 'start_time', 'DATETIME(3) NULL');
 CALL lab_system.add_column_if_missing('lab_approval', 'approval_task', 'end_time', 'DATETIME(3) NULL');
+CALL lab_system.add_column_if_missing('lab_approval', 'approval_task', 'comment', 'VARCHAR(500) NULL');
+CALL lab_system.add_column_if_missing('lab_approval', 'approval_task', 'version', 'INT NOT NULL DEFAULT 0');
 CALL lab_system.add_column_if_missing('lab_approval', 'approval_record', 'request_id', 'VARCHAR(64) NULL');
 CREATE TABLE IF NOT EXISTS approval_task_assignee (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,

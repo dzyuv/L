@@ -51,5 +51,8 @@ public class BookingController {
     @Scheduled(fixedDelay = 60000)
     public void markNoShow() { service.markNoShow(); }
 
+    @Scheduled(fixedDelay = 60000)
+    public void expirePendingApprovals() { service.expirePendingApprovals(); }
+
     private String requestId(HttpServletRequest request) { return Objects.toString(request.getAttribute("X-Request-Id"), ""); }
 }

@@ -17,6 +17,7 @@ public class Booking{
     public int participants;
     public String status;
     public int approvalLevelSnapshot;
+    public LocalDateTime approvalDeadline;
     public boolean needCheckinSnapshot;
     @Column(nullable=false) public String clientRequestId;
     public LocalDateTime checkinAt;

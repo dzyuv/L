@@ -40,7 +40,9 @@ public class ApprovalInternalServiceImpl implements ApprovalInternalService {
         task.level = request.level();
         task.approverRole = "RESOURCE_MANAGER";
         task.assignedUserId = request.assignedUserId();
-        task.deadline = LocalDateTime.now().plusHours(24);
+        LocalDateTime defaultDeadline = LocalDateTime.now().plusHours(24);
+        task.deadline = request.startTime() != null && request.startTime().isBefore(defaultDeadline)
+                ? request.startTime() : defaultDeadline;
         return tasks.save(task);
     }
 }

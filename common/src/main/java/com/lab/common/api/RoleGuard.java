@@ -11,14 +11,12 @@ import java.util.Set;
 /** Authorization helper for endpoints that require an administrative role. */
 @Component
 public class RoleGuard {
-    private static final Set<String> ADMIN_ROLES=Set.of("LAB_ADMIN","SYSTEM_ADMIN");
-
-    public void requireAdmin(HttpServletRequest request){
-        requireAny(request, ADMIN_ROLES.toArray(String[]::new));
-    }
-
     public void requireSystemAdmin(HttpServletRequest request){
         requireAny(request, "SYSTEM_ADMIN");
+    }
+
+    public void requireLabAdmin(HttpServletRequest request){
+        requireAny(request, "LAB_ADMIN");
     }
 
     public void requireAny(HttpServletRequest request,String... acceptedRoles){

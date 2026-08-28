@@ -7,6 +7,7 @@ import com.lab.common.exception.BusinessException;
 import com.lab.common.api.RoleGuard;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,28 +17,65 @@ import java.util.*;
 
 @Service
 public class BookingServiceImpl implements BookingService {
+    private static final Set<String> QUOTA_STATUSES = Set.of("PENDING_APPROVAL", "APPROVED", "CHECKED_IN");
     private final BookingRepository bookings;
     private final BookingSlotRepository slots;
+    private final BookingQuotaLockRepository quotaLocks;
     private final ResourceRuleClient resourceRules;
     private final ApprovalTaskClient approvalTasks;
     private final BookingLifecycleService lifecycle;
     private final ViolationRecordRepository violations;
     private final RoleGuard roleGuard;
+    private final int maxActive;
+    private final int teacherMaxActive;
+    private final int maxPending;
+    private final int teacherMaxPending;
+    private final int maxPerResource;
+    private final int teacherMaxPerResource;
+    private final int maxDailyMinutes;
+    private final int teacherMaxDailyMinutes;
+    private final int maxAdvanceDays;
+    private final int pendingHoldHours;
 
-    public BookingServiceImpl(BookingRepository bookings, BookingSlotRepository slots, ResourceRuleClient resourceRules, ApprovalTaskClient approvalTasks, BookingLifecycleService lifecycle, ViolationRecordRepository violations, RoleGuard roleGuard) {
+    public BookingServiceImpl(BookingRepository bookings, BookingSlotRepository slots,
+                              BookingQuotaLockRepository quotaLocks, ResourceRuleClient resourceRules,
+                              ApprovalTaskClient approvalTasks, BookingLifecycleService lifecycle,
+                              ViolationRecordRepository violations, RoleGuard roleGuard,
+                              @Value("${booking.fair-use.max-active:5}") int maxActive,
+                              @Value("${booking.fair-use.teacher-max-active:10}") int teacherMaxActive,
+                              @Value("${booking.fair-use.max-pending:3}") int maxPending,
+                              @Value("${booking.fair-use.teacher-max-pending:5}") int teacherMaxPending,
+                              @Value("${booking.fair-use.max-per-resource:2}") int maxPerResource,
+                              @Value("${booking.fair-use.teacher-max-per-resource:3}") int teacherMaxPerResource,
+                              @Value("${booking.fair-use.max-daily-minutes:240}") int maxDailyMinutes,
+                              @Value("${booking.fair-use.teacher-max-daily-minutes:480}") int teacherMaxDailyMinutes,
+                              @Value("${booking.fair-use.max-advance-days:30}") int maxAdvanceDays,
+                              @Value("${booking.fair-use.pending-hold-hours:24}") int pendingHoldHours) {
         this.bookings = bookings;
         this.slots = slots;
+        this.quotaLocks = quotaLocks;
         this.resourceRules = resourceRules;
         this.approvalTasks = approvalTasks;
         this.lifecycle = lifecycle;
         this.violations = violations;
         this.roleGuard = roleGuard;
+        this.maxActive = maxActive;
+        this.teacherMaxActive = teacherMaxActive;
+        this.maxPending = maxPending;
+        this.teacherMaxPending = teacherMaxPending;
+        this.maxPerResource = maxPerResource;
+        this.teacherMaxPerResource = teacherMaxPerResource;
+        this.maxDailyMinutes = maxDailyMinutes;
+        this.teacherMaxDailyMinutes = teacherMaxDailyMinutes;
+        this.maxAdvanceDays = maxAdvanceDays;
+        this.pendingHoldHours = pendingHoldHours;
     }
 
     @Override
     @Transactional
     public Booking create(BookingController.Create request, String key, HttpServletRequest servletRequest) {
         Long userId = currentUser(servletRequest);
+        roleGuard.requireAny(servletRequest, "STUDENT", "TEACHER", "LAB_ADMIN");
         if (key == null || key.isBlank() || key.length() > 64) {
             throw new BusinessException("IDEMPOTENCY_REQUIRED", "Idempotency-Key is required", HttpStatus.BAD_REQUEST);
         }
@@ -47,6 +85,9 @@ public class BookingServiceImpl implements BookingService {
         if (!request.startTime().isBefore(request.endTime())) {
             throw new BusinessException("INVALID_TIME", "Start time must be before end time", HttpStatus.BAD_REQUEST);
         }
+        quotaLocks.ensureExists(userId);
+        quotaLocks.lockByUserId(userId).orElseThrow(() -> new IllegalStateException("Booking quota lock was not created"));
+        assertFairUse(userId, request, servletRequest);
         ResourceRuleClient.BookingRule rule = resourceRules.getRule(request.resourceId(), request.startTime(), request.endTime(), request.participants(), servletRequest.getHeader("Authorization"));
         Booking booking = new Booking();
         booking.bookingNo = "BK" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
@@ -63,6 +104,10 @@ public class BookingServiceImpl implements BookingService {
         booking.needCheckinSnapshot = rule.needCheckin();
         booking.clientRequestId = key;
         booking.status = rule.approvalLevel() == 0 ? "APPROVED" : "PENDING_APPROVAL";
+        if (rule.approvalLevel() > 0) {
+            LocalDateTime holdDeadline = LocalDateTime.now().plusHours(pendingHoldHours);
+            booking.approvalDeadline = holdDeadline.isBefore(request.startTime()) ? holdDeadline : request.startTime();
+        }
         booking = bookings.saveAndFlush(booking);
         lifecycle.recordInitial(booking, userId, requestId(servletRequest));
         try {
@@ -166,8 +211,72 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
+    @Transactional
+    public void expirePendingApprovals() {
+        LocalDateTime now = LocalDateTime.now();
+        bookings.findAll().stream()
+                .filter(booking -> "PENDING_APPROVAL".equals(booking.status))
+                .forEach(booking -> {
+                    if (booking.approvalDeadline == null) {
+                        LocalDateTime createdDeadline = booking.createdAt.plusHours(pendingHoldHours);
+                        booking.approvalDeadline = createdDeadline.isBefore(booking.startTime)
+                                ? createdDeadline : booking.startTime;
+                    }
+                    if (!booking.approvalDeadline.isAfter(now)) {
+                        lifecycle.transition(booking, "EXPIRED", null, "Approval hold expired", null);
+                        lifecycle.releaseSlots(booking.id, "APPROVAL_TIMEOUT");
+                    }
+                    bookings.save(booking);
+                });
+    }
+
+    private void assertFairUse(Long userId, BookingController.Create request, HttpServletRequest servletRequest) {
+        LocalDateTime now = LocalDateTime.now();
+        if (!request.startTime().isAfter(now) || request.startTime().isAfter(now.plusDays(maxAdvanceDays))) {
+            throw new BusinessException("BOOKING_ADVANCE_LIMIT",
+                    "预约开始时间必须在未来 " + maxAdvanceDays + " 天内", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        boolean teacher = roleGuard.hasRole(servletRequest, "TEACHER") || roleGuard.hasRole(servletRequest, "LAB_ADMIN");
+        int activeLimit = teacher ? teacherMaxActive : maxActive;
+        int pendingLimit = teacher ? teacherMaxPending : maxPending;
+        int resourceLimit = teacher ? teacherMaxPerResource : maxPerResource;
+        int dailyMinutesLimit = teacher ? teacherMaxDailyMinutes : maxDailyMinutes;
+        List<Booking> active = bookings.findByUserIdOrderByStartTimeDesc(userId).stream()
+                .filter(item -> QUOTA_STATUSES.contains(item.status) && item.endTime != null && item.endTime.isAfter(now))
+                .toList();
+        if (active.size() >= activeLimit) {
+            throw new BusinessException("BOOKING_ACTIVE_LIMIT",
+                    "你当前最多可以保留 " + activeLimit + " 个未来有效预约，请先取消或完成已有预约", HttpStatus.TOO_MANY_REQUESTS);
+        }
+        long pending = active.stream().filter(item -> "PENDING_APPROVAL".equals(item.status)).count();
+        if (pending >= pendingLimit) {
+            throw new BusinessException("BOOKING_PENDING_LIMIT",
+                    "你最多可以同时提交 " + pendingLimit + " 个待审批预约，请等待审批后再提交", HttpStatus.TOO_MANY_REQUESTS);
+        }
+        long sameResource = active.stream().filter(item -> Objects.equals(item.resourceId, request.resourceId())).count();
+        if (sameResource >= resourceLimit) {
+            throw new BusinessException("BOOKING_RESOURCE_LIMIT",
+                    "同一资源最多保留 " + resourceLimit + " 个未来预约", HttpStatus.TOO_MANY_REQUESTS);
+        }
+        boolean overlaps = active.stream().anyMatch(item -> item.startTime.isBefore(request.endTime())
+                && item.endTime.isAfter(request.startTime()));
+        if (overlaps) {
+            throw new BusinessException("USER_TIME_CONFLICT", "你在该时间段已有其他预约", HttpStatus.CONFLICT);
+        }
+        long existingMinutes = active.stream()
+                .filter(item -> item.startTime.toLocalDate().equals(request.startTime().toLocalDate()))
+                .mapToLong(item -> java.time.Duration.between(item.startTime, item.endTime).toMinutes())
+                .sum();
+        long requestedMinutes = java.time.Duration.between(request.startTime(), request.endTime()).toMinutes();
+        if (existingMinutes + requestedMinutes > dailyMinutesLimit) {
+            throw new BusinessException("BOOKING_DAILY_DURATION_LIMIT",
+                    "同一用户每天累计预约时长不能超过 " + dailyMinutesLimit + " 分钟", HttpStatus.TOO_MANY_REQUESTS);
+        }
+    }
+
+    @Override
     public Map<String, Object> adminList(Long resourceId, Long userId, String status, HttpServletRequest servletRequest) {
-        roleGuard.requireAdmin(servletRequest);
+        roleGuard.requireLabAdmin(servletRequest);
         List<Booking> items = bookings.findAll().stream()
                 .filter(item -> resourceId == null || Objects.equals(item.resourceId, resourceId))
                 .filter(item -> userId == null || Objects.equals(item.userId, userId))
@@ -179,7 +288,7 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     public Map<String, Object> violations(HttpServletRequest servletRequest) {
-        roleGuard.requireAdmin(servletRequest);
+        roleGuard.requireLabAdmin(servletRequest);
         List<ViolationRecord> items = violations.findAllByOrderByCreatedAtDesc();
         return Map.of("items", items, "total", items.size());
     }
@@ -187,7 +296,7 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public Object processViolation(Long violationId, String status, String comment, HttpServletRequest servletRequest) {
-        roleGuard.requireAdmin(servletRequest);
+        roleGuard.requireLabAdmin(servletRequest);
         if (!Set.of("RESOLVED", "CONFIRMED", "DISMISSED").contains(status)) {
             throw new BusinessException("INVALID_STATUS", "Violation status is invalid", HttpStatus.BAD_REQUEST);
         }

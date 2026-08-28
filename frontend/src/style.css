@@ -778,7 +778,8 @@ header {
 .teacher-status.completed { background: #e4f3e9; color: #347658; }
 .teacher-status.rejected,
 .teacher-status.canceled,
-.teacher-status.no_show { background: #f3e9e7; color: #9a5a51; }
+.teacher-status.no_show,
+.teacher-status.expired { background: #f3e9e7; color: #9a5a51; }
 .teacher-empty { padding: 34px 20px; color: #8d9a94; font-size: 12px; text-align: center; }
 .teacher-resource-filters { border-bottom: 1px solid #e8eeeb; }
 .teacher-resource-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
@@ -993,7 +994,8 @@ header {
 }
 .booking-card-status.rejected,
 .booking-card-status.canceled,
-.booking-card-status.no_show {
+.booking-card-status.no_show,
+.booking-card-status.expired {
   background: #f3e9e7;
   color: #96574e;
 }

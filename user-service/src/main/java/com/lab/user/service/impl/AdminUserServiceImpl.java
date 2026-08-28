@@ -1,5 +1,6 @@
 package com.lab.user.service.impl;
 
+import com.lab.common.api.AdminOperationLogger;
 import com.lab.common.api.RoleGuard;
 import com.lab.common.exception.BusinessException;
 import com.lab.user.RefreshTokenRepository;
@@ -29,11 +30,14 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final RefreshTokenRepository refreshTokens;
     private final PasswordEncoder passwordEncoder;
     private final RoleGuard roleGuard;
+    private final AdminOperationLogger operationLogger;
 
     public AdminUserServiceImpl(UserRepository users, RoleRepository roles, RefreshTokenRepository refreshTokens,
-                                PasswordEncoder passwordEncoder, RoleGuard roleGuard) {
+                                PasswordEncoder passwordEncoder, RoleGuard roleGuard,
+                                AdminOperationLogger operationLogger) {
         this.users = users; this.roles = roles; this.refreshTokens = refreshTokens;
         this.passwordEncoder = passwordEncoder; this.roleGuard = roleGuard;
+        this.operationLogger = operationLogger;
     }
 
     @Override
@@ -72,7 +76,10 @@ public class AdminUserServiceImpl implements AdminUserService {
         user.failedLoginCount = 0;
         user.tokenVersion++;
         refreshTokens.deleteByUserId(user.id);
-        return view(users.save(user));
+        Map<String, Object> result = view(users.save(user));
+        operationLogger.success(request, "USER_STATUS_UPDATED", "USER", user.id,
+                Map.of("username", user.username, "status", status));
+        return result;
     }
 
     @Override
@@ -91,7 +98,10 @@ public class AdminUserServiceImpl implements AdminUserService {
                 .orElseThrow(() -> new BusinessException("ROLE_NOT_FOUND", "Role does not exist: " + code, HttpStatus.NOT_FOUND))));
         user.tokenVersion++;
         refreshTokens.deleteByUserId(user.id);
-        return view(users.save(user));
+        Map<String, Object> result = view(users.save(user));
+        operationLogger.success(request, "USER_ROLES_UPDATED", "USER", user.id,
+                Map.of("username", user.username, "roles", roleCodes));
+        return result;
     }
 
     @Override
@@ -107,6 +117,9 @@ public class AdminUserServiceImpl implements AdminUserService {
         user.status = "ACTIVE";
         user.tokenVersion++;
         refreshTokens.deleteByUserId(user.id);
+        users.save(user);
+        operationLogger.success(request, "USER_PASSWORD_RESET", "USER", user.id,
+                Map.of("username", user.username));
         return Map.of("id", user.id, "reset", true);
     }
 

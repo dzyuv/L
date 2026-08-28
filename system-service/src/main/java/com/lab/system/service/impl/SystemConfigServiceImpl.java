@@ -3,6 +3,7 @@ package com.lab.system.service.impl;
 import com.lab.system.service.SystemConfigService;
 import com.lab.system.SystemConfig;
 import com.lab.system.SystemConfigRepository;
+import com.lab.system.service.OperationLogService;
 import com.lab.common.api.RoleGuard;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
@@ -14,7 +15,10 @@ import java.util.*;
 public class SystemConfigServiceImpl implements SystemConfigService {
     private final SystemConfigRepository configs;
     private final RoleGuard roleGuard;
-    public SystemConfigServiceImpl(SystemConfigRepository configs, RoleGuard roleGuard) { this.configs = configs; this.roleGuard = roleGuard; }
+    private final OperationLogService operationLogs;
+    public SystemConfigServiceImpl(SystemConfigRepository configs, RoleGuard roleGuard, OperationLogService operationLogs) {
+        this.configs = configs; this.roleGuard = roleGuard; this.operationLogs = operationLogs;
+    }
     public List<Map<String, String>> configs(HttpServletRequest request) {
         roleGuard.requireSystemAdmin(request);
         return configs.findAll().stream().map(item -> Map.of("key", item.configKey, "value", item.configValue, "type", Objects.toString(item.valueType, "STRING"))).toList();
@@ -25,6 +29,8 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         SystemConfig item = configs.findByConfigKey(key).orElseGet(SystemConfig::new);
         item.configKey = key; item.configValue = value; item.updatedBy = request.getAttribute("userId") instanceof Long id ? id : 0L; item.updatedAt = java.time.LocalDateTime.now();
         configs.save(item);
+        operationLogs.recordLocal(request, "SYSTEM_CONFIG_UPDATED", "SYSTEM_CONFIG", item.id,
+                Map.of("key", item.configKey));
         return Map.of("key", item.configKey, "value", item.configValue);
     }
 }

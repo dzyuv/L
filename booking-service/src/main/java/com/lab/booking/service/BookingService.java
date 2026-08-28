@@ -17,6 +17,7 @@ public interface BookingService {
     Booking checkin(Long bookingId, HttpServletRequest servletRequest);
     void autoComplete();
     void markNoShow();
+    void expirePendingApprovals();
     Map<String, Object> adminList(Long resourceId, Long userId, String status, HttpServletRequest servletRequest);
     Map<String, Object> violations(HttpServletRequest servletRequest);
     Object processViolation(Long violationId, String status, String comment, HttpServletRequest servletRequest);

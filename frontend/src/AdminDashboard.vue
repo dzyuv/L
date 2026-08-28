@@ -5,13 +5,13 @@ import AssetAdminPanel from "./AssetAdminPanel.vue";
 import MaintenanceAdminPanel from "./MaintenanceAdminPanel.vue";
 import {
   AlertTriangle, BarChart3, CalendarClock, Check, ChevronRight, ClipboardCheck,
-  FlaskConical, PackageSearch, Plus, RefreshCw, Save, Search, Settings, Shield, Users, Wrench, X,
+  FlaskConical, PackageSearch, Plus, RefreshCw, Save, Search, Settings, Shield, ScrollText, Users, Wrench, X,
 } from "lucide-vue-next";
 
 const props = defineProps({ user: { type: Object, required: true }, initialResources: { type: Array, default: () => [] } });
 const isSystemAdmin = computed(() => (props.user?.roles || []).includes("SYSTEM_ADMIN"));
 const tabs = computed(() => isSystemAdmin.value
-  ? [{ id: "overview", label: "总览", icon: BarChart3 }, { id: "users", label: "用户与角色", icon: Users }, { id: "resource-types", label: "资源类别", icon: FlaskConical }, { id: "assets", label: "资产台账", icon: PackageSearch }, { id: "maintenance", label: "报修处理", icon: Wrench }, { id: "flows", label: "审批流", icon: ClipboardCheck }, { id: "configs", label: "系统配置", icon: Settings }, { id: "statistics", label: "全局统计", icon: BarChart3 }]
+  ? [{ id: "overview", label: "总览", icon: BarChart3 }, { id: "users", label: "用户与角色", icon: Users }, { id: "flows", label: "审批流", icon: ClipboardCheck }, { id: "configs", label: "系统配置", icon: Settings }, { id: "logs", label: "管理员日志", icon: ScrollText }]
   : [{ id: "overview", label: "运营总览", icon: BarChart3 }, { id: "resources", label: "资源管理", icon: FlaskConical }, { id: "resource-types", label: "资源类别", icon: FlaskConical }, { id: "assets", label: "资产台账", icon: PackageSearch }, { id: "maintenance", label: "报修处理", icon: Wrench }, { id: "bookings", label: "预约查询", icon: CalendarClock }, { id: "approvals", label: "二级审批", icon: ClipboardCheck }, { id: "violations", label: "违约处理", icon: AlertTriangle }]);
 const activeTab = ref("overview");
 const loading = ref(false);
@@ -25,7 +25,10 @@ const violations = ref([]);
 const users = ref([]);
 const roles = ref([]);
 const configs = ref([]);
-const statistics = ref([]);
+const operationLogs = ref([]);
+const logQuery = ref("");
+const logTypeFilter = ref("");
+const logResultFilter = ref("");
 const approvalFlows = ref([]);
 const assets = ref([]);
 const assetCategories = ref([]);
@@ -62,6 +65,19 @@ const displayUsers = computed(() => {
   if (!term) return users.value;
   return users.value.filter((item) => [item.username, item.realName, item.email].some((value) => String(value || "").toLowerCase().includes(term)));
 });
+const operationTypes = computed(() => [...new Set(operationLogs.value.map((item) => item.operationType).filter(Boolean))]);
+const displayOperationLogs = computed(() => {
+  const term = logQuery.value.trim().toLowerCase();
+  return operationLogs.value.filter((item) => {
+    const operator = users.value.find((user) => Number(user.id) === Number(item.operatorId));
+    const matchesTerm = !term || [operator?.realName, operator?.username, item.operationType,
+      item.targetType, item.targetId, item.requestId, item.ip, JSON.stringify(item.detail || {})]
+      .some((value) => String(value || "").toLowerCase().includes(term));
+    return matchesTerm
+      && (!logTypeFilter.value || item.operationType === logTypeFilter.value)
+      && (!logResultFilter.value || item.result === logResultFilter.value);
+  });
+});
 const labReport = computed(() => {
   const counts = bookings.value.reduce((map, item) => { map[item.status] = (map[item.status] || 0) + 1; return map; }, {});
   const resourceCounts = bookings.value.reduce((map, item) => {
@@ -94,46 +110,60 @@ function show(message, failed = false) {
 }
 function apiData(response, fallback = []) { return response.data?.data ?? fallback; }
 function statusText(value) {
-  return ({ ACTIVE: "正常", DISABLED: "已禁用", LOCKED: "已锁定", PENDING_APPROVAL: "待审批", APPROVED: "已通过", REJECTED: "已驳回", CANCELED: "已取消", CHECKED_IN: "已签到", COMPLETED: "已完成", NO_SHOW: "未签到", OPEN: "待处理", RESOLVED: "已解决", CONFIRMED: "已确认", DISMISSED: "已撤销" })[value] || value;
+  return ({ ACTIVE: "正常", DISABLED: "已禁用", LOCKED: "已锁定", PENDING_APPROVAL: "待审批", APPROVED: "已通过", REJECTED: "已驳回", CANCELED: "已取消", CHECKED_IN: "已签到", COMPLETED: "已完成", NO_SHOW: "未签到", EXPIRED: "审批超时", OPEN: "待处理", RESOLVED: "已解决", CONFIRMED: "已确认", DISMISSED: "已撤销" })[value] || value;
 }
 function formatTime(value) { return value ? String(value).replace("T", " ").slice(0, 16) : "-"; }
 function roleName(code) { return ({ STUDENT: "学生", TEACHER: "教师", LAB_ADMIN: "实验室管理员", SYSTEM_ADMIN: "系统管理员" })[code] || code; }
+function operationName(code) { return ({ USER_STATUS_UPDATED: "修改用户状态", USER_ROLES_UPDATED: "调整用户角色", USER_PASSWORD_RESET: "重置用户密码", APPROVAL_FLOW_PUBLISHED: "发布审批流", SYSTEM_CONFIG_UPDATED: "修改系统配置" })[code] || code; }
+function operationTarget(item) {
+  const label = ({ USER: "用户", RESOURCE_TYPE: "资源类别", SYSTEM_CONFIG: "系统配置" })[item.targetType] || item.targetType || "系统";
+  return item.targetId ? `${label} #${item.targetId}` : label;
+}
+function operationOperator(item) {
+  const operator = users.value.find((user) => Number(user.id) === Number(item.operatorId));
+  return operator ? `${operator.realName}（${operator.username}）` : `管理员 #${item.operatorId}`;
+}
+function operationDetail(item) {
+  const detail = item.detail || {};
+  if (item.operationType === "USER_STATUS_UPDATED") return `${detail.username || "用户"} → ${statusText(detail.status)}`;
+  if (item.operationType === "USER_ROLES_UPDATED") return `${detail.username || "用户"} → ${(detail.roles || []).map(roleName).join(" / ")}`;
+  if (item.operationType === "USER_PASSWORD_RESET") return `已重置 ${detail.username || "用户"} 的密码`;
+  if (item.operationType === "APPROVAL_FLOW_PUBLISHED") return `版本 v${detail.version || "-"}，${detail.nodeCount || 0} 个审批节点`;
+  if (item.operationType === "SYSTEM_CONFIG_UPDATED") return `配置项 ${detail.key || "-"}`;
+  return item.reason || "-";
+}
 
 async function loadAll() {
   loading.value = true;
   try {
     if (isSystemAdmin.value) {
-      const [userResponse, roleResponse, configResponse, statsResponse, flowResponse, typeResponse, resourceResponse] = await Promise.all([
+      const [userResponse, roleResponse, configResponse, logResponse, flowResponse, typeResponse] = await Promise.all([
         axios.get("/api/v1/admin/users"), axios.get("/api/v1/admin/roles"),
-        axios.get("/api/v1/admin/configs"), axios.get("/api/v1/statistics/usage"),
-        axios.get("/api/v1/admin/approval-flows"), axios.get("/api/v1/admin/resource-types"), axios.get("/api/v1/resources"),
+        axios.get("/api/v1/admin/configs"), axios.get("/api/v1/admin/operation-logs"),
+        axios.get("/api/v1/admin/approval-flows"), axios.get("/api/v1/resource-types"),
       ]);
       users.value = apiData(userResponse, {}).items || [];
       roles.value = apiData(roleResponse, {}).items || [];
       configs.value = apiData(configResponse, []);
-      statistics.value = apiData(statsResponse, {}).items || [];
+      operationLogs.value = apiData(logResponse, {}).items || [];
       approvalFlows.value = apiData(flowResponse, {}).items || [];
       resourceTypes.value = apiData(typeResponse, []);
-      resources.value = apiData(resourceResponse, []);
     } else {
-      const [resourceResponse, typeResponse, bookingResponse, approvalResponse, violationResponse] = await Promise.all([
+      const [resourceResponse, typeResponse, bookingResponse, approvalResponse, violationResponse, assetResponse, categoryResponse, ticketResponse] = await Promise.all([
         axios.get("/api/v1/resources"), axios.get("/api/v1/admin/resource-types"),
         axios.get("/api/v1/admin/bookings"), axios.get("/api/v1/approvals/mine"), axios.get("/api/v1/admin/violations"),
+        axios.get("/api/v1/admin/assets"), axios.get("/api/v1/admin/assets/categories"),
+        axios.get("/api/v1/admin/maintenance/tickets"),
       ]);
       resources.value = apiData(resourceResponse, []);
       resourceTypes.value = apiData(typeResponse, []);
       bookings.value = apiData(bookingResponse, {}).items || [];
       approvals.value = apiData(approvalResponse, []);
       violations.value = apiData(violationResponse, {}).items || [];
+      assets.value = apiData(assetResponse, {}).items || [];
+      assetCategories.value = apiData(categoryResponse, []);
+      maintenanceTickets.value = apiData(ticketResponse, {}).items || [];
     }
-    const [assetResponse, categoryResponse, ticketResponse] = await Promise.all([
-      axios.get("/api/v1/admin/assets"),
-      axios.get("/api/v1/admin/assets/categories"),
-      axios.get("/api/v1/admin/maintenance/tickets"),
-    ]);
-    assets.value = apiData(assetResponse, {}).items || [];
-    assetCategories.value = apiData(categoryResponse, []);
-    maintenanceTickets.value = apiData(ticketResponse, {}).items || [];
   } catch (e) { show(e.response?.data?.message || "管理数据加载失败", true); }
   finally { loading.value = false; }
 }
@@ -154,7 +184,7 @@ async function saveResetPassword() {
   catch (e) { show(e.response?.data?.message || "密码重置失败", true); }
 }
 async function saveConfig(item) {
-  try { await axios.put(`/api/v1/admin/configs/${encodeURIComponent(item.key)}`, { value: item.value }); show(`配置 ${item.key} 已保存`); }
+  try { await axios.put(`/api/v1/admin/configs/${encodeURIComponent(item.key)}`, { value: item.value }); show(`配置 ${item.key} 已保存`); await loadAll(); }
   catch (e) { show(e.response?.data?.message || "配置保存失败", true); }
 }
 async function createApprovalFlow() {
@@ -290,7 +320,7 @@ onMounted(loadAll);
       <div v-if="notice" class="admin-notice" :class="{ error }" role="status" aria-live="polite"><AlertTriangle v-if="error" :size="18" /><Check v-else :size="18" /><span><b>{{ error ? '操作未完成' : '操作成功' }}</b><small>{{ notice }}</small></span><button title="关闭提示" @click="notice = ''"><X :size="15" /></button></div>
 
       <template v-if="activeTab === 'overview'">
-        <div class="metric-strip" v-if="isSystemAdmin"><div><span>用户总数</span><strong>{{ users.length }}</strong><small>{{ activeUsers }} 个正常账号</small></div><div><span>角色数量</span><strong>{{ roles.length }}</strong><small>基于角色的权限控制</small></div><div><span>系统配置</span><strong>{{ configs.length }}</strong><small>当前参数项</small></div><div><span>统计快照</span><strong>{{ statistics.length }}</strong><small>最近聚合数据</small></div></div>
+        <div class="metric-strip" v-if="isSystemAdmin"><div><span>用户总数</span><strong>{{ users.length }}</strong><small>{{ activeUsers }} 个正常账号</small></div><div><span>角色数量</span><strong>{{ roles.length }}</strong><small>基于角色的权限控制</small></div><div><span>系统配置</span><strong>{{ configs.length }}</strong><small>当前参数项</small></div><div><span>管理员日志</span><strong>{{ operationLogs.length }}</strong><small>最近操作记录</small></div></div>
         <div class="metric-strip" v-else><div><span>资产总数</span><strong>{{ assets.length }}</strong><small>{{ highValueAssets }} 件贵重资产</small></div><div><span>待处理报修</span><strong>{{ openMaintenance }}</strong><small>尚未关闭的维修工单</small></div><div><span>维修中资产</span><strong>{{ repairingAssets }}</strong><small>当前不可正常使用</small></div><div><span>待审批预约</span><strong>{{ approvals.length || pendingBookings }}</strong><small>需要管理员关注</small></div></div>
         <div class="overview-body">
         <section class="admin-section"><div class="section-title"><div><h2>{{ isSystemAdmin ? '账号状态概览' : '近期预约动态' }}</h2><p>{{ isSystemAdmin ? '快速识别禁用和锁定账号' : '查看授权资源的最新预约状态' }}</p></div></div>
@@ -321,8 +351,27 @@ onMounted(loadAll);
         <section class="admin-section data-table flow-history"><div class="data-row flow-grid table-head"><span>资源类型</span><span>版本</span><span>审批节点</span><span>状态</span><span>创建时间</span></div><div v-for="item in approvalFlows" :key="item.id" class="data-row flow-grid"><span>{{ resourceTypes.find(type => type.id === item.resourceTypeId)?.name || `类型 ${item.resourceTypeId}` }}</span><strong>v{{ item.version }}</strong><span class="role-tags"><i v-for="node in item.nodes" :key="node.id">L{{ node.level }} {{ roleName(node.approverRole) }}</i></span><span class="status" :class="item.enabled ? 'active' : 'disabled'">{{ item.enabled ? '当前版本' : '历史版本' }}</span><span>{{ formatTime(item.createdAt) }}</span></div><div v-if="!approvalFlows.length" class="admin-empty">尚未配置审批流</div></section>
       </template>
 
-      <template v-else-if="activeTab === 'statistics'">
-        <section class="admin-section data-table"><div class="data-row stats-grid table-head"><span>指标</span><span>资源 / 用户</span><span>统计周期</span><span>指标值</span><span>计算时间</span></div><div v-for="item in statistics" :key="item.id" class="data-row stats-grid"><span>{{ item.metricType }}</span><span>{{ item.resourceId ? `资源 ${item.resourceId}` : item.userId ? `用户 ${item.userId}` : '全局' }}</span><span>{{ formatTime(item.periodStart) }} 至 {{ formatTime(item.periodEnd) }}</span><strong>{{ item.metricValue ?? item.numerator }}</strong><span>{{ formatTime(item.calculatedUntil) }}</span></div><div v-if="!statistics.length" class="admin-empty">尚未生成统计快照</div></section>
+      <template v-else-if="activeTab === 'logs'">
+        <div class="toolbar log-toolbar">
+          <label class="search"><Search :size="16" /><input v-model="logQuery" placeholder="搜索管理员、对象、请求号或 IP" /></label>
+          <div class="log-filters">
+            <select v-model="logTypeFilter"><option value="">全部操作</option><option v-for="type in operationTypes" :key="type" :value="type">{{ operationName(type) }}</option></select>
+            <select v-model="logResultFilter"><option value="">全部结果</option><option value="SUCCESS">成功</option><option value="FAILED">失败</option></select>
+            <span>{{ displayOperationLogs.length }} 条记录</span>
+          </div>
+        </div>
+        <section class="admin-section data-table operation-log-table">
+          <div class="data-row log-grid table-head"><span>操作时间</span><span>管理员</span><span>操作</span><span>目标与摘要</span><span>结果</span><span>请求信息</span></div>
+          <div v-for="item in displayOperationLogs" :key="item.id" class="data-row log-grid">
+            <span>{{ formatTime(item.createdAt) }}</span>
+            <span><b>{{ operationOperator(item) }}</b><small>ID {{ item.operatorId }}</small></span>
+            <span><b>{{ operationName(item.operationType) }}</b><small>{{ item.operationType }}</small></span>
+            <span><b>{{ operationTarget(item) }}</b><small>{{ operationDetail(item) }}</small></span>
+            <span class="status" :class="item.result === 'SUCCESS' ? 'active' : 'rejected'">{{ item.result === 'SUCCESS' ? '成功' : '失败' }}</span>
+            <span><span class="mono">{{ item.requestId || '-' }}</span><small>{{ item.ip || '-' }}</small></span>
+          </div>
+          <div v-if="!displayOperationLogs.length" class="admin-empty">暂无符合条件的管理员操作日志</div>
+        </section>
       </template>
 
       <template v-else-if="activeTab === 'resource-types'">
@@ -384,4 +433,7 @@ onMounted(loadAll);
 .resource-type-create{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:22px 20px;color:#82918a;font-size:11px}.resource-type-create .command{flex:0 0 auto}
 .resource-image-preview{height:150px;border:1px solid #d8e2dd;background:#edf2ef;overflow:hidden}.resource-image-preview img{width:100%;height:100%;display:block;object-fit:cover}
 @media(max-width:650px){.resource-type-create{align-items:stretch;flex-direction:column}}
+.log-grid{grid-template-columns:1fr 1.25fr 1.1fr 1.65fr .55fr 1.25fr;min-width:980px}.log-toolbar{gap:14px}.log-filters{display:flex;align-items:center;justify-content:flex-end;gap:8px}.log-filters select{height:36px;border:1px solid #d8e2dd;border-radius:4px;padding:0 28px 0 9px;background:#fff;color:#415b51;font-size:11px}.operation-log-table .data-row:not(.table-head){min-height:62px}.operation-log-table .mono{display:block;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
+@media(max-width:760px){.log-toolbar{height:auto;align-items:stretch;flex-direction:column}.log-toolbar .search{width:100%}.log-filters{justify-content:flex-start;flex-wrap:wrap}}
+.status.expired{background:#f3e9e7;color:#9a5a51}
 </style>

@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS resource (
   approval_level_override TINYINT NULL,
   need_checkin BOOLEAN NOT NULL DEFAULT TRUE,
   max_duration_minutes INT NOT NULL DEFAULT 120,
+  slot_minutes INT NOT NULL DEFAULT 30,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   version INT NOT NULL DEFAULT 0,
@@ -192,7 +193,10 @@ CREATE TABLE IF NOT EXISTS asset_status_history (
 CREATE TABLE IF NOT EXISTS maintenance_ticket (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   ticket_no VARCHAR(32) NOT NULL UNIQUE,
-  asset_id BIGINT NOT NULL,
+  asset_id BIGINT NULL,
+  resource_id BIGINT NULL,
+  location_snapshot VARCHAR(200) NULL,
+  asset_clue VARCHAR(500) NULL,
   reported_by BIGINT NULL,
   previous_asset_status VARCHAR(30) NULL,
   report_type VARCHAR(30) NOT NULL DEFAULT 'MALFUNCTION',
@@ -249,6 +253,9 @@ CREATE TABLE IF NOT EXISTS booking (
   KEY idx_booking_resource_status_time(resource_id, status, start_time, end_time),
   KEY idx_booking_approval_deadline(status, approval_deadline)
   ,UNIQUE KEY uk_booking_user_request(user_id, client_request_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS booking_quota_lock (
+  user_id BIGINT PRIMARY KEY
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS booking_slot (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -386,6 +393,8 @@ CREATE TABLE IF NOT EXISTS approval_task (
   status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
   deadline DATETIME(3) NOT NULL,
   completed_at DATETIME(3) NULL,
+  comment VARCHAR(500) NULL,
+  version INT NOT NULL DEFAULT 0,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   UNIQUE KEY uk_approval_task(booking_id, level, sequence_no),
   KEY idx_task_approver_status(assigned_user_id, status),

@@ -25,3 +25,15 @@ spring:
 security:
   jwt-secret: ${JWT_SECRET}
   internal-token: ${INTERNAL_SERVICE_TOKEN}
+booking:
+  fair-use:
+    max-active: ${BOOKING_MAX_ACTIVE:5}
+    teacher-max-active: ${BOOKING_TEACHER_MAX_ACTIVE:10}
+    max-pending: ${BOOKING_MAX_PENDING:3}
+    teacher-max-pending: ${BOOKING_TEACHER_MAX_PENDING:5}
+    max-per-resource: ${BOOKING_MAX_PER_RESOURCE:2}
+    teacher-max-per-resource: ${BOOKING_TEACHER_MAX_PER_RESOURCE:3}
+    max-daily-minutes: ${BOOKING_MAX_DAILY_MINUTES:240}
+    teacher-max-daily-minutes: ${BOOKING_TEACHER_MAX_DAILY_MINUTES:480}
+    max-advance-days: ${BOOKING_MAX_ADVANCE_DAYS:30}
+    pending-hold-hours: ${BOOKING_PENDING_HOLD_HOURS:24}

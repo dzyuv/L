@@ -21,28 +21,28 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
     }
     public List<Resource> list() { return resources.findAll().stream().filter(item -> !item.deleted && "ACTIVE".equals(item.status)).toList(); }
     public List<?> listPublicTypes() { return types.findAll().stream().filter(item -> !item.deleted && item.enabled).toList(); }
-    public List<?> listTypes(HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); return types.findAll().stream().filter(item -> !item.deleted).toList(); }
-    public List<?> listSchedules(Long id, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); resource(id); return schedules.findByResourceIdOrderByWeekdayAscOpenTimeAsc(id); }
+    public List<?> listTypes(HttpServletRequest servletRequest) { roleGuard.requireLabAdmin(servletRequest); return types.findAll().stream().filter(item -> !item.deleted).toList(); }
+    public List<?> listSchedules(Long id, HttpServletRequest servletRequest) { roleGuard.requireLabAdmin(servletRequest); resource(id); return schedules.findByResourceIdOrderByWeekdayAscOpenTimeAsc(id); }
     public Resource get(Long id) { return resource(id); }
-    public Object createType(ResourceController.TypeRequest request, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); ResourceType type=new ResourceType(); type.name=request.name(); type.defaultApprovalLevel=request.defaultApprovalLevel(); return types.save(type); }
+    public Object createType(ResourceController.TypeRequest request, HttpServletRequest servletRequest) { roleGuard.requireLabAdmin(servletRequest); ResourceType type=new ResourceType(); type.name=request.name(); type.defaultApprovalLevel=request.defaultApprovalLevel(); return types.save(type); }
     public Object updateType(Long id, ResourceController.TypeUpdateRequest request, HttpServletRequest servletRequest) {
-        roleGuard.requireAdmin(servletRequest);
+        roleGuard.requireLabAdmin(servletRequest);
         ResourceType type=types.findById(id).filter(item -> !item.deleted).orElseThrow(() -> new BusinessException("NOT_FOUND", "Resource type does not exist", HttpStatus.NOT_FOUND));
         types.findAll().stream().filter(item -> !Objects.equals(item.id, id) && !item.deleted && item.name.equalsIgnoreCase(request.name())).findFirst().ifPresent(item -> { throw new BusinessException("TYPE_EXISTS", "Resource type already exists", HttpStatus.CONFLICT); });
         type.name=request.name(); type.defaultApprovalLevel=request.defaultApprovalLevel(); type.enabled=request.enabled();
         return types.save(type);
     }
     public void deleteType(Long id, HttpServletRequest servletRequest) {
-        roleGuard.requireAdmin(servletRequest);
+        roleGuard.requireLabAdmin(servletRequest);
         ResourceType type=types.findById(id).filter(item -> !item.deleted).orElseThrow(() -> new BusinessException("NOT_FOUND", "Resource type does not exist", HttpStatus.NOT_FOUND));
         if (resources.countByTypeIdAndDeletedFalse(id) > 0) throw new BusinessException("TYPE_IN_USE", "Resource type is used by resources and cannot be deleted", HttpStatus.CONFLICT);
         type.deleted=true; type.enabled=false; types.save(type);
     }
-    public Resource create(ResourceController.ResourceRequest request, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); requireType(request.typeId()); Resource resource=new Resource(); apply(resource,request); return resources.save(resource); }
-    public Resource update(Long id, ResourceController.ResourceRequest request, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); requireType(request.typeId()); Resource resource=resource(id); apply(resource,request); return resources.save(resource); }
+    public Resource create(ResourceController.ResourceRequest request, HttpServletRequest servletRequest) { roleGuard.requireLabAdmin(servletRequest); requireType(request.typeId()); Resource resource=new Resource(); apply(resource,request); return resources.save(resource); }
+    public Resource update(Long id, ResourceController.ResourceRequest request, HttpServletRequest servletRequest) { roleGuard.requireLabAdmin(servletRequest); requireType(request.typeId()); Resource resource=resource(id); apply(resource,request); return resources.save(resource); }
     @Transactional
     public List<?> schedule(Long id, List<ResourceController.ScheduleRequest> requests, HttpServletRequest servletRequest) {
-        roleGuard.requireAdmin(servletRequest); resource(id); schedules.findAll().stream().filter(item -> Objects.equals(item.resourceId, id)).forEach(schedules::delete);
+        roleGuard.requireLabAdmin(servletRequest); resource(id); schedules.findAll().stream().filter(item -> Objects.equals(item.resourceId, id)).forEach(schedules::delete);
         List<ResourceSchedule> result=new ArrayList<>();
         Set<Integer> weekdays = new HashSet<>();
         for (ResourceController.ScheduleRequest request:requests) {
@@ -55,15 +55,15 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
         return schedules.saveAll(result);
     }
     public Object addManager(Long id, ResourceController.ManagerRequest request, HttpServletRequest servletRequest) {
-        roleGuard.requireAdmin(servletRequest); resource(id);
+        roleGuard.requireLabAdmin(servletRequest); resource(id);
         ResourceManager manager=new ResourceManager(); manager.resourceId=id; manager.userId=request.userId(); manager.managerType=request.managerType();
         manager.scopeType=request.scopeType()==null||request.scopeType().isBlank()?"RESOURCE":request.scopeType();
         manager.scopeValue=request.scopeValue()==null?"":request.scopeValue();
         return managers.save(manager);
     }
-    public List<?> listManagers(Long id, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); resource(id); return managers.findByResourceIdOrderByIdAsc(id); }
+    public List<?> listManagers(Long id, HttpServletRequest servletRequest) { roleGuard.requireLabAdmin(servletRequest); resource(id); return managers.findByResourceIdOrderByIdAsc(id); }
     public void removeManager(Long id, Long managerId, HttpServletRequest servletRequest) {
-        roleGuard.requireAdmin(servletRequest); resource(id);
+        roleGuard.requireLabAdmin(servletRequest); resource(id);
         ResourceManager manager=managers.findById(managerId).orElseThrow(() -> new BusinessException("NOT_FOUND", "Resource manager does not exist", HttpStatus.NOT_FOUND));
         if (!Objects.equals(manager.resourceId, id)) throw new BusinessException("NOT_FOUND", "Resource manager does not exist", HttpStatus.NOT_FOUND);
         managers.delete(manager);
