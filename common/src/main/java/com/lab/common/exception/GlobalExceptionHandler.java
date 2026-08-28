@@ -15,19 +15,19 @@ import org.slf4j.LoggerFactory;
 public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     @ExceptionHandler(BusinessException.class) ResponseEntity<ApiResponse<Void>> business(BusinessException e, HttpServletRequest r){
-        return ResponseEntity.status(e.status()).body(ApiResponse.error(e.code(), e.getMessage(), id(r)));
+        return ResponseEntity.status(e.status()).body(ApiResponse.error(e.code(), UserMessageLocalizer.resolve(e.code(), e.getMessage()), id(r)));
     }
     @ExceptionHandler({MethodArgumentNotValidException.class, ConstraintViolationException.class})
     ResponseEntity<ApiResponse<Void>> validation(Exception e,HttpServletRequest r){
-        return ResponseEntity.badRequest().body(ApiResponse.error("INVALID_ARGUMENT","Request validation failed",id(r)));
+        return ResponseEntity.badRequest().body(ApiResponse.error("INVALID_ARGUMENT","提交的信息不完整或格式不正确",id(r)));
     }
     @ExceptionHandler({HttpMessageNotReadableException.class, MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
     ResponseEntity<ApiResponse<Void>> malformed(Exception e,HttpServletRequest r){
-        return ResponseEntity.badRequest().body(ApiResponse.error("INVALID_ARGUMENT","Request format is invalid",id(r)));
+        return ResponseEntity.badRequest().body(ApiResponse.error("INVALID_ARGUMENT","请求格式不正确，请检查填写内容",id(r)));
     }
     @ExceptionHandler(Exception.class) ResponseEntity<ApiResponse<Void>> other(Exception e, HttpServletRequest r){
         log.error("Unhandled request failure: {} {}", r.getMethod(), r.getRequestURI(), e);
-        return ResponseEntity.internalServerError().body(ApiResponse.error("INTERNAL_ERROR", "Internal server error", id(r)));
+        return ResponseEntity.internalServerError().body(ApiResponse.error("INTERNAL_ERROR", "系统处理失败，请稍后重试", id(r)));
     }
     private String id(HttpServletRequest r){
         Object id=r.getAttribute("X-Request-Id");

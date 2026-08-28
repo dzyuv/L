@@ -1,8 +1,11 @@
 package com.lab.notification;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.lab.common.persistence.CrudMapper;
 import java.util.List;
 
-public interface NotificationRepository extends JpaRepository<Notification, Long> {
-    List<Notification> findByUserIdOrderByCreatedAtDesc(Long userId);
+public interface NotificationRepository extends CrudMapper<Notification> {
+    default List<Notification> findByUserIdOrderByCreatedAtDesc(Long userId) {
+        return selectList(Wrappers.<Notification>query().eq("user_id", userId).orderByDesc("created_at"));
+    }
 }

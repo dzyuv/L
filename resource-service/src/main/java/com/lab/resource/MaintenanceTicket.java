@@ -1,14 +1,13 @@
 package com.lab.resource;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "maintenance_ticket", uniqueConstraints = @UniqueConstraint(columnNames = "ticketNo"))
+@TableName("maintenance_ticket")
 public class MaintenanceTicket {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
-    @Column(nullable = false) public String ticketNo;
+    @TableId(type=IdType.AUTO) public Long id;
+    public String ticketNo;
     public Long assetId;
     public Long resourceId;
     public String locationSnapshot;
@@ -17,7 +16,7 @@ public class MaintenanceTicket {
     public String previousAssetStatus;
     public String reportType = "MALFUNCTION";
     public String severity = "MEDIUM";
-    @Column(nullable = false, length = 2000) public String description;
+    public String description;
     public String status = "REPORTED";
     public Long assignedTo;
     public BigDecimal estimatedCost;

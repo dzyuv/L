@@ -1,17 +1,17 @@
 package com.lab.user;
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.*;
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.Set;
-@Entity @Table(name="user") public class User {
-    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
-    @Column(unique=true,nullable=false) public String employeeNo;
-    @Column(unique=true,nullable=false) public String username;
-    @Column(nullable=false) public String passwordHash;
-    @Column(nullable=false) public String realName;
+@TableName("`user`") public class User {
+    @TableId(type=IdType.AUTO) public Long id;
+    public String employeeNo;
+    public String username;
+    public String passwordHash;
+    public String realName;
     public String email;
     public String phone;
-    @Column(nullable=false) public String status="ACTIVE";
+    public String status="ACTIVE";
     public int failedLoginCount;
     public Instant lockedUntil;
     public Instant lastLoginAt;
@@ -20,7 +20,6 @@ import java.util.Set;
     public boolean deleted;
     public Instant createdAt=Instant.now();
     public Instant updatedAt=Instant.now();
-    @ManyToMany(fetch=FetchType.EAGER)
-    @JoinTable(name="user_role", joinColumns=@JoinColumn(name="user_id"), inverseJoinColumns=@JoinColumn(name="role_id"))
+    @TableField(exist=false)
     public Set<Role> roles=new LinkedHashSet<>();
 }

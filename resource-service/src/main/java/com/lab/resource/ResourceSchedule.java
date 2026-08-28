@@ -1,9 +1,9 @@
 package com.lab.resource;
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.*;
 import java.time.LocalDate;
 import java.time.LocalTime;
-@Entity public class ResourceSchedule{
-    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
+@TableName("resource_schedule") public class ResourceSchedule{
+    @TableId(type=IdType.AUTO) public Long id;
     public Long resourceId;
     public int weekday;
     public LocalTime openTime;

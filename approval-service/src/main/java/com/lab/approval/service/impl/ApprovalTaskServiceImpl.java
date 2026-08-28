@@ -47,10 +47,17 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         if (!"PENDING".equals(task.status)) throw new BusinessException("INVALID_STATUS", "Approval task has already been processed", HttpStatus.UNPROCESSABLE_ENTITY);
         if (expired(task)) throw new BusinessException("APPROVAL_EXPIRED", "Approval task has expired", HttpStatus.UNPROCESSABLE_ENTITY);
         if (!List.of("approve", "reject").contains(action)) throw new BusinessException("INVALID_ACTION", "Approval action is invalid", HttpStatus.BAD_REQUEST);
+        String normalizedComment = comment == null ? null : comment.trim();
+        if ("reject".equals(action) && (normalizedComment == null || normalizedComment.isBlank())) {
+            throw new BusinessException("REJECTION_REASON_REQUIRED", "驳回时必须填写原因", HttpStatus.BAD_REQUEST);
+        }
+        if (normalizedComment != null && normalizedComment.length() > 500) {
+            throw new BusinessException("INVALID_ARGUMENT", "审批说明不能超过 500 个字符", HttpStatus.BAD_REQUEST);
+        }
         String requestId = Objects.toString(request.getAttribute("X-Request-Id"), "");
         if (!requestId.isBlank() && records.findByRequestIdAndTaskId(requestId, task.id).isPresent()) return task;
         task.status = "approve".equals(action) ? "APPROVED" : "REJECTED";
-        task.comment = comment;
+        task.comment = normalizedComment;
         task.completedAt = LocalDateTime.now();
         ApprovalTask saved = tasks.save(task);
         ApprovalRecord record = new ApprovalRecord();
@@ -58,7 +65,7 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         record.bookingId = saved.bookingId;
         record.approverId = userId;
         record.result = saved.status;
-        record.comment = comment;
+        record.comment = normalizedComment;
         record.requestId = requestId.isBlank() ? null : requestId;
         records.save(record);
         bookingDecisions.submit(saved.bookingId, saved.status, request.getHeader("Authorization"));

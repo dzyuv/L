@@ -1,13 +1,12 @@
 package com.lab.resource;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.*;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "asset_category", uniqueConstraints = @UniqueConstraint(columnNames = "name"))
+@TableName("asset_category")
 public class AssetCategory {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
-    @Column(nullable = false) public String name;
+    @TableId(type=IdType.AUTO) public Long id;
+    public String name;
     public boolean serialized = true;
     public boolean highValue = false;
     public boolean enabled = true;

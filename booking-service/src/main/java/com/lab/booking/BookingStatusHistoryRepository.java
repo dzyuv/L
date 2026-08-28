@@ -1,5 +1,5 @@
 package com.lab.booking;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.lab.common.persistence.CrudMapper;
 
-public interface BookingStatusHistoryRepository extends JpaRepository<BookingStatusHistory,Long>{}
+public interface BookingStatusHistoryRepository extends CrudMapper<BookingStatusHistory>{}

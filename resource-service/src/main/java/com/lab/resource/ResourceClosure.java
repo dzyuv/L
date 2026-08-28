@@ -1,8 +1,8 @@
 package com.lab.resource;
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.*;
 import java.time.LocalDateTime;
-@Entity public class ResourceClosure{
-    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
+@TableName("resource_closure") public class ResourceClosure{
+    @TableId(type=IdType.AUTO) public Long id;
     public Long resourceId;
     public LocalDateTime startTime;
     public LocalDateTime endTime;

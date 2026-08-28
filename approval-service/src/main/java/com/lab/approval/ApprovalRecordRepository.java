@@ -1,10 +1,15 @@
 package com.lab.approval;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.lab.common.persistence.CrudMapper;
 
 import java.util.Optional;
 
-public interface ApprovalRecordRepository extends JpaRepository<ApprovalRecord, Long> {
-    Optional<ApprovalRecord> findByRequestId(String requestId);
-    Optional<ApprovalRecord> findByRequestIdAndTaskId(String requestId, Long taskId);
+public interface ApprovalRecordRepository extends CrudMapper<ApprovalRecord> {
+    default Optional<ApprovalRecord> findByRequestId(String requestId) {
+        return Optional.ofNullable(selectOne(Wrappers.<ApprovalRecord>query().eq("request_id", requestId)));
+    }
+    default Optional<ApprovalRecord> findByRequestIdAndTaskId(String requestId, Long taskId) {
+        return Optional.ofNullable(selectOne(Wrappers.<ApprovalRecord>query().eq("request_id", requestId).eq("task_id", taskId)));
+    }
 }

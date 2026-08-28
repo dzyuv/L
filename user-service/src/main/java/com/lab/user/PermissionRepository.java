@@ -1,6 +1,6 @@
 package com.lab.user;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.lab.common.persistence.CrudMapper;
 
-public interface PermissionRepository extends JpaRepository<Permission,Long> {
+public interface PermissionRepository extends CrudMapper<Permission> {
 }

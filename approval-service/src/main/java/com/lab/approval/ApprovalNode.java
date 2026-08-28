@@ -1,11 +1,12 @@
 package com.lab.approval;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 
-@Entity
-@Table(name="approval_node", uniqueConstraints=@UniqueConstraint(columnNames={"flowId", "level", "sequenceNo"}))
+@TableName("approval_node")
 public class ApprovalNode {
-    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
+    @TableId(type=IdType.AUTO) public Long id;
     public Long flowId;
     public int level;
     public int sequenceNo = 1;

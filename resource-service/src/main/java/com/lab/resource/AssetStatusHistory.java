@@ -1,15 +1,16 @@
 package com.lab.resource;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "asset_status_history")
+@TableName("asset_status_history")
 public class AssetStatusHistory {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
-    @Column(nullable = false) public Long assetId;
+    @TableId(type=IdType.AUTO) public Long id;
+    public Long assetId;
     public String fromStatus;
-    @Column(nullable = false) public String toStatus;
+    public String toStatus;
     public String reason;
     public Long operatorId;
     public LocalDateTime createdAt = LocalDateTime.now();

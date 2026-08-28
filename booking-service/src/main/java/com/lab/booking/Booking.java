@@ -1,11 +1,10 @@
 package com.lab.booking;
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.*;
 import java.time.*;
-@Entity
-@Table(name="booking", uniqueConstraints=@UniqueConstraint(name="uk_booking_user_request",columnNames={"user_id","client_request_id"}))
+@TableName("booking")
 public class Booking{
-    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
-    @Column(unique=true,nullable=false) public String bookingNo;
+    @TableId(type=IdType.AUTO) public Long id;
+    public String bookingNo;
     public Long userId;
     public Long resourceId;
     public String applicantNameSnapshot;
@@ -19,7 +18,7 @@ public class Booking{
     public int approvalLevelSnapshot;
     public LocalDateTime approvalDeadline;
     public boolean needCheckinSnapshot;
-    @Column(nullable=false) public String clientRequestId;
+    public String clientRequestId;
     public LocalDateTime checkinAt;
     public LocalDateTime completedAt;
     public LocalDateTime canceledAt;

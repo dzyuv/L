@@ -1,9 +1,13 @@
 package com.lab.booking;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.lab.common.persistence.CrudMapper;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
-public interface UserRestrictionRepository extends JpaRepository<UserRestriction,Long>{
-    Optional<UserRestriction> findFirstByUserIdAndStatusAndRestrictedUntilAfterOrderByRestrictedUntilDesc(Long userId,String status,LocalDateTime time);
+public interface UserRestrictionRepository extends CrudMapper<UserRestriction>{
+    default Optional<UserRestriction> findFirstByUserIdAndStatusAndRestrictedUntilAfterOrderByRestrictedUntilDesc(Long userId,String status,LocalDateTime time) {
+        return Optional.ofNullable(selectOne(Wrappers.<UserRestriction>query().eq("user_id", userId)
+                .eq("status", status).gt("restricted_until", time).orderByDesc("restricted_until").last("LIMIT 1")));
+    }
 }

@@ -1,8 +1,10 @@
 package com.lab.booking;
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
-@Entity public class BookingSlot{
-    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
+@TableName("booking_slot") public class BookingSlot{
+    @TableId(type=IdType.AUTO) public Long id;
     public Long resourceId;
     public Long bookingId;
     public LocalDateTime slotStart;

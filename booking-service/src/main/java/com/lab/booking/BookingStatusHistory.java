@@ -1,12 +1,13 @@
 package com.lab.booking;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name="booking_status_history")
+@TableName("booking_status_history")
 public class BookingStatusHistory {
-    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
+    @TableId(type=IdType.AUTO) public Long id;
     public Long bookingId;
     public String fromStatus;
     public String toStatus;

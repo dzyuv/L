@@ -37,6 +37,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
     public Map<String, Object> register(AuthController.Register request) {
         if (users.existsByEmployeeNo(request.employeeNo())) {
             throw new BusinessException("USER_EXISTS", "employee number already exists", HttpStatus.CONFLICT);

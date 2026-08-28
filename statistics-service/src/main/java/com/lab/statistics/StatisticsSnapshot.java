@@ -1,16 +1,14 @@
 package com.lab.statistics;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-@Entity @Table(name = "statistics_snapshot")
+@TableName("statistics_snapshot")
 public class StatisticsSnapshot {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
+    @TableId(type=IdType.AUTO) public Long id;
     public String metricType;
     public Long resourceId;
     public Long userId;

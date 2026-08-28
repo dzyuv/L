@@ -1,8 +1,8 @@
 package com.lab.approval;
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.*;
 import java.time.LocalDateTime;
-@Entity public class ApprovalTask{
-    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
+@TableName("approval_task") public class ApprovalTask{
+    @TableId(type=IdType.AUTO) public Long id;
     public Long bookingId;
     public Long applicantUserId;
     public String applicantName;

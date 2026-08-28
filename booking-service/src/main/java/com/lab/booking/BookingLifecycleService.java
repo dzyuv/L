@@ -54,6 +54,7 @@ public class BookingLifecycleService {
         for(BookingSlot slot:slots.findByBookingIdAndReleasedAtIsNull(bookingId)){
             slot.releasedAt=releasedAt;
             slot.releaseReason=reason;
+            slots.save(slot);
         }
     }
 

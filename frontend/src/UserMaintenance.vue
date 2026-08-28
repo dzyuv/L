@@ -123,7 +123,7 @@ onMounted(loadMaintenance);
 
   <div v-if="dialogOpen" class="maintenance-modal-bg" @click.self="dialogOpen = false">
     <section class="maintenance-modal" role="dialog" aria-modal="true">
-      <div class="maintenance-modal-title"><div><h2>{{ internal ? '内部设备报修' : '设施问题反馈' }}</h2><p>{{ internal ? '按位置检索并确认具体资产，贵重设备需核对唯一编号' : '管理员会根据位置和设备线索确认具体资产' }}</p></div><button title="关闭" @click="dialogOpen = false"><X :size="18" /></button></div>
+      <div class="maintenance-modal-title"><div><h2>{{ internal ? '内部设备报修' : '设施问题反馈' }}</h2><p>{{ internal ? '按位置检索并确认具体资产，贵重设备需核对唯一编号' : '管理员会根据位置和设备线索确认具体资产' }}</p></div><button class="modal-close" title="关闭" aria-label="关闭报修窗口" @click="dialogOpen = false"><X :size="22" /></button></div>
       <div class="maintenance-form">
         <label class="wide">问题发生区域<select v-model="form.resourceId"><option value="">无法确认或不在列表中</option><option v-for="resource in reportableResources" :key="resource.id" :value="resource.id">{{ resource.name }} · {{ resource.location }}</option></select></label>
         <template v-if="internal"><label class="wide">检索设备<input v-model="assetQuery" placeholder="输入资产编号、设备名称、序列号或位置" /></label><label class="wide">具体资产<select v-model="form.assetId"><option value="" disabled>请选择检索到的设备</option><option v-for="asset in filteredAssets" :key="asset.id" :value="asset.id">{{ asset.assetNo }} · {{ asset.name }} · {{ asset.location || '位置未登记' }}{{ asset.serialNo ? ` · SN ${asset.serialNo}` : '' }}</option></select></label></template>

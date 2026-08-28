@@ -1,8 +1,8 @@
 package com.lab.resource;
-import jakarta.persistence.*;
-@Entity public class ResourceType{
-    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
-    @Column(nullable=false,unique=true) public String name;
+import com.baomidou.mybatisplus.annotation.*;
+@TableName("resource_type") public class ResourceType{
+    @TableId(type=IdType.AUTO) public Long id;
+    public String name;
     public int defaultApprovalLevel=1;
     public boolean defaultNeedCheckin=true;
     public boolean enabled=true;

@@ -1,5 +1,5 @@
 package com.lab.booking;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.lab.common.persistence.CrudMapper;
 
-public interface OutboxEventRepository extends JpaRepository<OutboxEvent,Long>{}
+public interface OutboxEventRepository extends CrudMapper<OutboxEvent>{}

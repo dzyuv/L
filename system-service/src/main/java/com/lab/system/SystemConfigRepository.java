@@ -1,8 +1,11 @@
 package com.lab.system;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.lab.common.persistence.CrudMapper;
 import java.util.Optional;
 
-public interface SystemConfigRepository extends JpaRepository<SystemConfig, Long> {
-    Optional<SystemConfig> findByConfigKey(String configKey);
+public interface SystemConfigRepository extends CrudMapper<SystemConfig> {
+    default Optional<SystemConfig> findByConfigKey(String configKey) {
+        return Optional.ofNullable(selectOne(Wrappers.<SystemConfig>query().eq("config_key", configKey)));
+    }
 }

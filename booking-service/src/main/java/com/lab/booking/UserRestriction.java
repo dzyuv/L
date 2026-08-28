@@ -1,12 +1,13 @@
 package com.lab.booking;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name="user_restriction")
+@TableName("user_restriction")
 public class UserRestriction {
-    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
+    @TableId(type=IdType.AUTO) public Long id;
     public Long userId;
     public LocalDateTime restrictedUntil;
     public String reason;

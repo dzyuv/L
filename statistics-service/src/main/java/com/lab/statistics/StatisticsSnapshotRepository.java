@@ -1,8 +1,11 @@
 package com.lab.statistics;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.lab.common.persistence.CrudMapper;
 import java.util.List;
 
-public interface StatisticsSnapshotRepository extends JpaRepository<StatisticsSnapshot, Long> {
-    List<StatisticsSnapshot> findTop100ByOrderByPeriodEndDesc();
+public interface StatisticsSnapshotRepository extends CrudMapper<StatisticsSnapshot> {
+    default List<StatisticsSnapshot> findTop100ByOrderByPeriodEndDesc() {
+        return selectList(Wrappers.<StatisticsSnapshot>query().orderByDesc("period_end").last("LIMIT 100"));
+    }
 }

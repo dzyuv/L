@@ -1,12 +1,9 @@
 package com.lab.resource;
-import jakarta.persistence.*;
-@Entity @Table(name="resource",uniqueConstraints=@UniqueConstraint(columnNames={
-    "typeId","name"
-}
-)) public class Resource{
-    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
+import com.baomidou.mybatisplus.annotation.*;
+@TableName("resource") public class Resource{
+    @TableId(type=IdType.AUTO) public Long id;
     public Long typeId;
-    @Column(nullable=false) public String name;
+    public String name;
     public String location;
     public int capacity;
     public String status="ACTIVE";

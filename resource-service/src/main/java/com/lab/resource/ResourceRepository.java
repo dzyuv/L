@@ -1,5 +1,8 @@
 package com.lab.resource;
-import org.springframework.data.jpa.repository.JpaRepository;
-public interface ResourceRepository extends JpaRepository<Resource,Long>{
-    long countByTypeIdAndDeletedFalse(Long typeId);
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.lab.common.persistence.CrudMapper;
+public interface ResourceRepository extends CrudMapper<Resource>{
+    default long countByTypeIdAndDeletedFalse(Long typeId) {
+        return selectCount(Wrappers.<Resource>query().eq("type_id", typeId).eq("deleted", false));
+    }
 }

@@ -21,6 +21,9 @@ const resources = ref([...props.initialResources]);
 const resourceTypes = ref([]);
 const bookings = ref([]);
 const approvals = ref([]);
+const rejectionTarget = ref(null);
+const rejectionReason = ref("");
+const rejectionSaving = ref(false);
 const violations = ref([]);
 const users = ref([]);
 const roles = ref([]);
@@ -293,9 +296,37 @@ async function cancelClosure(item) {
   try { await axios.post(`/api/v1/admin/resources/${selectedResource.value.id}/closures/${item.id}/cancel`); show("维护时段已取消"); await manageResource(selectedResource.value); }
   catch (e) { show(e.response?.data?.message || "维护时段取消失败", true); }
 }
-async function processApproval(item, action) {
-  try { await axios.post(`/api/v1/approvals/${item.id}/${action}`, { comment: action === "approve" ? "实验室管理员审批通过" : "实验室管理员驳回" }); show(action === "approve" ? "审批已通过" : "审批已驳回"); await loadAll(); }
+async function approveTask(item) {
+  try { await axios.post(`/api/v1/approvals/${item.id}/approve`, { comment: "实验室管理员审批通过" }); show("审批已通过"); await loadAll(); }
   catch (e) { show(e.response?.data?.message || "审批处理失败", true); }
+}
+function openRejection(item) {
+  rejectionTarget.value = item;
+  rejectionReason.value = "";
+}
+function closeRejection() {
+  if (rejectionSaving.value) return;
+  rejectionTarget.value = null;
+  rejectionReason.value = "";
+}
+async function submitRejection() {
+  const reason = rejectionReason.value.trim();
+  if (!reason || !rejectionTarget.value) {
+    show("请填写驳回原因", true);
+    return;
+  }
+  rejectionSaving.value = true;
+  try {
+    await axios.post(`/api/v1/approvals/${rejectionTarget.value.id}/reject`, { comment: reason });
+    rejectionTarget.value = null;
+    rejectionReason.value = "";
+    show("审批已驳回");
+    await loadAll();
+  } catch (e) {
+    show(e.response?.data?.message || "驳回操作失败", true);
+  } finally {
+    rejectionSaving.value = false;
+  }
 }
 async function processViolation(item, status) {
   try { await axios.put(`/api/v1/admin/violations/${item.id}`, { status, comment: status === "CONFIRMED" ? "管理员确认违约" : "管理员撤销违约" }); show("违约记录已处理"); await loadAll(); }
@@ -404,7 +435,7 @@ onMounted(loadAll);
       </template>
 
       <template v-else-if="activeTab === 'approvals'">
-        <section class="admin-section"><div class="approval-admin-list"><article v-for="item in approvals" :key="item.id"><span class="approval-level">L{{ item.level }}</span><div><b>预约 #{{ item.bookingId }}</b><span>申请用户 {{ item.applicantUserId }}</span><small>截止 {{ formatTime(item.deadline) }}</small></div><div class="approval-buttons"><button class="reject" @click="processApproval(item, 'reject')"><X :size="15" />驳回</button><button class="accept" @click="processApproval(item, 'approve')"><Check :size="15" />通过</button></div></article><div v-if="!approvals.length" class="admin-empty">暂无待审批任务</div></div></section>
+        <section class="admin-section"><div class="approval-admin-list"><article v-for="item in approvals" :key="item.id"><span class="approval-level">L{{ item.level }}</span><div class="approval-applicant"><b>{{ item.applicantName || `用户 ${item.applicantUserId}` }}</b><span>申请人</span><small>预约 #{{ item.bookingId }}</small></div><div class="approval-schedule"><b>{{ item.resourceName || `资源 #${item.resourceId}` }}</b><span>{{ formatTime(item.startTime) }} 至 {{ formatTime(item.endTime) }}</span><small>审批截止 {{ formatTime(item.deadline) }}</small></div><div class="approval-buttons"><button class="reject" @click="openRejection(item)"><X :size="15" />驳回</button><button class="accept" @click="approveTask(item)"><Check :size="15" />通过</button></div></article><div v-if="!approvals.length" class="admin-empty">暂无待审批任务</div></div></section>
       </template>
 
       <template v-else-if="activeTab === 'violations'">
@@ -412,9 +443,10 @@ onMounted(loadAll);
       </template>
     </section>
 
-    <div v-if="selectedUser" class="admin-modal-bg" @click.self="selectedUser = null"><section class="admin-modal"><div class="modal-title"><div><h2>{{ selectedUser.realName }}</h2><p>{{ selectedUser.username }} 的角色与访问凭据</p></div><button title="关闭" @click="selectedUser = null"><X :size="18" /></button></div><div class="modal-body"><fieldset><legend>分配角色</legend><label v-for="role in roles" :key="role.code"><input v-model="selectedRoles" type="checkbox" :value="role.code" /><span>{{ roleName(role.code) }}</span></label></fieldset><button class="command full-command" @click="saveUserRoles"><Save :size="16" />保存角色</button><div class="password-reset"><label>重置密码<input v-model="resetPassword" type="password" placeholder="输入至少 8 位新密码" /></label><button @click="saveResetPassword">确认重置</button></div></div></section></div>
-    <div v-if="resourceTypeDialog" class="admin-modal-bg" @click.self="resourceTypeDialog = false"><section class="admin-modal resource-type-modal"><div class="modal-title"><div><h2>{{ editingResourceType ? '编辑资源类别' : '新增资源类别' }}</h2><p>{{ editingResourceType ? '修改类别名称、默认审批级别和启用状态' : '填写类别名称并设置默认审批级别' }}</p></div><button title="关闭" @click="resourceTypeDialog = false"><X :size="18" /></button></div><form class="modal-body resource-type-modal-form" @submit.prevent="saveResourceType"><label>类别名称<input v-model="resourceTypeEditForm.name" maxlength="100" /></label><label>默认审批级别<select v-model.number="resourceTypeEditForm.defaultApprovalLevel"><option :value="0">无需审批</option><option :value="1">一级审批</option><option :value="2">二级审批</option></select></label><label>类别状态<select v-model="resourceTypeEditForm.enabled"><option :value="true">启用中</option><option :value="false">已停用</option></select></label><div class="modal-actions"><button class="quiet" type="button" @click="resourceTypeDialog = false">取消</button><button class="command" type="submit"><Save :size="16" />{{ editingResourceType ? '保存修改' : '创建类别' }}</button></div></form></section></div>
-    <div v-if="resourceDialog" class="admin-modal-bg" @click.self="resourceDialog = false"><section class="admin-modal resource-form-modal"><div class="modal-title"><div><h2>{{ selectedResource ? '编辑资源' : '新增资源' }}</h2><p>维护资源基础资料与预约规则</p></div><button title="关闭" @click="resourceDialog = false"><X :size="18" /></button></div><div class="modal-body form-columns"><label>资源类型<select v-model.number="resourceForm.typeId"><option value="" disabled>请选择</option><option v-for="type in resourceTypes" :key="type.id" :value="type.id">{{ type.name }}</option></select></label><label>资源名称<input v-model="resourceForm.name" /></label><label>位置<input v-model="resourceForm.location" /></label><label>容量<input v-model.number="resourceForm.capacity" type="number" min="1" /></label><label>最大预约时长（分钟）<input v-model.number="resourceForm.maxDurationMinutes" type="number" min="1" /></label><label class="check-field"><input v-model="resourceForm.needCheckin" type="checkbox" />需要签到</label><label class="wide-field">图片地址<input v-model.trim="resourceForm.imageUrl" maxlength="500" placeholder="请输入可公开访问的图片 URL" /></label><div v-if="resourceForm.imageUrl" class="resource-image-preview wide-field"><img :src="resourceForm.imageUrl" alt="资源图片预览" /></div><label class="wide-field">描述<textarea v-model="resourceForm.description"></textarea></label><button class="command full-command wide-field" @click="saveResource"><Save :size="16" />保存资源</button></div></section></div>
+    <div v-if="selectedUser" class="admin-modal-bg" @click.self="selectedUser = null"><section class="admin-modal"><div class="modal-title"><div><h2>{{ selectedUser.realName }}</h2><p>{{ selectedUser.username }} 的角色与访问凭据</p></div><button class="modal-close" title="关闭" aria-label="关闭用户窗口" @click="selectedUser = null"><X :size="22" /></button></div><div class="modal-body"><fieldset><legend>分配角色</legend><label v-for="role in roles" :key="role.code"><input v-model="selectedRoles" type="checkbox" :value="role.code" /><span>{{ roleName(role.code) }}</span></label></fieldset><button class="command full-command" @click="saveUserRoles"><Save :size="16" />保存角色</button><div class="password-reset"><label>重置密码<input v-model="resetPassword" type="password" placeholder="输入至少 8 位新密码" /></label><button @click="saveResetPassword">确认重置</button></div></div></section></div>
+    <div v-if="resourceTypeDialog" class="admin-modal-bg" @click.self="resourceTypeDialog = false"><section class="admin-modal resource-type-modal"><div class="modal-title"><div><h2>{{ editingResourceType ? '编辑资源类别' : '新增资源类别' }}</h2><p>{{ editingResourceType ? '修改类别名称、默认审批级别和启用状态' : '填写类别名称并设置默认审批级别' }}</p></div><button class="modal-close" title="关闭" aria-label="关闭资源类别窗口" @click="resourceTypeDialog = false"><X :size="22" /></button></div><form class="modal-body resource-type-modal-form" @submit.prevent="saveResourceType"><label>类别名称<input v-model="resourceTypeEditForm.name" maxlength="100" /></label><label>默认审批级别<select v-model.number="resourceTypeEditForm.defaultApprovalLevel"><option :value="0">无需审批</option><option :value="1">一级审批</option><option :value="2">二级审批</option></select></label><label>类别状态<select v-model="resourceTypeEditForm.enabled"><option :value="true">启用中</option><option :value="false">已停用</option></select></label><div class="modal-actions"><button class="quiet" type="button" @click="resourceTypeDialog = false">取消</button><button class="command" type="submit"><Save :size="16" />{{ editingResourceType ? '保存修改' : '创建类别' }}</button></div></form></section></div>
+    <div v-if="resourceDialog" class="admin-modal-bg" @click.self="resourceDialog = false"><section class="admin-modal resource-form-modal"><div class="modal-title"><div><h2>{{ selectedResource ? '编辑资源' : '新增资源' }}</h2><p>维护资源基础资料与预约规则</p></div><button class="modal-close" title="关闭" aria-label="关闭资源窗口" @click="resourceDialog = false"><X :size="22" /></button></div><div class="modal-body form-columns"><label>资源类型<select v-model.number="resourceForm.typeId"><option value="" disabled>请选择</option><option v-for="type in resourceTypes" :key="type.id" :value="type.id">{{ type.name }}</option></select></label><label>资源名称<input v-model="resourceForm.name" /></label><label>位置<input v-model="resourceForm.location" /></label><label>容量<input v-model.number="resourceForm.capacity" type="number" min="1" /></label><label>最大预约时长（分钟）<input v-model.number="resourceForm.maxDurationMinutes" type="number" min="1" /></label><label class="check-field"><input v-model="resourceForm.needCheckin" type="checkbox" />需要签到</label><label class="wide-field">图片地址<input v-model.trim="resourceForm.imageUrl" maxlength="500" placeholder="请输入可公开访问的图片 URL" /></label><div v-if="resourceForm.imageUrl" class="resource-image-preview wide-field"><img :src="resourceForm.imageUrl" alt="资源图片预览" /></div><label class="wide-field">描述<textarea v-model="resourceForm.description"></textarea></label><button class="command full-command wide-field" @click="saveResource"><Save :size="16" />保存资源</button></div></section></div>
+    <div v-if="rejectionTarget" class="approval-reject-backdrop" @click.self="closeRejection"><section class="approval-reject-modal" role="dialog" aria-modal="true" aria-labelledby="admin-reject-title"><header class="approval-reject-head"><div><h2 id="admin-reject-title">驳回预约</h2><p>填写原因后，申请人可在预约记录中查看</p></div><button class="modal-close" type="button" title="关闭" aria-label="关闭驳回窗口" :disabled="rejectionSaving" @click="closeRejection"><X :size="22" /></button></header><div class="approval-reject-body"><div class="approval-reject-context"><b>{{ rejectionTarget.resourceName || `预约 #${rejectionTarget.bookingId}` }}</b><span>申请人：{{ rejectionTarget.applicantName || `用户 ${rejectionTarget.applicantUserId}` }}</span><small>{{ formatTime(rejectionTarget.startTime) }} 至 {{ formatTime(rejectionTarget.endTime) }}</small></div><label class="approval-reject-field"><span>驳回原因 <em>必填</em></span><textarea v-model="rejectionReason" maxlength="500" autofocus placeholder="请说明驳回原因，便于申请人修改后重新提交"></textarea><small>{{ rejectionReason.length }} / 500</small></label></div><footer class="approval-reject-actions"><button class="approval-reject-cancel" type="button" :disabled="rejectionSaving" @click="closeRejection">取消</button><button class="approval-reject-confirm" type="button" :disabled="!rejectionReason.trim() || rejectionSaving" @click="submitRejection">{{ rejectionSaving ? '提交中...' : '确认驳回' }}</button></footer></section></div>
   </main>
 </template>
 
@@ -436,4 +468,6 @@ onMounted(loadAll);
 .log-grid{grid-template-columns:1fr 1.25fr 1.1fr 1.65fr .55fr 1.25fr;min-width:980px}.log-toolbar{gap:14px}.log-filters{display:flex;align-items:center;justify-content:flex-end;gap:8px}.log-filters select{height:36px;border:1px solid #d8e2dd;border-radius:4px;padding:0 28px 0 9px;background:#fff;color:#415b51;font-size:11px}.operation-log-table .data-row:not(.table-head){min-height:62px}.operation-log-table .mono{display:block;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
 @media(max-width:760px){.log-toolbar{height:auto;align-items:stretch;flex-direction:column}.log-toolbar .search{width:100%}.log-filters{justify-content:flex-start;flex-wrap:wrap}}
 .status.expired{background:#f3e9e7;color:#9a5a51}
+.approval-admin-list article{min-height:78px;display:grid;grid-template-columns:34px minmax(160px,.8fr) minmax(230px,1.2fr) auto;column-gap:16px;align-items:center;padding:10px 0}.approval-admin-list article>div:nth-child(2){flex:initial}.approval-applicant,.approval-schedule{min-width:0}.approval-schedule{padding-left:16px;border-left:1px solid #e5ece8}.approval-admin-list b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:650px){.approval-admin-list{padding:8px 14px}.approval-admin-list article{grid-template-columns:34px minmax(0,1fr);row-gap:9px}.approval-schedule{grid-column:2;padding-left:0;border-left:0}.approval-buttons{grid-column:2}.approval-buttons button{flex:1;justify-content:center}}
 </style>

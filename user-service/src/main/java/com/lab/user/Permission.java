@@ -1,14 +1,13 @@
 package com.lab.user;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 
-@Entity
-@Table(name="permission")
+@TableName("permission")
 public class Permission {
-    @Id @GeneratedValue(strategy=GenerationType.IDENTITY)
+    @TableId(type=IdType.AUTO)
     public Long id;
-    @Column(nullable=false,unique=true,length=100)
     public String code;
-    @Column(nullable=false,length=100)
     public String name;
 }

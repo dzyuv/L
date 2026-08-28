@@ -1,16 +1,17 @@
 package com.lab.user;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.Instant;
 
-@Entity
-@Table(name="refresh_token")
+@TableName("refresh_token")
 public class RefreshToken {
-    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
-    @Column(nullable=false,unique=true,length=128) public String tokenHash;
-    @Column(nullable=false) public Long userId;
+    @TableId(type=IdType.AUTO) public Long id;
+    public String tokenHash;
+    public Long userId;
     public int tokenVersion;
-    @Column(nullable=false) public Instant expiresAt;
+    public Instant expiresAt;
     public Instant revokedAt;
     public Instant createdAt=Instant.now();
 }

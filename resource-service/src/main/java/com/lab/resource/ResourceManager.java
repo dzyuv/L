@@ -1,12 +1,13 @@
 package com.lab.resource;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(uniqueConstraints=@UniqueConstraint(columnNames={"resourceId","userId","managerType"}))
+@TableName("resource_manager")
 public class ResourceManager {
-    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
+    @TableId(type=IdType.AUTO) public Long id;
     public Long resourceId;
     public Long userId;
     public String managerType="APPROVER";

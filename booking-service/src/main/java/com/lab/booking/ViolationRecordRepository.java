@@ -1,10 +1,16 @@
 package com.lab.booking;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.lab.common.persistence.CrudMapper;
 import java.time.LocalDateTime;
 import java.util.List;
 
-public interface ViolationRecordRepository extends JpaRepository<ViolationRecord,Long>{
-    long countByUserIdAndViolationTypeAndCreatedAtAfter(Long userId,String violationType,LocalDateTime createdAt);
-    List<ViolationRecord> findAllByOrderByCreatedAtDesc();
+public interface ViolationRecordRepository extends CrudMapper<ViolationRecord>{
+    default long countByUserIdAndViolationTypeAndCreatedAtAfter(Long userId,String violationType,LocalDateTime createdAt) {
+        return selectCount(Wrappers.<ViolationRecord>query().eq("user_id", userId)
+                .eq("violation_type", violationType).gt("created_at", createdAt));
+    }
+    default List<ViolationRecord> findAllByOrderByCreatedAtDesc() {
+        return selectList(Wrappers.<ViolationRecord>query().orderByDesc("created_at"));
+    }
 }

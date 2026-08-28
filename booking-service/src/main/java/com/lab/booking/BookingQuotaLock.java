@@ -1,12 +1,11 @@
 package com.lab.booking;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 
-@Entity
-@Table(name = "booking_quota_lock")
+@TableName("booking_quota_lock")
 public class BookingQuotaLock {
-    @Id
+    @TableId(value="user_id", type=IdType.INPUT)
     public Long userId;
 }

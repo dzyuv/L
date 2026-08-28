@@ -29,6 +29,9 @@ const onlyAvailableResources = ref(false);
 const availabilityByResource = ref({});
 const bookings = ref([]);
 const approvals = ref([]);
+const rejectionTarget = ref(null);
+const rejectionReason = ref("");
+const rejectionSaving = ref(false);
 const teacherActiveTab = ref("overview");
 const loading = ref(false);
 const notice = ref("");
@@ -87,7 +90,7 @@ const teacherUpcomingBookings = computed(() => bookings.value
 const teacherPageTitle = computed(() => teacherTabs.find((item) => item.id === teacherActiveTab.value)?.label || "教师工作台");
 watch(notice, (message) => {
   if (!message) return;
-  const success = /成功|已通过|已完成|已取消|已退出/.test(message);
+  const success = /成功|已通过|已驳回|已完成|已取消|已退出/.test(message);
   const failed = /失败|错误|失效|不可|不能|无法|驳回|请选择|请填写|必须|暂不|没有开放/.test(message);
   toast.value = { visible: true, message, type: success ? "success" : failed ? "error" : "info" };
   clearTimeout(toastTimer);
@@ -101,7 +104,8 @@ axios.interceptors.request.use((c) => {
 axios.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const isLoginRequest = String(error.config?.url || "").includes("/user/login");
+    if (error.response?.status === 401 && !isLoginRequest) {
       token.value = "";
       user.value = null;
       localStorage.removeItem("token");
@@ -373,13 +377,41 @@ async function load() {
     loading.value = false;
   }
 }
-async function processApproval(task, action) {
+async function approveTask(task) {
   try {
-    await axios.post(`/api/v1/approvals/${task.id}/${action}`, { comment: action === "approve" ? "Approved by teacher" : "Rejected by teacher" });
-    notice.value = action === "approve" ? "审批已通过" : "预约申请已驳回";
+    await axios.post(`/api/v1/approvals/${task.id}/approve`, { comment: "教师审批通过" });
+    notice.value = "审批已通过";
     await load();
   } catch (e) {
     notice.value = e.response?.data?.message || "审批操作失败";
+  }
+}
+function openRejection(task) {
+  rejectionTarget.value = task;
+  rejectionReason.value = "";
+}
+function closeRejection() {
+  if (rejectionSaving.value) return;
+  rejectionTarget.value = null;
+  rejectionReason.value = "";
+}
+async function submitRejection() {
+  const reason = rejectionReason.value.trim();
+  if (!reason || !rejectionTarget.value) {
+    notice.value = "请填写驳回原因";
+    return;
+  }
+  rejectionSaving.value = true;
+  try {
+    await axios.post(`/api/v1/approvals/${rejectionTarget.value.id}/reject`, { comment: reason });
+    rejectionTarget.value = null;
+    rejectionReason.value = "";
+    notice.value = "预约申请已驳回";
+    await load();
+  } catch (e) {
+    notice.value = e.response?.data?.message || "驳回操作失败";
+  } finally {
+    rejectionSaving.value = false;
   }
 }
 function selectResource(r) {
@@ -649,7 +681,7 @@ onMounted(() => {
                 <article v-for="task in approvals.slice(0, 5)" :key="task.id">
                   <span class="teacher-level">L{{ task.level }}</span>
                   <div><b>{{ task.resourceName || `预约 #${task.bookingId}` }}</b><span>{{ task.applicantName || `用户 ${task.applicantUserId}` }}</span><small>{{ task.startTime?.replace('T', ' ') }} - {{ task.endTime?.slice(11, 16) }}</small></div>
-                  <div class="teacher-approval-actions"><button class="reject" type="button" title="驳回预约" @click="processApproval(task, 'reject')"><X :size="15" /></button><button class="approve" type="button" title="通过预约" @click="processApproval(task, 'approve')"><CheckCircle2 :size="15" /></button></div>
+                  <div class="teacher-approval-actions"><button class="reject" type="button" title="驳回预约" @click="openRejection(task)"><X :size="15" /></button><button class="approve" type="button" title="通过预约" @click="approveTask(task)"><CheckCircle2 :size="15" /></button></div>
                 </article>
                 <div v-if="!approvals.length" class="teacher-empty">暂无待审批任务</div>
               </div>
@@ -673,9 +705,9 @@ onMounted(() => {
           <div class="teacher-approval-list">
             <article v-for="task in approvals" :key="task.id">
               <span class="teacher-level">L{{ task.level }}</span>
-              <div><b>{{ task.resourceName || `预约 #${task.bookingId}` }}</b><span>申请人：{{ task.applicantName || `用户 ${task.applicantUserId}` }}</span><small>{{ task.startTime?.replace('T', ' ') }} - {{ task.endTime?.replace('T', ' ') }}</small></div>
-              <span class="teacher-deadline">审批截止<small>{{ task.deadline?.replace('T', ' ').slice(0, 16) || '-' }}</small></span>
-              <div class="teacher-approval-actions labeled"><button class="reject" type="button" @click="processApproval(task, 'reject')"><X :size="15" />驳回</button><button class="approve" type="button" @click="processApproval(task, 'approve')"><CheckCircle2 :size="15" />通过</button></div>
+              <div class="teacher-approval-summary"><b>{{ task.resourceName || `预约 #${task.bookingId}` }}</b><span>申请人：{{ task.applicantName || `用户 ${task.applicantUserId}` }}</span><small>预约 #{{ task.bookingId }}</small></div>
+              <div class="teacher-approval-timing"><span>使用时间</span><b>{{ task.startTime?.replace('T', ' ').slice(0, 16) || '-' }} 至 {{ task.endTime?.replace('T', ' ').slice(0, 16) || '-' }}</b><small>审批截止 {{ task.deadline?.replace('T', ' ').slice(0, 16) || '-' }}</small></div>
+              <div class="teacher-approval-actions labeled"><button class="reject" type="button" @click="openRejection(task)"><X :size="15" />驳回</button><button class="approve" type="button" @click="approveTask(task)"><CheckCircle2 :size="15" />通过</button></div>
             </article>
             <div v-if="!approvals.length" class="teacher-empty">暂无待审批预约</div>
           </div>
@@ -784,7 +816,7 @@ onMounted(() => {
             <h2>{{ bookingForm.resourceName }}</h2>
             <p>选择连续的半小时预约时段，暗色时段不可预约</p>
           </div>
-          <button class="icon-btn" type="button" @click="closeBookingModal" title="关闭">×</button>
+          <button class="modal-close" type="button" @click="closeBookingModal" title="关闭" aria-label="关闭预约窗口"><X :size="22" /></button>
         </div>
         <div class="booking-modal-content">
           <div v-if="slotDates.length" class="slot-date-tabs" aria-label="选择预约日期">
@@ -813,6 +845,19 @@ onMounted(() => {
           <div class="modal-summary" :class="{ empty: !selectedSlots.length }"><template v-if="selectedSlots.length"><b>已选 {{ selectedSlots.length }} 个时段</b><span>{{ bookingForm.startTime.replace('T', ' ') }} - {{ bookingForm.endTime.slice(11) }}</span></template><template v-else><b>请选择连续时段</b><span>提交前可确认日期和时间</span></template></div>
           <button class="primary" type="button" :disabled="!selectedSlots.length || loading" @click="createBooking">提交预约</button>
         </footer>
+      </section>
+    </div>
+    <div v-if="rejectionTarget" class="approval-reject-backdrop" @click.self="closeRejection">
+      <section class="approval-reject-modal" role="dialog" aria-modal="true" aria-labelledby="teacher-reject-title">
+        <header class="approval-reject-head">
+          <div><h2 id="teacher-reject-title">驳回预约</h2><p>填写原因后，申请人可在预约记录中查看</p></div>
+          <button class="modal-close" type="button" title="关闭" aria-label="关闭驳回窗口" :disabled="rejectionSaving" @click="closeRejection"><X :size="22" /></button>
+        </header>
+        <div class="approval-reject-body">
+          <div class="approval-reject-context"><b>{{ rejectionTarget.resourceName || `预约 #${rejectionTarget.bookingId}` }}</b><span>申请人：{{ rejectionTarget.applicantName || `用户 ${rejectionTarget.applicantUserId}` }}</span><small>{{ rejectionTarget.startTime?.replace('T', ' ').slice(0, 16) || '-' }} 至 {{ rejectionTarget.endTime?.replace('T', ' ').slice(0, 16) || '-' }}</small></div>
+          <label class="approval-reject-field"><span>驳回原因 <em>必填</em></span><textarea v-model="rejectionReason" maxlength="500" autofocus placeholder="请说明驳回原因，便于申请人修改后重新提交"></textarea><small>{{ rejectionReason.length }} / 500</small></label>
+        </div>
+        <footer class="approval-reject-actions"><button class="approval-reject-cancel" type="button" :disabled="rejectionSaving" @click="closeRejection">取消</button><button class="approval-reject-confirm" type="button" :disabled="!rejectionReason.trim() || rejectionSaving" @click="submitRejection">{{ rejectionSaving ? '提交中...' : '确认驳回' }}</button></footer>
       </section>
     </div>
   </div>

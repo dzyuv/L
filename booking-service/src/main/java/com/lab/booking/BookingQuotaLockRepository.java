@@ -1,20 +1,16 @@
 package com.lab.booking;
 
-import jakarta.persistence.LockModeType;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import com.lab.common.persistence.CrudMapper;
+import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
 import java.util.Optional;
 
-public interface BookingQuotaLockRepository extends JpaRepository<BookingQuotaLock, Long> {
-    @Modifying
-    @Query(value = "INSERT IGNORE INTO booking_quota_lock(user_id) VALUES (:userId)", nativeQuery = true)
+public interface BookingQuotaLockRepository extends CrudMapper<BookingQuotaLock> {
+    @Insert("INSERT IGNORE INTO booking_quota_lock(user_id) VALUES(#{userId})")
     void ensureExists(@Param("userId") Long userId);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select item from BookingQuotaLock item where item.userId = :userId")
+    @Select("SELECT user_id FROM booking_quota_lock WHERE user_id=#{userId} FOR UPDATE")
     Optional<BookingQuotaLock> lockByUserId(@Param("userId") Long userId);
 }

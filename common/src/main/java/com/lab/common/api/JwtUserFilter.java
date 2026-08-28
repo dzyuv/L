@@ -22,13 +22,13 @@ public class JwtUserFilter extends OncePerRequestFilter {
     @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
         String header = request.getHeader("Authorization");
         if (header == null || !header.startsWith("Bearer ")) {
-            unauthorized(request, response, "Access token is required");
+            unauthorized(request, response, "请先登录后再操作");
             return;
         }
         try {
             Claims claims = Jwts.parser().verifyWith(keys.key()).build().parseSignedClaims(header.substring(7)).getPayload();
             if(!"access".equals(claims.get("tokenType",String.class))){
-                unauthorized(request, response, "Access token is required");
+                unauthorized(request, response, "请先登录后再操作");
                 return;
             }
             request.setAttribute("userId", Long.valueOf(claims.getSubject()));
@@ -38,7 +38,7 @@ public class JwtUserFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
         }
         catch (Exception ex) {
-            unauthorized(request, response, "Access token is invalid or expired");
+            unauthorized(request, response, "登录已失效，请重新登录");
         }
     }
 

@@ -1,12 +1,13 @@
 package com.lab.booking;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name="violation_record",uniqueConstraints=@UniqueConstraint(columnNames={"bookingId","violationType"}))
+@TableName("violation_record")
 public class ViolationRecord {
-    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
+    @TableId(type=IdType.AUTO) public Long id;
     public Long bookingId;
     public Long userId;
     public String violationType;
