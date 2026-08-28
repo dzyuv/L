@@ -8,10 +8,13 @@ import java.util.*;
 
 public interface ResourceManagementService {
     List<Resource> list();
+    List<?> listPublicTypes();
     List<?> listTypes(HttpServletRequest servletRequest);
     List<?> listSchedules(Long id, HttpServletRequest servletRequest);
     Resource get(Long id);
     Object createType(ResourceController.TypeRequest request, HttpServletRequest servletRequest);
+    Object updateType(Long id, ResourceController.TypeUpdateRequest request, HttpServletRequest servletRequest);
+    void deleteType(Long id, HttpServletRequest servletRequest);
     Resource create(ResourceController.ResourceRequest request, HttpServletRequest servletRequest);
     Resource update(Long id, ResourceController.ResourceRequest request, HttpServletRequest servletRequest);
     List<?> schedule(Long id, List<ResourceController.ScheduleRequest> requests, HttpServletRequest servletRequest);

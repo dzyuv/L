@@ -25,7 +25,7 @@ spring:
     - id: resource-service
       uri: lb://resource-service
       predicates:
-        - Path=/api/v1/resources/**,/api/v1/admin/resources/**,/api/v1/admin/resource-types/**,/api/v1/assets/**,/api/v1/admin/assets/**,/api/v1/maintenance/**,/api/v1/admin/maintenance/**
+        - Path=/api/v1/resources/**,/api/v1/resource-types,/api/v1/admin/resources/**,/api/v1/admin/resource-types/**,/api/v1/assets/**,/api/v1/admin/assets/**,/api/v1/maintenance/**,/api/v1/admin/maintenance/**
 
     - id: booking-service
       uri: lb://booking-service

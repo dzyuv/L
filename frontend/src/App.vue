@@ -14,6 +14,7 @@ import {
   LogOut,
   Plus,
   RefreshCw,
+  Search,
   ShieldCheck,
   Users as UsersIcon,
   X,
@@ -21,6 +22,10 @@ import {
 const token = ref(localStorage.getItem("token") || "");
 const user = ref(null);
 const resources = ref([]);
+const resourceTypes = ref([]);
+const resourceQuery = ref("");
+const resourceTypeFilter = ref("");
+const onlyAvailableResources = ref(false);
 const availabilityByResource = ref({});
 const bookings = ref([]);
 const approvals = ref([]);
@@ -57,6 +62,16 @@ const resourceBookingCounts = computed(() => bookings.value.reduce((counts, item
   return counts;
 }, {}));
 const pendingBookingCount = computed(() => bookings.value.filter((item) => item.status === "PENDING_APPROVAL").length);
+const resourceTypeMap = computed(() => Object.fromEntries(resourceTypes.value.map((item) => [item.id, item])));
+const filteredResources = computed(() => {
+  const query = resourceQuery.value.trim().toLowerCase();
+  return resources.value.filter((resource) => {
+    const matchesQuery = !query || [resource.name, resource.location, resource.description].some((value) => String(value || "").toLowerCase().includes(query));
+    const matchesType = !resourceTypeFilter.value || resource.typeId === Number(resourceTypeFilter.value);
+    const hasAvailability = resourceHasAvailability(resource);
+    return matchesQuery && matchesType && (!onlyAvailableResources.value || hasAvailability);
+  });
+});
 watch(notice, (message) => {
   if (!message) return;
   const success = /成功|已通过|已完成|已取消|已退出/.test(message);
@@ -94,12 +109,7 @@ function formatDateTime(date) {
   return `${datePart}T${timePart}`;
 }
 function resourceImage(resource) {
-  const name = String(resource?.name || "");
-  if (name.includes("显微") || name.includes("材料") || name.includes("分析")) return "https://images.unsplash.com/photo-1576086213369-97a306d36557?auto=format&fit=crop&w=900&q=82";
-  if (name.includes("计算机") || name.includes("电脑") || name.includes("工作站")) return "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=900&q=82";
-  if (name.includes("电子") || name.includes("测量") || name.includes("示波")) return "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=900&q=82";
-  if (name.includes("会议") || name.includes("教室")) return "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=900&q=82";
-  return "https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=900&q=82";
+  return String(resource?.imageUrl || "").trim();
 }
 function resourceDisplayName(resource) {
   const value = String(resource?.name || "").trim();
@@ -319,12 +329,14 @@ async function load() {
       approvals.value = [];
       return;
     }
-    const [r, b] = await Promise.all([
+    const [r, b, types] = await Promise.all([
       axios.get("/api/v1/resources"),
       axios.get("/api/v1/bookings/my"),
+      axios.get("/api/v1/resource-types"),
     ]);
     resources.value = r.data.data;
     bookings.value = b.data.data;
+    resourceTypes.value = types.data?.data || [];
     if (isTeacher.value) {
       const approvalResponse = await axios.get("/api/v1/approvals/mine");
       approvals.value = approvalResponse.data?.data || [];
@@ -355,6 +367,12 @@ function selectResource(r) {
   selectedSlotKeys.value = [];
   activeSlotDate.value = slotDates.value.find((item) => item.availableCount)?.date || slotDates.value[0]?.date || "";
   bookingModalOpen.value = true;
+}
+function resourceTypeName(resource) {
+  return resourceTypeMap.value[resource?.typeId]?.name || resourceKind(resource);
+}
+function resourceHasAvailability(resource) {
+  return Boolean(availabilityByResource.value[resource?.id]?.slots?.some((slot) => slot.available));
 }
 async function loadAvailability(items) {
   const now = new Date();
@@ -639,25 +657,32 @@ onMounted(() => {
           <div class="panel-head">
             <div>
               <h2>资源目录</h2>
-              <p>选择资源后填写预约时段</p>
+              <p>按类别和空闲状态筛选，选择资源后填写预约时段</p>
             </div>
             <button class="ghost" @click="load">
               <RefreshCw :size="16" />刷新
             </button>
           </div>
+          <div class="resource-filters">
+            <label class="resource-search"><Search :size="15" /><input v-model="resourceQuery" placeholder="搜索实验室名称、位置或用途" /></label>
+            <select v-model="resourceTypeFilter"><option value="">全部类别</option><option v-for="type in resourceTypes" :key="type.id" :value="type.id">{{ type.name }}</option></select>
+            <label class="availability-filter"><input v-model="onlyAvailableResources" type="checkbox" />只看未来14天有空闲</label>
+            <button v-if="resourceQuery || resourceTypeFilter || onlyAvailableResources" class="clear-resource-filter" @click="resourceQuery = ''; resourceTypeFilter = ''; onlyAvailableResources = false">清除筛选</button>
+            <span class="resource-filter-count">显示 {{ filteredResources.length }} / {{ resources.length }}</span>
+          </div>
           <div class="resource-card-grid">
             <button
-              v-for="r in resources"
+              v-for="r in filteredResources"
               :key="r.id"
               class="resource-card"
               :class="{ selected: bookingForm.resourceId === r.id }"
               @click="selectResource(r)"
             >
-              <div class="resource-card-image"><img :src="resourceImage(r)" :alt="`${resourceDisplayName(r)} 场景图`" loading="lazy" @error="handleResourceImageError" /><span class="resource-card-kind">{{ resourceKind(r) }}</span><span class="resource-card-status"><i></i>可预约</span></div>
+              <div class="resource-card-image" :class="{ 'resource-image-fallback': !resourceImage(r) }"><img v-if="resourceImage(r)" :src="resourceImage(r)" :alt="`${resourceDisplayName(r)} 场景图`" loading="lazy" @error="handleResourceImageError" /><span v-else class="resource-image-empty">暂无图片</span><span class="resource-card-kind">{{ resourceTypeName(r) }}</span><span class="resource-card-status" :class="{ unavailable: !resourceHasAvailability(r) }"><i></i>{{ resourceHasAvailability(r) ? '有空闲' : '暂无空闲' }}</span></div>
               <div class="resource-card-body"><div class="resource-card-title"><strong>{{ resourceDisplayName(r) }}</strong><ChevronRight :size="16" /></div><p>{{ resourceDisplayDescription(r) }}</p><div class="resource-card-meta"><span><CalendarDays :size="14" />{{ r.location }}</span><span><UsersIcon :size="14" />{{ r.capacity }} 人</span></div><div class="resource-card-footer"><span v-if="availabilityByResource[r.id]?.next">最近开放 {{ availabilityByResource[r.id].next.date }} {{ availabilityByResource[r.id].next.openTime }}</span><span v-else>未来14天暂无开放时段</span><b>{{ resourceBookingCounts[r.id] || 0 }} 次我的预约</b></div></div>
             </button>
-            <div v-if="!resources.length" class="empty resource-card-empty">
-              暂无资源，请先在资源服务中配置。
+            <div v-if="!filteredResources.length" class="empty resource-card-empty">
+              {{ resources.length ? '没有符合当前筛选条件的资源。' : '暂无资源，请先在资源服务中配置。' }}
             </div>
           </div>
         </section>
@@ -672,7 +697,7 @@ onMounted(() => {
         <div class="student-booking-list">
           <article v-for="b in bookings" :key="b.id" class="student-booking-card">
             <div class="booking-date"><strong>{{ bookingDay(b.startTime) }}</strong><span>{{ bookingMonth(b.startTime) }}</span></div>
-            <div class="booking-resource-thumb"><img :src="resourceImage(bookingResource(b))" alt="" loading="lazy" @error="handleResourceImageError" /></div>
+            <div class="booking-resource-thumb" :class="{ 'resource-image-fallback': !resourceImage(bookingResource(b)) }"><img v-if="resourceImage(bookingResource(b))" :src="resourceImage(bookingResource(b))" alt="" loading="lazy" @error="handleResourceImageError" /><span v-else>无图</span></div>
             <div class="booking-card-info"><span class="mono">{{ b.bookingNo }}</span><h3>{{ resourceDisplayName(bookingResource(b)) }}</h3><p><Clock3 :size="14" />{{ b.startTime?.slice(11, 16) }} - {{ b.endTime?.slice(11, 16) }}<span>{{ b.purpose }}</span></p></div>
             <span class="booking-card-status" :class="b.status.toLowerCase()"><i></i>{{ bookingStatusText(b.status) }}</span>
             <button v-if="['APPROVED', 'PENDING_APPROVAL'].includes(b.status)" class="booking-cancel" @click="cancel(b.id)">取消预约</button>

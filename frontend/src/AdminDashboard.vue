@@ -11,8 +11,8 @@ import {
 const props = defineProps({ user: { type: Object, required: true }, initialResources: { type: Array, default: () => [] } });
 const isSystemAdmin = computed(() => (props.user?.roles || []).includes("SYSTEM_ADMIN"));
 const tabs = computed(() => isSystemAdmin.value
-  ? [{ id: "overview", label: "总览", icon: BarChart3 }, { id: "users", label: "用户与角色", icon: Users }, { id: "assets", label: "资产台账", icon: PackageSearch }, { id: "maintenance", label: "报修处理", icon: Wrench }, { id: "flows", label: "审批流", icon: ClipboardCheck }, { id: "configs", label: "系统配置", icon: Settings }, { id: "statistics", label: "全局统计", icon: BarChart3 }]
-  : [{ id: "overview", label: "运营总览", icon: BarChart3 }, { id: "resources", label: "资源管理", icon: FlaskConical }, { id: "assets", label: "资产台账", icon: PackageSearch }, { id: "maintenance", label: "报修处理", icon: Wrench }, { id: "bookings", label: "预约查询", icon: CalendarClock }, { id: "approvals", label: "二级审批", icon: ClipboardCheck }, { id: "violations", label: "违约处理", icon: AlertTriangle }]);
+  ? [{ id: "overview", label: "总览", icon: BarChart3 }, { id: "users", label: "用户与角色", icon: Users }, { id: "resource-types", label: "资源类别", icon: FlaskConical }, { id: "assets", label: "资产台账", icon: PackageSearch }, { id: "maintenance", label: "报修处理", icon: Wrench }, { id: "flows", label: "审批流", icon: ClipboardCheck }, { id: "configs", label: "系统配置", icon: Settings }, { id: "statistics", label: "全局统计", icon: BarChart3 }]
+  : [{ id: "overview", label: "运营总览", icon: BarChart3 }, { id: "resources", label: "资源管理", icon: FlaskConical }, { id: "resource-types", label: "资源类别", icon: FlaskConical }, { id: "assets", label: "资产台账", icon: PackageSearch }, { id: "maintenance", label: "报修处理", icon: Wrench }, { id: "bookings", label: "预约查询", icon: CalendarClock }, { id: "approvals", label: "二级审批", icon: ClipboardCheck }, { id: "violations", label: "违约处理", icon: AlertTriangle }]);
 const activeTab = ref("overview");
 const loading = ref(false);
 const notice = ref("");
@@ -43,6 +43,10 @@ const managers = ref([]);
 const closureForm = ref({ startTime: "", endTime: "", reason: "" });
 const managerForm = ref({ userId: "", managerType: "APPROVER", scopeType: "RESOURCE", scopeValue: "" });
 const flowForm = ref({ resourceTypeId: "", levels: 1, deadlineMinutes: 1440 });
+const resourceTypeEditForm = ref({ name: "", defaultApprovalLevel: 1, enabled: true });
+const resourceTypeDialog = ref(false);
+const editingResourceType = ref(null);
+const resourceTypeActionId = ref(null);
 let noticeTimer;
 
 const pendingBookings = computed(() => bookings.value.filter((item) => item.status === "PENDING_APPROVAL").length);
@@ -80,7 +84,7 @@ const labReport = computed(() => {
 });
 
 function emptyResource() {
-  return { typeId: "", name: "", location: "", capacity: 1, description: "", maxDurationMinutes: 120, needCheckin: true, approvalLevelOverride: null };
+  return { typeId: "", name: "", location: "", capacity: 1, description: "", imageUrl: "", maxDurationMinutes: 120, needCheckin: true, approvalLevelOverride: null };
 }
 function show(message, failed = false) {
   notice.value = message;
@@ -159,9 +163,56 @@ async function createApprovalFlow() {
   try { await axios.post("/api/v1/admin/approval-flows", { resourceTypeId: Number(flowForm.value.resourceTypeId), nodes }); show("审批流新版本已发布"); await loadAll(); }
   catch (e) { show(e.response?.data?.message || "审批流发布失败", true); }
 }
+function editResourceType(item) {
+  editingResourceType.value = item;
+  resourceTypeEditForm.value = { name: item.name, defaultApprovalLevel: item.defaultApprovalLevel ?? 1, enabled: item.enabled !== false };
+  resourceTypeDialog.value = true;
+}
+function beginCreateResourceType() {
+  editingResourceType.value = null;
+  resourceTypeEditForm.value = { name: "", defaultApprovalLevel: 1, enabled: true };
+  resourceTypeDialog.value = true;
+}
+async function saveResourceType() {
+  const name = resourceTypeEditForm.value.name.trim();
+  if (!name) return show("请填写资源类别名称", true);
+  const isEditing = Boolean(editingResourceType.value);
+  try {
+    if (isEditing) {
+      await axios.put(`/api/v1/admin/resource-types/${editingResourceType.value.id}`, { name, defaultApprovalLevel: Number(resourceTypeEditForm.value.defaultApprovalLevel), enabled: resourceTypeEditForm.value.enabled });
+    } else {
+      await axios.post("/api/v1/admin/resource-types", { name, defaultApprovalLevel: Number(resourceTypeEditForm.value.defaultApprovalLevel) });
+    }
+    resourceTypeDialog.value = false;
+    editingResourceType.value = null;
+    show(isEditing ? "资源类别已更新" : "资源类别已创建");
+    await loadAll();
+  } catch (e) { show(e.response?.data?.message || "资源类别保存失败", true); }
+}
+async function toggleResourceType(item) {
+  if (resourceTypeActionId.value) return;
+  resourceTypeActionId.value = item.id;
+  try {
+    await axios.put(`/api/v1/admin/resource-types/${item.id}`, { name: item.name, defaultApprovalLevel: item.defaultApprovalLevel, enabled: item.enabled === false });
+    show(item.enabled === false ? "资源类别已启用" : "资源类别已停用");
+    await loadAll();
+  } catch (e) { show(e.response?.data?.message || "资源类别状态更新失败", true); }
+  finally { resourceTypeActionId.value = null; }
+}
+async function deleteResourceType(item) {
+  const linkedCount = resources.value.filter(resource => Number(resource.typeId) === Number(item.id)).length;
+  if (linkedCount > 0) return show(`该类别仍关联 ${linkedCount} 个资源，请先迁移或删除这些资源`, true);
+  if (!window.confirm(`确定删除资源类别“${item.name}”吗？删除后将无法恢复。`)) return;
+  try {
+    await axios.delete(`/api/v1/admin/resource-types/${item.id}`);
+    if (editingResourceType.value?.id === item.id) { editingResourceType.value = null; resourceTypeDialog.value = false; }
+    show("资源类别已删除");
+    await loadAll();
+  } catch (e) { show(e.response?.data?.message || "资源类别删除失败，可能仍被资源使用", true); }
+}
 
 function createResource() { resourceForm.value = emptyResource(); resourceDialog.value = true; }
-function editResource(item) { resourceForm.value = { typeId: item.typeId, name: item.name, location: item.location, capacity: item.capacity, description: item.description || "", maxDurationMinutes: item.maxDurationMinutes, needCheckin: item.needCheckin, approvalLevelOverride: item.approvalLevelOverride ?? null }; selectedResource.value = item; resourceDialog.value = true; }
+function editResource(item) { resourceForm.value = { typeId: item.typeId, name: item.name, location: item.location, capacity: item.capacity, description: item.description || "", imageUrl: item.imageUrl || "", maxDurationMinutes: item.maxDurationMinutes, needCheckin: item.needCheckin, approvalLevelOverride: item.approvalLevelOverride ?? null }; selectedResource.value = item; resourceDialog.value = true; }
 async function saveResource() {
   try {
     if (selectedResource.value) await axios.put(`/api/v1/admin/resources/${selectedResource.value.id}`, resourceForm.value);
@@ -238,6 +289,7 @@ onMounted(loadAll);
       <template v-if="activeTab === 'overview'">
         <div class="metric-strip" v-if="isSystemAdmin"><div><span>用户总数</span><strong>{{ users.length }}</strong><small>{{ activeUsers }} 个正常账号</small></div><div><span>角色数量</span><strong>{{ roles.length }}</strong><small>基于角色的权限控制</small></div><div><span>系统配置</span><strong>{{ configs.length }}</strong><small>当前参数项</small></div><div><span>统计快照</span><strong>{{ statistics.length }}</strong><small>最近聚合数据</small></div></div>
         <div class="metric-strip" v-else><div><span>资产总数</span><strong>{{ assets.length }}</strong><small>{{ highValueAssets }} 件贵重资产</small></div><div><span>待处理报修</span><strong>{{ openMaintenance }}</strong><small>尚未关闭的维修工单</small></div><div><span>维修中资产</span><strong>{{ repairingAssets }}</strong><small>当前不可正常使用</small></div><div><span>待审批预约</span><strong>{{ approvals.length || pendingBookings }}</strong><small>需要管理员关注</small></div></div>
+        <div class="overview-body">
         <section class="admin-section"><div class="section-title"><div><h2>{{ isSystemAdmin ? '账号状态概览' : '近期预约动态' }}</h2><p>{{ isSystemAdmin ? '快速识别禁用和锁定账号' : '查看授权资源的最新预约状态' }}</p></div></div>
           <div v-if="isSystemAdmin" class="compact-list"><div v-for="item in users.slice(0, 6)" :key="item.id"><span class="avatar">{{ item.realName?.slice(0, 1) }}</span><div><b>{{ item.realName }}</b><small>{{ item.username }} · {{ item.roles.map(roleName).join(' / ') }}</small></div><span class="status" :class="item.status.toLowerCase()">{{ statusText(item.status) }}</span></div></div>
           <div v-else class="data-table"><div class="data-row table-head"><span>预约编号</span><span>申请人</span><span>资源</span><span>开始时间</span><span>状态</span></div><div v-for="item in bookings.slice(0, 8)" :key="item.id" class="data-row"><span class="mono">{{ item.bookingNo }}</span><span>{{ item.applicantNameSnapshot }}</span><span>{{ item.resourceNameSnapshot }}</span><span>{{ formatTime(item.startTime) }}</span><span class="status" :class="item.status.toLowerCase()">{{ statusText(item.status) }}</span></div><div v-if="!bookings.length" class="admin-empty">暂无预约数据</div></div>
@@ -249,6 +301,7 @@ onMounted(loadAll);
           </section>
           <section class="admin-section report-card report-upcoming"><div class="report-card-head"><div><h2>近期预约</h2><small>按开始时间排列，便于安排实验室值守</small></div><button class="quiet" @click="activeTab = 'bookings'">查看全部 <ChevronRight :size="14" /></button></div><div class="data-table"><div class="data-row report-booking-row table-head"><span>预约编号</span><span>申请人</span><span>资源</span><span>开始时间</span><span>状态</span></div><div v-for="item in labReport.upcoming" :key="item.id" class="data-row report-booking-row"><span class="mono">{{ item.bookingNo }}</span><span>{{ item.applicantNameSnapshot || `用户 ${item.userId}` }}</span><span>{{ item.resourceNameSnapshot }}</span><span>{{ formatTime(item.startTime) }}</span><span class="status" :class="item.status.toLowerCase()">{{ statusText(item.status) }}</span></div><div v-if="!labReport.upcoming.length" class="admin-empty">暂无即将开始的预约</div></div></section>
         </template>
+        </div>
       </template>
 
       <template v-else-if="activeTab === 'users'">
@@ -267,6 +320,15 @@ onMounted(loadAll);
 
       <template v-else-if="activeTab === 'statistics'">
         <section class="admin-section data-table"><div class="data-row stats-grid table-head"><span>指标</span><span>资源 / 用户</span><span>统计周期</span><span>指标值</span><span>计算时间</span></div><div v-for="item in statistics" :key="item.id" class="data-row stats-grid"><span>{{ item.metricType }}</span><span>{{ item.resourceId ? `资源 ${item.resourceId}` : item.userId ? `用户 ${item.userId}` : '全局' }}</span><span>{{ formatTime(item.periodStart) }} 至 {{ formatTime(item.periodEnd) }}</span><strong>{{ item.metricValue ?? item.numerator }}</strong><span>{{ formatTime(item.calculatedUntil) }}</span></div><div v-if="!statistics.length" class="admin-empty">尚未生成统计快照</div></section>
+      </template>
+
+      <template v-else-if="activeTab === 'resource-types'">
+        <section class="admin-section resource-type-list">
+            <div class="section-title"><div><h2>资源类别</h2><p>{{ resourceTypes.length }} 个类别会出现在资源管理表单中</p></div><button class="command" type="button" @click="beginCreateResourceType"><Plus :size="16" />新建资源类别</button></div>
+            <div class="resource-type-row resource-type-head"><span>类别名称</span><span>默认审批</span><span>状态</span><span>创建时间</span><span>操作</span></div>
+            <div v-for="item in resourceTypes" :key="item.id" class="resource-type-row"><span><b>{{ item.name }}</b><small>ID {{ item.id }}</small></span><span>{{ item.defaultApprovalLevel === 0 ? '无需审批' : `L${item.defaultApprovalLevel} · ${item.defaultApprovalLevel === 2 ? '二级审批' : '一级审批'}` }}</span><span class="status" :class="item.enabled === false || item.deleted ? 'disabled' : 'active'">{{ item.enabled === false || item.deleted ? '已停用' : '启用中' }}</span><span>{{ formatTime(item.createdAt) }}</span><span class="resource-type-actions"><button class="quiet" type="button" @click.stop="editResourceType(item)">编辑</button><button class="quiet" type="button" :disabled="resourceTypeActionId === item.id" :class="{ danger: item.enabled !== false }" @click.stop="toggleResourceType(item)">{{ resourceTypeActionId === item.id ? '处理中...' : item.enabled === false ? '启用' : '停用' }}</button><button class="quiet danger" type="button" @click.stop="deleteResourceType(item)">删除</button></span></div>
+            <div v-if="!resourceTypes.length" class="admin-empty">暂无资源类别，请先创建一个类别</div>
+        </section>
       </template>
 
       <template v-else-if="activeTab === 'resources'">
@@ -299,7 +361,8 @@ onMounted(loadAll);
     </section>
 
     <div v-if="selectedUser" class="admin-modal-bg" @click.self="selectedUser = null"><section class="admin-modal"><div class="modal-title"><div><h2>{{ selectedUser.realName }}</h2><p>{{ selectedUser.username }} 的角色与访问凭据</p></div><button title="关闭" @click="selectedUser = null"><X :size="18" /></button></div><div class="modal-body"><fieldset><legend>分配角色</legend><label v-for="role in roles" :key="role.code"><input v-model="selectedRoles" type="checkbox" :value="role.code" /><span>{{ roleName(role.code) }}</span></label></fieldset><button class="command full-command" @click="saveUserRoles"><Save :size="16" />保存角色</button><div class="password-reset"><label>重置密码<input v-model="resetPassword" type="password" placeholder="输入至少 8 位新密码" /></label><button @click="saveResetPassword">确认重置</button></div></div></section></div>
-    <div v-if="resourceDialog" class="admin-modal-bg" @click.self="resourceDialog = false"><section class="admin-modal resource-form-modal"><div class="modal-title"><div><h2>{{ selectedResource ? '编辑资源' : '新增资源' }}</h2><p>维护资源基础资料与预约规则</p></div><button title="关闭" @click="resourceDialog = false"><X :size="18" /></button></div><div class="modal-body form-columns"><label>资源类型<select v-model.number="resourceForm.typeId"><option value="" disabled>请选择</option><option v-for="type in resourceTypes" :key="type.id" :value="type.id">{{ type.name }}</option></select></label><label>资源名称<input v-model="resourceForm.name" /></label><label>位置<input v-model="resourceForm.location" /></label><label>容量<input v-model.number="resourceForm.capacity" type="number" min="1" /></label><label>最大预约时长（分钟）<input v-model.number="resourceForm.maxDurationMinutes" type="number" min="1" /></label><label class="check-field"><input v-model="resourceForm.needCheckin" type="checkbox" />需要签到</label><label class="wide-field">描述<textarea v-model="resourceForm.description"></textarea></label><button class="command full-command wide-field" @click="saveResource"><Save :size="16" />保存资源</button></div></section></div>
+    <div v-if="resourceTypeDialog" class="admin-modal-bg" @click.self="resourceTypeDialog = false"><section class="admin-modal resource-type-modal"><div class="modal-title"><div><h2>{{ editingResourceType ? '编辑资源类别' : '新增资源类别' }}</h2><p>{{ editingResourceType ? '修改类别名称、默认审批级别和启用状态' : '填写类别名称并设置默认审批级别' }}</p></div><button title="关闭" @click="resourceTypeDialog = false"><X :size="18" /></button></div><form class="modal-body resource-type-modal-form" @submit.prevent="saveResourceType"><label>类别名称<input v-model="resourceTypeEditForm.name" maxlength="100" /></label><label>默认审批级别<select v-model.number="resourceTypeEditForm.defaultApprovalLevel"><option :value="0">无需审批</option><option :value="1">一级审批</option><option :value="2">二级审批</option></select></label><label>类别状态<select v-model="resourceTypeEditForm.enabled"><option :value="true">启用中</option><option :value="false">已停用</option></select></label><div class="modal-actions"><button class="quiet" type="button" @click="resourceTypeDialog = false">取消</button><button class="command" type="submit"><Save :size="16" />{{ editingResourceType ? '保存修改' : '创建类别' }}</button></div></form></section></div>
+    <div v-if="resourceDialog" class="admin-modal-bg" @click.self="resourceDialog = false"><section class="admin-modal resource-form-modal"><div class="modal-title"><div><h2>{{ selectedResource ? '编辑资源' : '新增资源' }}</h2><p>维护资源基础资料与预约规则</p></div><button title="关闭" @click="resourceDialog = false"><X :size="18" /></button></div><div class="modal-body form-columns"><label>资源类型<select v-model.number="resourceForm.typeId"><option value="" disabled>请选择</option><option v-for="type in resourceTypes" :key="type.id" :value="type.id">{{ type.name }}</option></select></label><label>资源名称<input v-model="resourceForm.name" /></label><label>位置<input v-model="resourceForm.location" /></label><label>容量<input v-model.number="resourceForm.capacity" type="number" min="1" /></label><label>最大预约时长（分钟）<input v-model.number="resourceForm.maxDurationMinutes" type="number" min="1" /></label><label class="check-field"><input v-model="resourceForm.needCheckin" type="checkbox" />需要签到</label><label class="wide-field">图片地址<input v-model.trim="resourceForm.imageUrl" maxlength="500" placeholder="请输入可公开访问的图片 URL" /></label><div v-if="resourceForm.imageUrl" class="resource-image-preview wide-field"><img :src="resourceForm.imageUrl" alt="资源图片预览" /></div><label class="wide-field">描述<textarea v-model="resourceForm.description"></textarea></label><button class="command full-command wide-field" @click="saveResource"><Save :size="16" />保存资源</button></div></section></div>
   </main>
 </template>
 
@@ -311,4 +374,11 @@ onMounted(loadAll);
 @media(max-width:950px){.admin-shell{grid-template-columns:72px minmax(0,1fr)}.admin-sidebar{padding:22px 8px}.workspace-mark div,.admin-sidebar nav span,.admin-sidebar nav svg:last-child,.scope-note{display:none}.workspace-mark{justify-content:center;padding:0 0 22px}.admin-sidebar nav button{display:grid;grid-template-columns:1fr;place-items:center;padding:0}.metric-strip{grid-template-columns:1fr 1fr}.resource-admin-layout{grid-template-columns:1fr}.resource-catalog{display:grid;grid-template-columns:1fr 1fr}.closure-form{grid-template-columns:1fr 1fr}.closure-form input:nth-child(3){grid-column:1/-1}.manager-form{grid-template-columns:1fr 1fr}.manager-form button{grid-column:1/-1}.report-grid{grid-template-columns:1fr}}
 @media(max-width:650px){.admin-shell{display:block}.admin-sidebar{min-height:auto;padding:10px;position:sticky;top:76px;z-index:5}.workspace-mark,.scope-note{display:none}.admin-sidebar nav{display:flex;overflow:auto;margin:0}.admin-sidebar nav button{min-width:48px}.admin-content{padding:22px 14px}.metric-strip{grid-template-columns:1fr}.metric-strip>div{border-right:0;border-bottom:1px solid #e6ece9}.resource-catalog{grid-template-columns:1fr}.schedule-row{grid-template-columns:65px 1fr 16px 1fr 28px}.schedule-row input:nth-of-type(3){display:none}.closure-form{grid-template-columns:1fr}.manager-form{grid-template-columns:1fr}.manager-form button{grid-column:auto}.form-columns{grid-template-columns:1fr}.wide-field{grid-column:auto}}
 .admin-notice{position:fixed;z-index:100;top:88px;right:24px;width:min(390px,calc(100vw - 32px));min-height:54px;padding:0 14px;gap:10px;border-left-width:4px;box-shadow:0 14px 38px rgba(28,55,44,.2)}.admin-notice>span{min-width:0}.admin-notice b,.admin-notice small{display:block}.admin-notice b{margin-bottom:3px;color:#263b32;font-size:11px}.admin-notice small{font-size:11px;line-height:1.4}@media(max-width:650px){.admin-notice{top:88px;right:12px;width:calc(100vw - 24px)}}
+.resource-type-layout{display:grid;grid-template-columns:minmax(260px, .75fr) minmax(0, 1.5fr);gap:14px;align-items:start}.resource-type-form{overflow:hidden}.resource-type-form>.section-title>svg{color:#4b7c68}.resource-type-form form{display:grid;gap:14px;padding:18px 20px 20px}.resource-type-form label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#65766e}.resource-type-form input,.resource-type-form select{height:38px;border:1px solid #d8e2dd;border-radius:4px;padding:0 9px;background:#fff;color:#243b31}.resource-type-form-actions{display:flex;gap:8px}.resource-type-form-actions .command{flex:1}.resource-type-list{min-width:0}.resource-type-row{display:grid;grid-template-columns:minmax(120px,1.2fr) minmax(95px,.9fr) minmax(75px,.7fr) minmax(110px,1fr) minmax(190px,1.8fr);gap:12px;align-items:center;min-height:58px;padding:0 20px;border-bottom:1px solid #edf1ef;font-size:12px}.resource-type-row.resource-type-head{min-height:38px;background:#fafbfa;color:#839089;font-size:10px}.resource-type-row b,.resource-type-row small{display:block}.resource-type-row small{font-size:10px;color:#82918a;margin-top:3px}.resource-type-actions{display:flex;gap:5px;flex-wrap:wrap}.resource-type-actions .quiet{padding:5px 8px;font-size:10px}.resource-type-actions .danger{color:#a45149;border-color:#ead1cc}.resource-type-row:last-of-type{border-bottom:0}
+@media(max-width:950px){.resource-type-layout{grid-template-columns:1fr}.resource-type-row{grid-template-columns:minmax(130px,1.5fr) 1fr .8fr 1.1fr minmax(180px,1.5fr)}}
+@media(max-width:650px){.resource-type-row{grid-template-columns:minmax(110px,1fr) 1fr .8fr;gap:10px;padding:0 14px}.resource-type-row>span:nth-child(4),.resource-type-head>span:nth-child(4){display:none}.resource-type-row>span:nth-child(5){grid-column:1/-1;padding:0 0 10px}.resource-type-head>span:nth-child(5){display:none}.resource-type-actions{padding-top:0}}
+.overview-body{display:flex;flex-direction:column;gap:0}.overview-body>.admin-section{order:2}.overview-body>.report-grid{order:1}.overview-body>.report-upcoming{order:3}.resource-type-modal{width:min(480px,100%)}.resource-type-modal-form{display:grid;gap:14px}.resource-type-modal-form label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#65766e}.resource-type-modal-form input,.resource-type-modal-form select{height:38px;border:1px solid #d8e2dd;border-radius:4px;padding:0 9px;background:#fff;color:#243b31}.modal-actions{display:flex;justify-content:flex-end;gap:8px;padding-top:4px}.modal-actions .command{min-width:110px}
+.resource-type-create{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:22px 20px;color:#82918a;font-size:11px}.resource-type-create .command{flex:0 0 auto}
+.resource-image-preview{height:150px;border:1px solid #d8e2dd;background:#edf2ef;overflow:hidden}.resource-image-preview img{width:100%;height:100%;display:block;object-fit:cover}
+@media(max-width:650px){.resource-type-create{align-items:stretch;flex-direction:column}}
 </style>

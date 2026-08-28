@@ -20,10 +20,24 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
         this.resources=resources; this.types=types; this.schedules=schedules; this.closures=closures; this.managers=managers; this.roleGuard=roleGuard; this.internalServices=internalServices;
     }
     public List<Resource> list() { return resources.findAll().stream().filter(item -> !item.deleted && "ACTIVE".equals(item.status)).toList(); }
+    public List<?> listPublicTypes() { return types.findAll().stream().filter(item -> !item.deleted && item.enabled).toList(); }
     public List<?> listTypes(HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); return types.findAll().stream().filter(item -> !item.deleted).toList(); }
     public List<?> listSchedules(Long id, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); resource(id); return schedules.findByResourceIdOrderByWeekdayAscOpenTimeAsc(id); }
     public Resource get(Long id) { return resource(id); }
     public Object createType(ResourceController.TypeRequest request, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); ResourceType type=new ResourceType(); type.name=request.name(); type.defaultApprovalLevel=request.defaultApprovalLevel(); return types.save(type); }
+    public Object updateType(Long id, ResourceController.TypeUpdateRequest request, HttpServletRequest servletRequest) {
+        roleGuard.requireAdmin(servletRequest);
+        ResourceType type=types.findById(id).filter(item -> !item.deleted).orElseThrow(() -> new BusinessException("NOT_FOUND", "Resource type does not exist", HttpStatus.NOT_FOUND));
+        types.findAll().stream().filter(item -> !Objects.equals(item.id, id) && !item.deleted && item.name.equalsIgnoreCase(request.name())).findFirst().ifPresent(item -> { throw new BusinessException("TYPE_EXISTS", "Resource type already exists", HttpStatus.CONFLICT); });
+        type.name=request.name(); type.defaultApprovalLevel=request.defaultApprovalLevel(); type.enabled=request.enabled();
+        return types.save(type);
+    }
+    public void deleteType(Long id, HttpServletRequest servletRequest) {
+        roleGuard.requireAdmin(servletRequest);
+        ResourceType type=types.findById(id).filter(item -> !item.deleted).orElseThrow(() -> new BusinessException("NOT_FOUND", "Resource type does not exist", HttpStatus.NOT_FOUND));
+        if (resources.countByTypeIdAndDeletedFalse(id) > 0) throw new BusinessException("TYPE_IN_USE", "Resource type is used by resources and cannot be deleted", HttpStatus.CONFLICT);
+        type.deleted=true; type.enabled=false; types.save(type);
+    }
     public Resource create(ResourceController.ResourceRequest request, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); requireType(request.typeId()); Resource resource=new Resource(); apply(resource,request); return resources.save(resource); }
     public Resource update(Long id, ResourceController.ResourceRequest request, HttpServletRequest servletRequest) { roleGuard.requireAdmin(servletRequest); requireType(request.typeId()); Resource resource=resource(id); apply(resource,request); return resources.save(resource); }
     @Transactional
@@ -85,7 +99,7 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
     }
     private Resource resource(Long id) { return resources.findById(id).filter(item -> !item.deleted).orElseThrow(()->new BusinessException("NOT_FOUND","Resource does not exist",HttpStatus.NOT_FOUND)); }
     private void requireType(Long id) { if(types.findById(id).filter(item -> !item.deleted && item.enabled).isEmpty()) throw new BusinessException("TYPE_NOT_FOUND","Resource type does not exist",HttpStatus.NOT_FOUND); }
-    private void apply(Resource resource, ResourceController.ResourceRequest request) { resource.typeId=request.typeId(); resource.name=request.name(); resource.location=request.location(); resource.capacity=request.capacity(); resource.description=request.description(); resource.maxDurationMinutes=request.maxDurationMinutes(); resource.needCheckin=request.needCheckin(); resource.approvalLevelOverride=request.approvalLevelOverride(); }
+    private void apply(Resource resource, ResourceController.ResourceRequest request) { resource.typeId=request.typeId(); resource.name=request.name(); resource.location=request.location(); resource.capacity=request.capacity(); resource.description=request.description(); resource.imageUrl=request.imageUrl()==null||request.imageUrl().isBlank()?null:request.imageUrl().trim(); resource.maxDurationMinutes=request.maxDurationMinutes(); resource.needCheckin=request.needCheckin(); resource.approvalLevelOverride=request.approvalLevelOverride(); }
     private boolean effective(ResourceSchedule schedule,LocalDate date) { return (schedule.effectiveFrom==null||!date.isBefore(schedule.effectiveFrom))&&(schedule.effectiveTo==null||!date.isAfter(schedule.effectiveTo)); }
     private boolean contains(ResourceSchedule schedule,LocalTime start,LocalTime end) { return !start.isBefore(schedule.openTime)&&!end.isAfter(schedule.closeTime); }
 }
