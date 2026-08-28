@@ -770,7 +770,6 @@ onMounted(() => {
           <div v-if="!bookings.length" class="empty">还没有预约记录</div>
         </div>
       </section>
-      <div class="notice student-notice" v-if="notice">{{ notice }}</div>
       <UserMaintenance :key="`student-maintenance-${user?.id}`" :resources="resources" :bookings="bookings" />
     </main>
     <div v-if="bookingModalOpen" class="booking-modal-backdrop" @click.self="closeBookingModal">
