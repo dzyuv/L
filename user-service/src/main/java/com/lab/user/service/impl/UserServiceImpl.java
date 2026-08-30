@@ -1,12 +1,14 @@
 package com.lab.user.service.impl;
 
 import com.lab.common.api.JwtKeyProvider;
+import com.lab.common.api.Roles;
 import com.lab.common.exception.BusinessException;
 import com.lab.user.*;
 import com.lab.user.controller.AuthController;
 import com.lab.user.service.UserService;
 import io.jsonwebtoken.Jwts;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,13 +29,20 @@ public class UserServiceImpl implements UserService {
     private final JwtKeyProvider jwtKeys;
     private final RefreshTokenRepository refreshTokens;
     private final SecureRandom random = new SecureRandom();
-    private static final long ACCESS_TOKEN_MILLIS = 2 * 60 * 60 * 1000L;
-    private static final long REFRESH_TOKEN_SECONDS = 30L * 24 * 60 * 60;
+    private final long accessTokenMillis;
+    private final long refreshTokenSeconds;
+    private final int maxLoginFailures;
 
     public UserServiceImpl(UserRepository users, RoleRepository roles, PasswordEncoder encoder,
-                           JwtKeyProvider jwtKeys, RefreshTokenRepository refreshTokens) {
+                           JwtKeyProvider jwtKeys, RefreshTokenRepository refreshTokens,
+                           @Value("${security.jwt.access-token-hours:2}") int accessTokenHours,
+                           @Value("${security.jwt.refresh-token-days:30}") int refreshTokenDays,
+                           @Value("${security.login.max-failures:5}") int maxLoginFailures) {
         this.users = users; this.roles = roles; this.encoder = encoder;
         this.jwtKeys = jwtKeys; this.refreshTokens = refreshTokens;
+        this.accessTokenMillis = accessTokenHours * 60L * 60L * 1000L;
+        this.refreshTokenSeconds = refreshTokenDays * 24L * 60L * 60L;
+        this.maxLoginFailures = maxLoginFailures;
     }
 
     @Override
@@ -49,7 +58,7 @@ public class UserServiceImpl implements UserService {
         user.passwordHash = encoder.encode(request.password());
         user.email = request.email();
         user.phone = request.phone();
-        user.roles.add(roles.findByCode("STUDENT").orElseThrow(() -> new IllegalStateException("STUDENT role is not initialized")));
+        user.roles.add(roles.findByCode(Roles.STUDENT).orElseThrow(() -> new IllegalStateException("STUDENT role is not initialized")));
         users.save(user);
         return profile(user);
     }
@@ -63,7 +72,7 @@ public class UserServiceImpl implements UserService {
         }
         if (!encoder.matches(request.password(), user.passwordHash)) {
             user.failedLoginCount++;
-            if (user.failedLoginCount >= 5) user.status = "LOCKED";
+            if (user.failedLoginCount >= maxLoginFailures) user.status = "LOCKED";
             users.save(user);
             throw new BusinessException("LOGIN_FAILED", "invalid username or password", HttpStatus.UNAUTHORIZED);
         }
@@ -138,16 +147,16 @@ public class UserServiceImpl implements UserService {
                 .claim("tokenType", "access")
                 .claim("username", user.username).claim("realName", user.realName)
                 .claim("roles", roleCodes(user)).issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + ACCESS_TOKEN_MILLIS))
+                .expiration(new Date(System.currentTimeMillis() + accessTokenMillis))
                 .signWith(jwtKeys.key()).compact();
         String refreshToken = randomToken();
         RefreshToken stored = new RefreshToken();
         stored.tokenHash = hash(refreshToken);
         stored.userId = user.id;
         stored.tokenVersion = user.tokenVersion;
-        stored.expiresAt = Instant.now().plusSeconds(REFRESH_TOKEN_SECONDS);
+        stored.expiresAt = Instant.now().plusSeconds(refreshTokenSeconds);
         refreshTokens.save(stored);
-        return Map.of("accessToken", accessToken, "refreshToken", refreshToken, "expiresIn", ACCESS_TOKEN_MILLIS / 1000,
+        return Map.of("accessToken", accessToken, "refreshToken", refreshToken, "expiresIn", accessTokenMillis / 1000,
                 "user", profile(user));
     }
 

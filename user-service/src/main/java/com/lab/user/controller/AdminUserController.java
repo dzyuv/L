@@ -26,6 +26,8 @@ public class AdminUserController {
     public ApiResponse<?> users(@RequestParam(value = "query", required = false) String query,
                                 @RequestParam(value = "status", required = false) String status,
                                 HttpServletRequest request) { return ok(service.list(query, status, request), request); }
+    @GetMapping("/users/teachers")
+    public ApiResponse<?> teachers(HttpServletRequest request) { return ok(service.teachers(request), request); }
     @GetMapping("/roles") public ApiResponse<?> roles(HttpServletRequest request) { return ok(service.roles(request), request); }
     @PutMapping("/users/{id}/status") public ApiResponse<?> status(@PathVariable("id") Long id, @Valid @RequestBody StatusRequest body, HttpServletRequest request) { return ok(service.updateStatus(id, body.status(), request), request); }
     @PutMapping("/users/{id}/roles") public ApiResponse<?> roles(@PathVariable("id") Long id, @Valid @RequestBody RolesRequest body, HttpServletRequest request) { return ok(service.updateRoles(id, body.roles(), request), request); }

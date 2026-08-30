@@ -20,7 +20,7 @@ public class InternalApprovalController {
     public record CreateTask(@NotNull Long bookingId, @NotNull Long applicantUserId, String applicantName,
                              @NotNull Long resourceId, String resourceName,
                              @NotNull java.time.LocalDateTime startTime, @NotNull java.time.LocalDateTime endTime,
-                             @Min(1) int level, @NotNull Long assignedUserId) {}
+                             @Min(1) int level, Long assignedUserId, String approverRole) {}
 
     @PostMapping("/tasks")
     public ApiResponse<ApprovalTask> create(@Valid @RequestBody CreateTask request, HttpServletRequest servletRequest) {

@@ -4,8 +4,10 @@ import com.lab.approval.*;
 import com.lab.approval.controller.InternalApprovalController;
 import com.lab.approval.service.ApprovalInternalService;
 import com.lab.common.api.InternalServiceGuard;
+import com.lab.common.api.Roles;
 import com.lab.common.exception.BusinessException;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,10 +17,13 @@ import java.time.LocalDateTime;
 public class ApprovalInternalServiceImpl implements ApprovalInternalService {
     private final ApprovalTaskRepository tasks;
     private final InternalServiceGuard internalServices;
+    private final int timeoutHours;
 
-    public ApprovalInternalServiceImpl(ApprovalTaskRepository tasks, InternalServiceGuard internalServices) {
+    public ApprovalInternalServiceImpl(ApprovalTaskRepository tasks, InternalServiceGuard internalServices,
+                                       @Value("${approval.timeout-hours:24}") int timeoutHours) {
         this.tasks = tasks;
         this.internalServices = internalServices;
+        this.timeoutHours = timeoutHours;
     }
 
     @Override
@@ -38,9 +43,10 @@ public class ApprovalInternalServiceImpl implements ApprovalInternalService {
         task.startTime = request.startTime();
         task.endTime = request.endTime();
         task.level = request.level();
-        task.approverRole = "RESOURCE_MANAGER";
         task.assignedUserId = request.assignedUserId();
-        LocalDateTime defaultDeadline = LocalDateTime.now().plusHours(24);
+        String role = request.approverRole() == null ? "" : request.approverRole().trim();
+        task.approverRole = role.isBlank() ? (request.assignedUserId() == null ? Roles.LAB_ADMIN : Roles.TEACHER) : role;
+        LocalDateTime defaultDeadline = LocalDateTime.now().plusHours(timeoutHours);
         task.deadline = request.startTime() != null && request.startTime().isBefore(defaultDeadline)
                 ? request.startTime() : defaultDeadline;
         return tasks.save(task);

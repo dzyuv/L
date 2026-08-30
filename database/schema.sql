@@ -241,6 +241,7 @@ CREATE TABLE IF NOT EXISTS booking (
   completed_at DATETIME(3) NULL,
   canceled_at DATETIME(3) NULL,
   cancel_reason VARCHAR(500) NULL,
+  reject_reason VARCHAR(500) NULL,
   forced BOOLEAN NOT NULL DEFAULT FALSE,
   force_reason VARCHAR(500) NULL,
   forced_by BIGINT NULL,

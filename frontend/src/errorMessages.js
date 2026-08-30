@@ -30,6 +30,8 @@ const ERROR_MESSAGES = {
   INVALID_SCHEDULE: "开放时间设置不正确",
   INVALID_CLOSURE: "维护关闭时间设置不正确",
   ESCALATION_APPROVER_NOT_CONFIGURED: "未配置可处理该申请的上级审批人",
+  RESOURCE_OWNER_REQUIRED: "请先为该资源配置资源负责人",
+  MANAGER_EXISTS: "该用户已经是此资源的负责人",
   IDEMPOTENCY_REQUIRED: "请勿重复提交，请刷新后重试",
   BOOKING_CONFLICT: "所选时段已被占用，请重新选择",
   USER_TIME_CONFLICT: "你在该时段已有其他预约",

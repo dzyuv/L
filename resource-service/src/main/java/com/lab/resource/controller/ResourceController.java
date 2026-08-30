@@ -21,9 +21,8 @@ public class ResourceController {
                                   String description, @Size(max = 500) String imageUrl, @Min(1) int maxDurationMinutes,
                                   boolean needCheckin, @Min(0) Integer approvalLevelOverride) {}
     public record ScheduleRequest(@Min(1) @Max(7) int weekday, @NotNull LocalTime openTime, @NotNull LocalTime closeTime, @Min(5) int slotMinutes, @Min(1) int maxDurationMinutes) {}
-    public record ManagerRequest(@NotNull Long userId, @NotBlank @Size(max = 30) String managerType,
-                                 @Size(max = 30) String scopeType, @Size(max = 100) String scopeValue) {}
-    public record BookingRule(String resourceName, int capacity, int slotMinutes, int maxDurationMinutes, boolean needCheckin, int approvalLevel, Long approverUserId) {}
+    public record ManagerRequest(@NotNull Long userId) {}
+    public record BookingRule(String resourceName, int capacity, int slotMinutes, int maxDurationMinutes, boolean needCheckin, int approvalLevel, Long approverUserId, String approverRole) {}
     @GetMapping("/resources") public ApiResponse<?> list(HttpServletRequest request) { return ok(service.list(), request); }
     @GetMapping("/resource-types") public ApiResponse<?> listPublicTypes(HttpServletRequest request) { return ok(service.listPublicTypes(), request); }
     @GetMapping("/admin/resource-types") public ApiResponse<?> listTypes(HttpServletRequest request) { return ok(service.listTypes(request), request); }

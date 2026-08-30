@@ -12,11 +12,11 @@ import java.util.Set;
 @Component
 public class RoleGuard {
     public void requireSystemAdmin(HttpServletRequest request){
-        requireAny(request, "SYSTEM_ADMIN");
+        requireAny(request, Roles.SYSTEM_ADMIN);
     }
 
     public void requireLabAdmin(HttpServletRequest request){
-        requireAny(request, "LAB_ADMIN");
+        requireAny(request, Roles.LAB_ADMIN);
     }
 
     public void requireAny(HttpServletRequest request,String... acceptedRoles){

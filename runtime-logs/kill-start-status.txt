@@ -1,0 +1,22 @@
+begin
+port 8081 pids=29064
+killed 29064
+port 8082 pids=31360
+killed 31360
+port 8083 pids=35108
+killed 35108
+port 8084 pids=14464
+killed 14464
+after-kill port 8081 pids=
+after-kill port 8082 pids=
+after-kill port 8083 pids=
+after-kill port 8084 pids=
+started user-service
+started resource-service
+started booking-service
+started approval-service
+final port 8081 pids=16828
+final port 8082 pids=37436
+final port 8083 pids=28192
+final port 8084 pids=30240
+finished

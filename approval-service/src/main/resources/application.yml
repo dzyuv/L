@@ -32,3 +32,5 @@ mybatis-plus:
 security:
   jwt-secret: ${JWT_SECRET}
   internal-token: ${INTERNAL_SERVICE_TOKEN}
+approval:
+  timeout-hours: ${APPROVAL_TIMEOUT_HOURS:24}

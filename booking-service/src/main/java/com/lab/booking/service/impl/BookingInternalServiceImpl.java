@@ -35,7 +35,15 @@ public class BookingInternalServiceImpl implements BookingInternalService {
             throw new BusinessException("INVALID_STATUS", "Booking is not pending approval", HttpStatus.UNPROCESSABLE_ENTITY);
         }
         Long operatorId = servletRequest.getAttribute("userId") instanceof Long value ? value : null;
-        lifecycle.transition(booking, decision.status(), operatorId, "Approval decision", Objects.toString(servletRequest.getAttribute("X-Request-Id"), ""));
+        String comment = decision.comment() == null ? "" : decision.comment().trim();
+        if ("REJECTED".equals(decision.status())) {
+            if (comment.isBlank()) {
+                throw new BusinessException("REJECTION_REASON_REQUIRED", "驳回时必须填写原因", HttpStatus.BAD_REQUEST);
+            }
+            booking.rejectReason = comment;
+        }
+        String historyReason = comment.isBlank() ? "Approval decision" : comment;
+        lifecycle.transition(booking, decision.status(), operatorId, historyReason, Objects.toString(servletRequest.getAttribute("X-Request-Id"), ""));
         if ("REJECTED".equals(decision.status())) lifecycle.releaseSlots(booking.id, "REJECTED");
         return bookings.save(booking);
     }

@@ -66,6 +66,11 @@ CALL lab_system.add_column_if_missing('lab_resource', 'resource_closure', 'updat
 CALL lab_system.add_column_if_missing('lab_resource', 'resource_closure', 'version', 'INT NOT NULL DEFAULT 0');
 CALL lab_system.add_column_if_missing('lab_resource', 'resource_manager', 'scope_type', "VARCHAR(30) NOT NULL DEFAULT 'RESOURCE'");
 CALL lab_system.add_column_if_missing('lab_resource', 'resource_manager', 'scope_value', "VARCHAR(100) NOT NULL DEFAULT ''");
+DELETE t1 FROM lab_resource.resource_manager t1
+INNER JOIN lab_resource.resource_manager t2
+  ON t1.resource_id = t2.resource_id AND t1.user_id = t2.user_id
+ AND t1.manager_type = 'APPROVER' AND t2.manager_type = 'OWNER';
+UPDATE lab_resource.resource_manager SET manager_type = 'OWNER' WHERE manager_type <> 'OWNER';
 CALL lab_system.add_column_if_missing('lab_resource', 'maintenance_ticket', 'resource_id', 'BIGINT NULL');
 CALL lab_system.add_column_if_missing('lab_resource', 'maintenance_ticket', 'location_snapshot', 'VARCHAR(200) NULL');
 CALL lab_system.add_column_if_missing('lab_resource', 'maintenance_ticket', 'asset_clue', 'VARCHAR(500) NULL');
@@ -104,6 +109,20 @@ CALL lab_system.add_column_if_missing('lab_booking', 'booking', 'approval_flow_v
 CALL lab_system.add_column_if_missing('lab_booking', 'booking', 'approval_deadline', 'DATETIME(3) NULL');
 CALL lab_system.add_column_if_missing('lab_booking', 'booking', 'forced', 'BOOLEAN NOT NULL DEFAULT FALSE');
 CALL lab_system.add_column_if_missing('lab_booking', 'booking', 'force_reason', 'VARCHAR(500) NULL');
+CALL lab_system.add_column_if_missing('lab_booking', 'booking', 'reject_reason', 'VARCHAR(500) NULL');
+UPDATE lab_booking.booking b
+INNER JOIN (
+  SELECT r.booking_id, r.comment
+  FROM lab_approval.approval_record r
+  INNER JOIN (
+    SELECT booking_id, MAX(id) AS latest_id
+    FROM lab_approval.approval_record
+    WHERE result = 'REJECTED' AND comment IS NOT NULL AND comment <> ''
+    GROUP BY booking_id
+  ) latest ON latest.latest_id = r.id
+) src ON src.booking_id = b.id
+SET b.reject_reason = src.comment
+WHERE b.status = 'REJECTED' AND (b.reject_reason IS NULL OR b.reject_reason = '');
 CALL lab_system.add_column_if_missing('lab_booking', 'booking', 'forced_by', 'BIGINT NULL');
 CALL lab_system.add_column_if_missing('lab_booking', 'booking', 'deleted', 'BOOLEAN NOT NULL DEFAULT FALSE');
 SET @legacy_booking_idempotency_index = (

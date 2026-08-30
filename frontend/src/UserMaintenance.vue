@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import axios from "axios";
-import { AlertTriangle, Plus, RefreshCw, Wrench, X } from "lucide-vue-next";
+import { AlertTriangle, Eye, Plus, RefreshCw, Wrench, X } from "lucide-vue-next";
 
 const props = defineProps({
   internal: { type: Boolean, default: false },
@@ -12,6 +12,7 @@ const assets = ref([]);
 const tickets = ref([]);
 const loading = ref(false);
 const dialogOpen = ref(false);
+const selectedTicket = ref(null);
 const notice = ref("");
 const failed = ref(false);
 const form = ref(emptyForm());
@@ -41,6 +42,19 @@ function reportTypeText(value) {
 }
 function severityText(value) {
   return ({ LOW: "低", MEDIUM: "中", HIGH: "高", CRITICAL: "紧急" })[value] || value;
+}
+function statusHint(value) {
+  return ({
+    REPORTED: "上报已提交，等待实验室管理员核实和受理。",
+    TRIAGED: "管理员已受理，正在确认设备和安排维修。",
+    REPAIRING: "设备已进入维修流程，暂不应继续使用。",
+    WAITING_ACCEPTANCE: "维修已完成，正在等待管理员验收。",
+    CLOSED: "工单已验收关闭，请查看下方处理结果。",
+    REJECTED: "管理员未受理或已终止该工单，请查看处理说明。",
+  })[value] || "请关注工单最新处理状态。";
+}
+function progressIndex(value) {
+  return ({ REPORTED: 0, TRIAGED: 1, REPAIRING: 2, WAITING_ACCEPTANCE: 3, CLOSED: 4 })[value] ?? -1;
 }
 function formatTime(value) {
   return value ? String(value).replace("T", " ").slice(0, 16) : "-";
@@ -109,17 +123,40 @@ onMounted(loadMaintenance);
     </div>
     <div v-if="notice" class="maintenance-notice" :class="{ failed }"><AlertTriangle v-if="failed" :size="15" /><Wrench v-else :size="15" />{{ notice }}<button title="关闭提示" @click="notice = ''"><X :size="14" /></button></div>
     <div class="maintenance-table">
-      <div class="maintenance-row maintenance-table-head"><span>工单编号</span><span>问题位置 / 设备</span><span>问题</span><span>上报时间</span><span>状态</span></div>
+      <div class="maintenance-row maintenance-table-head"><span>工单编号</span><span>问题位置 / 设备</span><span>问题</span><span>上报时间</span><span>状态</span><span>详情</span></div>
       <div v-for="ticket in tickets" :key="ticket.id" class="maintenance-row">
         <span class="mono">{{ ticket.ticketNo }}</span>
         <span><b>{{ assetMap[ticket.assetId]?.name || resourceMap[ticket.resourceId]?.name || ticket.locationSnapshot || '待管理员定位' }}</b><small>{{ assetMap[ticket.assetId]?.assetNo || ticket.assetClue || ticket.locationSnapshot || '未指定具体设备' }}</small></span>
         <span><b>{{ reportTypeText(ticket.reportType) }} · {{ severityText(ticket.severity) }}</b><small :title="ticket.description">{{ ticket.description }}</small></span>
         <span>{{ formatTime(ticket.reportedAt) }}</span>
         <span class="ticket-status" :class="ticket.status.toLowerCase()">{{ statusText(ticket.status) }}</span>
+        <button class="maintenance-view" type="button" title="查看工单详情" aria-label="查看工单详情" @click="selectedTicket = ticket"><Eye :size="16" /></button>
       </div>
       <div v-if="!tickets.length" class="maintenance-empty">暂无报修记录</div>
     </div>
   </section>
+
+  <div v-if="selectedTicket" class="maintenance-modal-bg" @click.self="selectedTicket = null">
+    <section class="maintenance-modal ticket-result-modal" role="dialog" aria-modal="true" aria-labelledby="maintenance-result-title">
+      <div class="maintenance-modal-title"><div><h2 id="maintenance-result-title">报修进度</h2><p>{{ selectedTicket.ticketNo }}</p></div><button class="modal-close" title="关闭" aria-label="关闭报修详情窗口" @click="selectedTicket = null"><X :size="22" /></button></div>
+      <div class="ticket-result-body">
+        <div class="ticket-result-status"><span class="ticket-status" :class="selectedTicket.status.toLowerCase()">{{ statusText(selectedTicket.status) }}</span><b>{{ statusHint(selectedTicket.status) }}</b></div>
+        <div v-if="selectedTicket.status !== 'REJECTED'" class="ticket-progress" aria-label="报修处理进度">
+          <div v-for="(step, index) in ['已上报', '已受理', '维修中', '待验收', '已关闭']" :key="step" :class="{ done: index <= progressIndex(selectedTicket.status), current: index === progressIndex(selectedTicket.status) }"><i></i><span>{{ step }}</span></div>
+        </div>
+        <dl class="ticket-result-details">
+          <div><dt>问题位置 / 设备</dt><dd>{{ assetMap[selectedTicket.assetId]?.name || resourceMap[selectedTicket.resourceId]?.name || selectedTicket.locationSnapshot || '待管理员定位' }}</dd></div>
+          <div><dt>问题类型</dt><dd>{{ reportTypeText(selectedTicket.reportType) }} · {{ severityText(selectedTicket.severity) }}</dd></div>
+          <div><dt>上报时间</dt><dd>{{ formatTime(selectedTicket.reportedAt) }}</dd></div>
+          <div><dt>最近处理</dt><dd>{{ formatTime(selectedTicket.processedAt) }}</dd></div>
+          <div class="wide"><dt>问题描述</dt><dd>{{ selectedTicket.description }}</dd></div>
+          <div class="wide"><dt>处理说明</dt><dd>{{ selectedTicket.resolution || '管理员尚未填写处理说明' }}</dd></div>
+          <div v-if="selectedTicket.estimatedCost != null || selectedTicket.actualCost != null"><dt>维修费用</dt><dd>预计 {{ selectedTicket.estimatedCost ?? '-' }} 元 · 实际 {{ selectedTicket.actualCost ?? '-' }} 元</dd></div>
+          <div v-if="selectedTicket.closedAt"><dt>关闭时间</dt><dd>{{ formatTime(selectedTicket.closedAt) }}</dd></div>
+        </dl>
+      </div>
+    </section>
+  </div>
 
   <div v-if="dialogOpen" class="maintenance-modal-bg" @click.self="dialogOpen = false">
     <section class="maintenance-modal" role="dialog" aria-modal="true">
@@ -139,7 +176,7 @@ onMounted(loadMaintenance);
 </template>
 
 <style scoped>
-.maintenance-panel{margin-top:14px;overflow:hidden}.maintenance-head{gap:16px}.maintenance-actions{display:flex;gap:8px}.maintenance-icon,.maintenance-command{height:36px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;gap:6px}.maintenance-icon{width:36px;border:1px solid #d8e3dd;background:#fff;color:#537267}.maintenance-command,.maintenance-submit{border:0;background:#225c4d;color:#fff;padding:0 13px}.maintenance-command:disabled,.maintenance-icon:disabled{opacity:.5;cursor:not-allowed}.maintenance-notice{min-height:38px;padding:0 18px;background:#eaf5ee;color:#347458;display:flex;align-items:center;gap:7px;font-size:12px;border-bottom:1px solid #dcebe2}.maintenance-notice.failed{background:#faece9;color:#a24d42}.maintenance-notice button{margin-left:auto;border:0;background:transparent;color:inherit}.maintenance-table{overflow:auto}.maintenance-row{min-width:760px;display:grid;grid-template-columns:1.35fr 1.2fr 1.8fr 1fr .7fr;gap:14px;align-items:center;min-height:58px;padding:0 22px;border-bottom:1px solid #edf1ee;font-size:12px}.maintenance-table-head{min-height:38px;background:#fafbfa;color:#84928b;font-size:10px}.maintenance-row b,.maintenance-row small{display:block}.maintenance-row small{margin-top:4px;color:#829089;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:230px}.ticket-status{width:max-content;padding:5px 8px;border-radius:3px;background:#fff0d8;color:#8f6a2f;font-size:10px}.ticket-status.repairing{background:#e5eef6;color:#426d8b}.ticket-status.waiting_acceptance{background:#eee9f7;color:#68568d}.ticket-status.closed{background:#e4f3e9;color:#347658}.ticket-status.rejected{background:#f3e9e7;color:#9a5a51}.maintenance-empty{padding:30px;text-align:center;color:#94a098;font-size:12px}.maintenance-modal-bg{position:fixed;z-index:60;inset:0;background:rgba(18,31,26,.48);display:grid;place-items:center;padding:20px}.maintenance-modal{width:min(620px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:7px}.maintenance-modal-title{padding:19px 21px;border-bottom:1px solid #e6ece9;display:flex;justify-content:space-between}.maintenance-modal-title h2{font-size:17px;margin:0 0 4px}.maintenance-modal-title p{font-size:11px;color:#82918a;margin:0}.maintenance-modal-title button{border:0;background:transparent}.maintenance-form{padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:13px}.maintenance-form label{display:flex;flex-direction:column;gap:6px;color:#607169;font-size:11px}.maintenance-form select,.maintenance-form textarea{border:1px solid #d8e2dd;border-radius:4px;padding:0 9px;background:#fff;color:#243b31}.maintenance-form select{height:38px}.maintenance-form textarea{height:100px;padding:9px;resize:vertical}.wide{grid-column:1/-1}.selected-asset{display:grid;grid-template-columns:28px 1fr auto;align-items:center;padding:12px;background:#f2f7f4;color:#3c6958}.selected-asset b,.selected-asset small{display:block}.selected-asset small{margin-top:3px;color:#799087;font-size:10px}.selected-asset em{font-style:normal;font-family:monospace;font-size:11px}.maintenance-submit{height:39px;border-radius:5px;display:flex;align-items:center;justify-content:center;gap:7px}.maintenance-submit:disabled{opacity:.55}.mono{font-family:ui-monospace,monospace;color:#60756b}@media(max-width:650px){.maintenance-head{align-items:flex-start}.maintenance-actions{flex-shrink:0}.maintenance-command{width:36px;padding:0;font-size:0}.maintenance-form{grid-template-columns:1fr}.wide{grid-column:auto}.selected-asset{grid-template-columns:24px 1fr}.selected-asset em{grid-column:2}}
-@media(max-width:650px){.maintenance-table{padding:10px;background:#f8faf9}.maintenance-table-head{display:none}.maintenance-row{min-width:0;grid-template-columns:minmax(0,1fr) auto;gap:9px 12px;align-items:start;min-height:0;margin-bottom:9px;padding:13px;border:1px solid #e0e8e4;border-radius:6px;background:#fff}.maintenance-row>span:nth-child(1){grid-column:1/-1;padding-bottom:8px;border-bottom:1px solid #edf1ef;font-size:10px}.maintenance-row>span:nth-child(2){grid-column:1;grid-row:2}.maintenance-row>span:nth-child(3){grid-column:1/-1;grid-row:3}.maintenance-row>span:nth-child(4){grid-column:1/-1;grid-row:4;color:#88958f;font-size:10px}.maintenance-row>span:nth-child(5){grid-column:2;grid-row:2;justify-self:end}.maintenance-row small{max-width:none;white-space:normal;line-height:1.45}.maintenance-empty{background:#fff}}
+.maintenance-panel{margin-top:14px;overflow:hidden}.maintenance-head{gap:16px}.maintenance-actions{display:flex;gap:8px}.maintenance-icon,.maintenance-command{height:36px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;gap:6px}.maintenance-icon{width:36px;border:1px solid #d8e3dd;background:#fff;color:#537267}.maintenance-command,.maintenance-submit{border:0;background:#225c4d;color:#fff;padding:0 13px}.maintenance-command:disabled,.maintenance-icon:disabled{opacity:.5;cursor:not-allowed}.maintenance-notice{min-height:38px;padding:0 18px;background:#eaf5ee;color:#347458;display:flex;align-items:center;gap:7px;font-size:12px;border-bottom:1px solid #dcebe2}.maintenance-notice.failed{background:#faece9;color:#a24d42}.maintenance-notice button{margin-left:auto;border:0;background:transparent;color:inherit}.maintenance-table{overflow:auto}.maintenance-row{min-width:820px;display:grid;grid-template-columns:1.3fr 1.2fr 1.7fr 1fr .7fr 34px;gap:14px;align-items:center;min-height:58px;padding:0 22px;border-bottom:1px solid #edf1ee;font-size:12px}.maintenance-table-head{min-height:38px;background:#fafbfa;color:#84928b;font-size:10px}.maintenance-row b,.maintenance-row small{display:block}.maintenance-row small{margin-top:4px;color:#829089;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:230px}.ticket-status{width:max-content;padding:5px 8px;border-radius:3px;background:#fff0d8;color:#8f6a2f;font-size:10px}.ticket-status.repairing{background:#e5eef6;color:#426d8b}.ticket-status.waiting_acceptance{background:#eee9f7;color:#68568d}.ticket-status.closed{background:#e4f3e9;color:#347658}.ticket-status.rejected{background:#f3e9e7;color:#9a5a51}.maintenance-view{width:32px;height:32px;display:grid;place-items:center;border:1px solid #d7e2dc;border-radius:4px;background:#fff;color:#42695a}.maintenance-empty{padding:30px;text-align:center;color:#94a098;font-size:12px}.maintenance-modal-bg{position:fixed;z-index:60;inset:0;background:rgba(18,31,26,.48);display:grid;place-items:center;padding:20px}.maintenance-modal{width:min(620px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:7px}.maintenance-modal-title{padding:19px 21px;border-bottom:1px solid #e6ece9;display:flex;justify-content:space-between}.maintenance-modal-title h2{font-size:17px;margin:0 0 4px}.maintenance-modal-title p{font-size:11px;color:#82918a;margin:0}.maintenance-modal-title button{border:0;background:transparent}.maintenance-form{padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:13px}.maintenance-form label{display:flex;flex-direction:column;gap:6px;color:#607169;font-size:11px}.maintenance-form select,.maintenance-form textarea{border:1px solid #d8e2dd;border-radius:4px;padding:0 9px;background:#fff;color:#243b31}.maintenance-form select{height:38px}.maintenance-form textarea{height:100px;padding:9px;resize:vertical}.wide{grid-column:1/-1}.selected-asset{display:grid;grid-template-columns:28px 1fr auto;align-items:center;padding:12px;background:#f2f7f4;color:#3c6958}.selected-asset b,.selected-asset small{display:block}.selected-asset small{margin-top:3px;color:#799087;font-size:10px}.selected-asset em{font-style:normal;font-family:monospace;font-size:11px}.maintenance-submit{height:39px;border-radius:5px;display:flex;align-items:center;justify-content:center;gap:7px}.maintenance-submit:disabled{opacity:.55}.mono{font-family:ui-monospace,monospace;color:#60756b}.ticket-result-body{padding:20px}.ticket-result-status{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#f5f8f6}.ticket-result-status b{font-size:11px;line-height:1.5}.ticket-progress{display:grid;grid-template-columns:repeat(5,1fr);margin:22px 0}.ticket-progress>div{position:relative;display:grid;justify-items:center;gap:6px;color:#929e98;font-size:10px}.ticket-progress>div:before{content:"";position:absolute;top:5px;right:50%;width:100%;height:2px;background:#dce4e0}.ticket-progress>div:first-child:before{display:none}.ticket-progress i{position:relative;z-index:1;width:12px;height:12px;border:2px solid #cbd6d0;border-radius:50%;background:#fff}.ticket-progress .done:before,.ticket-progress .done i{border-color:#4d8b70;background:#4d8b70}.ticket-progress .done:before{background:#4d8b70}.ticket-progress .current span{color:#285c49;font-weight:700}.ticket-result-details{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0}.ticket-result-details>div{padding-bottom:10px;border-bottom:1px solid #edf1ef}.ticket-result-details dt{color:#87948e;font-size:10px}.ticket-result-details dd{margin:5px 0 0;color:#31483e;font-size:12px;line-height:1.55}@media(max-width:650px){.maintenance-head{align-items:flex-start}.maintenance-actions{flex-shrink:0}.maintenance-command{width:36px;padding:0;font-size:0}.maintenance-form,.ticket-result-details{grid-template-columns:1fr}.wide{grid-column:auto}.selected-asset{grid-template-columns:24px 1fr}.selected-asset em{grid-column:2}.ticket-result-status{align-items:flex-start;flex-direction:column}}
+@media(max-width:650px){.maintenance-table{padding:10px;background:#f8faf9}.maintenance-table-head{display:none}.maintenance-row{min-width:0;grid-template-columns:minmax(0,1fr) auto;gap:9px 12px;align-items:start;min-height:0;margin-bottom:9px;padding:13px;border:1px solid #e0e8e4;border-radius:6px;background:#fff}.maintenance-row>span:nth-child(1){grid-column:1/-1;padding-bottom:8px;border-bottom:1px solid #edf1ef;font-size:10px}.maintenance-row>span:nth-child(2){grid-column:1;grid-row:2}.maintenance-row>span:nth-child(3){grid-column:1/-1;grid-row:3}.maintenance-row>span:nth-child(4){grid-column:1/-1;grid-row:4;color:#88958f;font-size:10px}.maintenance-row>span:nth-child(5){grid-column:2;grid-row:2;justify-self:end}.maintenance-row>.maintenance-view{grid-column:2;grid-row:3;justify-self:end}.maintenance-row small{max-width:none;white-space:normal;line-height:1.45}.maintenance-empty{background:#fff}.ticket-progress{margin:18px -8px}.ticket-progress>div{font-size:9px}}
 .maintenance-form input{height:38px;border:1px solid #d8e2dd;border-radius:4px;padding:0 9px;background:#fff;color:#243b31}
 </style>

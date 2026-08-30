@@ -20,16 +20,16 @@ public class BookingDecisionClient {
         internalToken=token;
     }
 
-    public void submit(Long bookingId,String status,String authorization){
+    public void submit(Long bookingId,String status,String comment,String authorization){
         try{
             client.post().uri("/api/v1/internal/bookings/{id}/approval-decision",bookingId)
                 .header(HttpHeaders.AUTHORIZATION,authorization==null?"":authorization)
                 .header(InternalServiceGuard.HEADER,internalToken)
-                .body(new Decision(status)).retrieve().toBodilessEntity();
+                .body(new Decision(status,comment)).retrieve().toBodilessEntity();
         }catch(RestClientException exception){
             throw new BusinessException("BOOKING_SERVICE_UNAVAILABLE","Booking service is unavailable",HttpStatus.SERVICE_UNAVAILABLE);
         }
     }
 
-    private record Decision(String status){}
+    private record Decision(String status,String comment){}
 }

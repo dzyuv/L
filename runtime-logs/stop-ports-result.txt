@@ -1,0 +1,6 @@
+﻿start
+port 8081 count=0
+port 8082 count=0
+port 8083 count=0
+port 8084 count=0
+done

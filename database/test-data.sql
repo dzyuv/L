@@ -140,18 +140,16 @@ WHERE NOT EXISTS (
     AND existing.enabled = TRUE
 );
 
+DELETE FROM resource_manager WHERE manager_type = 'APPROVER';
 INSERT INTO resource_manager
   (resource_id, user_id, manager_type, scope_type, scope_value, created_at)
 VALUES
-  (@material_resource_id, @teacher_id, 'APPROVER', 'RESOURCE', '', @seed_now),
-  (@electronics_resource_id, @teacher_id, 'APPROVER', 'RESOURCE', '', @seed_now),
-  (@spectrum_resource_id, @teacher_id, 'APPROVER', 'RESOURCE', '', @seed_now),
-  (@material_resource_id, @lab_admin_id, 'OWNER', 'RESOURCE', '', @seed_now),
+  (@material_resource_id, @teacher_id, 'OWNER', 'RESOURCE', '', @seed_now),
+  (@electronics_resource_id, @teacher_id, 'OWNER', 'RESOURCE', '', @seed_now),
+  (@spectrum_resource_id, @teacher_id, 'OWNER', 'RESOURCE', '', @seed_now),
   (@computer_resource_id, @lab_admin_id, 'OWNER', 'RESOURCE', '', @seed_now),
-  (@electronics_resource_id, @lab_admin_id, 'OWNER', 'RESOURCE', '', @seed_now),
-  (@meeting_resource_id, @lab_admin_id, 'OWNER', 'RESOURCE', '', @seed_now),
-  (@spectrum_resource_id, @lab_admin_id, 'OWNER', 'RESOURCE', '', @seed_now)
-ON DUPLICATE KEY UPDATE scope_type = VALUES(scope_type), scope_value = VALUES(scope_value);
+  (@meeting_resource_id, @lab_admin_id, 'OWNER', 'RESOURCE', '', @seed_now)
+ON DUPLICATE KEY UPDATE manager_type = VALUES(manager_type), scope_type = VALUES(scope_type), scope_value = VALUES(scope_value);
 
 -- A visible future closure used to verify calendar availability filtering.
 INSERT INTO resource_closure

@@ -56,12 +56,18 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
     }
     public Object addManager(Long id, ResourceController.ManagerRequest request, HttpServletRequest servletRequest) {
         roleGuard.requireLabAdmin(servletRequest); resource(id);
-        ResourceManager manager=new ResourceManager(); manager.resourceId=id; manager.userId=request.userId(); manager.managerType=request.managerType();
-        manager.scopeType=request.scopeType()==null||request.scopeType().isBlank()?"RESOURCE":request.scopeType();
-        manager.scopeValue=request.scopeValue()==null?"":request.scopeValue();
+        boolean exists=managers.findByResourceIdOrderByIdAsc(id).stream()
+                .anyMatch(item->"OWNER".equals(item.managerType)&&Objects.equals(item.userId, request.userId()));
+        if (exists) throw new BusinessException("MANAGER_EXISTS", "该用户已经是此资源的负责人", HttpStatus.CONFLICT);
+        ResourceManager manager=new ResourceManager(); manager.resourceId=id; manager.userId=request.userId(); manager.managerType="OWNER";
+        manager.scopeType="RESOURCE"; manager.scopeValue="";
         return managers.save(manager);
     }
-    public List<?> listManagers(Long id, HttpServletRequest servletRequest) { roleGuard.requireLabAdmin(servletRequest); resource(id); return managers.findByResourceIdOrderByIdAsc(id); }
+    public List<?> listManagers(Long id, HttpServletRequest servletRequest) {
+        roleGuard.requireLabAdmin(servletRequest); resource(id);
+        return managers.findByResourceIdOrderByIdAsc(id).stream()
+                .filter(item->"OWNER".equals(item.managerType)||"APPROVER".equals(item.managerType)).toList();
+    }
     public void removeManager(Long id, Long managerId, HttpServletRequest servletRequest) {
         roleGuard.requireLabAdmin(servletRequest); resource(id);
         ResourceManager manager=managers.findById(managerId).orElseThrow(() -> new BusinessException("NOT_FOUND", "Resource manager does not exist", HttpStatus.NOT_FOUND));
@@ -108,14 +114,15 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
         if(closures.findByResourceIdAndStatusNot(id,"CANCELED").stream().anyMatch(item->item.startTime.isBefore(endTime)&&item.endTime.isAfter(startTime))) throw new BusinessException("RESOURCE_CLOSED","Resource is closed during this interval",HttpStatus.UNPROCESSABLE_ENTITY);
         int approvalLevel=resource.approvalLevelOverride!=null?resource.approvalLevelOverride:type.defaultApprovalLevel;
         Long approver=null;
+        String approverRole=null;
         if (approvalLevel>0) {
             Long applicantId=roleGuard.currentUserId(servletRequest);
-            List<ResourceManager> assigned=managers.findByResourceIdOrderByIdAsc(id);
-            approver=assigned.stream().filter(item->"APPROVER".equals(item.managerType)).map(item->item.userId).filter(userId->!Objects.equals(userId,applicantId)).findFirst()
-                .or(()->assigned.stream().filter(item->"OWNER".equals(item.managerType)).map(item->item.userId).filter(userId->!Objects.equals(userId,applicantId)).findFirst())
-                .orElseThrow(()->new BusinessException("ESCALATION_APPROVER_NOT_CONFIGURED","The applicant cannot approve their own booking; configure a resource owner or another approver",HttpStatus.UNPROCESSABLE_ENTITY));
+            List<ResourceManager> owners=managers.findByResourceIdOrderByIdAsc(id).stream()
+                    .filter(item->"OWNER".equals(item.managerType)||"APPROVER".equals(item.managerType)).toList();
+            approver=owners.stream().map(item->item.userId).filter(userId->!Objects.equals(userId,applicantId)).findFirst().orElse(null);
+            approverRole=approver==null?Roles.LAB_ADMIN:Roles.TEACHER;
         }
-        return new ResourceController.BookingRule(resource.name,resource.capacity,schedule.slotMinutes,Math.min(resource.maxDurationMinutes,schedule.maxDurationMinutes),resource.needCheckin,approvalLevel,approver);
+        return new ResourceController.BookingRule(resource.name,resource.capacity,schedule.slotMinutes,Math.min(resource.maxDurationMinutes,schedule.maxDurationMinutes),resource.needCheckin,approvalLevel,approver,approverRole);
     }
     private Resource resource(Long id) { return resources.findById(id).filter(item -> !item.deleted).orElseThrow(()->new BusinessException("NOT_FOUND","Resource does not exist",HttpStatus.NOT_FOUND)); }
     private void requireType(Long id) { if(types.findById(id).filter(item -> !item.deleted && item.enabled).isEmpty()) throw new BusinessException("TYPE_NOT_FOUND","Resource type does not exist",HttpStatus.NOT_FOUND); }

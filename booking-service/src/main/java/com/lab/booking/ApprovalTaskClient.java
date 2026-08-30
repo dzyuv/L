@@ -2,6 +2,7 @@ package com.lab.booking;
 
 import com.lab.common.exception.BusinessException;
 import com.lab.common.api.InternalServiceGuard;
+import com.lab.common.api.Roles;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -20,17 +21,18 @@ public class ApprovalTaskClient {
         internalToken=token;
     }
 
-    public void create(Booking booking,Long approverUserId,String authorization){
+    public void create(Booking booking,Long approverUserId,String approverRole,String authorization){
         try{
+            String role=approverRole==null||approverRole.isBlank()?(approverUserId==null?Roles.LAB_ADMIN:Roles.TEACHER):approverRole;
             client.post().uri("/api/v1/internal/approvals/tasks")
                 .header(HttpHeaders.AUTHORIZATION,authorization==null?"":authorization)
                 .header(InternalServiceGuard.HEADER,internalToken)
-                .body(new CreateTask(booking.id,booking.userId,booking.applicantNameSnapshot,booking.resourceId,booking.resourceNameSnapshot,booking.startTime,booking.endTime,booking.approvalLevelSnapshot,approverUserId)).retrieve().toBodilessEntity();
+                .body(new CreateTask(booking.id,booking.userId,booking.applicantNameSnapshot,booking.resourceId,booking.resourceNameSnapshot,booking.startTime,booking.endTime,booking.approvalLevelSnapshot,approverUserId,role)).retrieve().toBodilessEntity();
         }catch(RestClientException exception){
             throw new BusinessException("APPROVAL_SERVICE_UNAVAILABLE","Approval service is unavailable",HttpStatus.SERVICE_UNAVAILABLE);
         }
     }
 
     private record CreateTask(Long bookingId,Long applicantUserId,String applicantName,Long resourceId,String resourceName,
-                              java.time.LocalDateTime startTime,java.time.LocalDateTime endTime,int level,Long assignedUserId){}
+                              java.time.LocalDateTime startTime,java.time.LocalDateTime endTime,int level,Long assignedUserId,String approverRole){}
 }

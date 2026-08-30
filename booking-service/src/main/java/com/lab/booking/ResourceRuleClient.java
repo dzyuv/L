@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 
 @Component
 public class ResourceRuleClient {
-    public record BookingRule(String resourceName,int capacity,int slotMinutes,int maxDurationMinutes,boolean needCheckin,int approvalLevel,Long approverUserId){}
+    public record BookingRule(String resourceName,int capacity,int slotMinutes,int maxDurationMinutes,boolean needCheckin,int approvalLevel,Long approverUserId,String approverRole){}
     private final RestClient client;
     private final ObjectMapper json;
     private final String internalToken;

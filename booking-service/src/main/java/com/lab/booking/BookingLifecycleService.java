@@ -3,6 +3,7 @@ package com.lab.booking;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lab.common.exception.BusinessException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
@@ -12,9 +13,9 @@ import java.util.UUID;
 
 @Component
 public class BookingLifecycleService {
-    private static final int NO_SHOW_THRESHOLD=3;
-    private static final int NO_SHOW_WINDOW_DAYS=30;
-    private static final int RESTRICTION_DAYS=30;
+    private final int noShowThreshold;
+    private final int noShowWindowDays;
+    private final int restrictionDays;
 
     private final BookingStatusHistoryRepository histories;
     private final BookingSlotRepository slots;
@@ -23,13 +24,19 @@ public class BookingLifecycleService {
     private final OutboxEventRepository outbox;
     private final ObjectMapper json;
 
-    BookingLifecycleService(BookingStatusHistoryRepository h,BookingSlotRepository s,ViolationRecordRepository v,UserRestrictionRepository r,OutboxEventRepository o,ObjectMapper objectMapper){
+    BookingLifecycleService(BookingStatusHistoryRepository h,BookingSlotRepository s,ViolationRecordRepository v,UserRestrictionRepository r,OutboxEventRepository o,ObjectMapper objectMapper,
+                            @Value("${booking.violation.max-count:3}") int noShowThreshold,
+                            @Value("${booking.violation.window-days:30}") int noShowWindowDays,
+                            @Value("${booking.violation.restriction-days:30}") int restrictionDays){
         histories=h;
         slots=s;
         violations=v;
         restrictions=r;
         outbox=o;
         json=objectMapper;
+        this.noShowThreshold=noShowThreshold;
+        this.noShowWindowDays=noShowWindowDays;
+        this.restrictionDays=restrictionDays;
     }
 
     public void assertCanCreate(Long userId){
@@ -67,12 +74,12 @@ public class BookingLifecycleService {
         violations.save(violation);
 
         LocalDateTime now=LocalDateTime.now();
-        long count=violations.countByUserIdAndViolationTypeAndCreatedAtAfter(booking.userId,"NO_SHOW",now.minusDays(NO_SHOW_WINDOW_DAYS));
+        long count=violations.countByUserIdAndViolationTypeAndCreatedAtAfter(booking.userId,"NO_SHOW",now.minusDays(noShowWindowDays));
         boolean alreadyRestricted=restrictions.findFirstByUserIdAndStatusAndRestrictedUntilAfterOrderByRestrictedUntilDesc(booking.userId,"ACTIVE",now).isPresent();
-        if(count>=NO_SHOW_THRESHOLD && !alreadyRestricted){
+        if(count>=noShowThreshold && !alreadyRestricted){
             UserRestriction restriction=new UserRestriction();
             restriction.userId=booking.userId;
-            restriction.restrictedUntil=now.plusDays(RESTRICTION_DAYS);
+            restriction.restrictedUntil=now.plusDays(restrictionDays);
             restriction.reason="Repeated no-show bookings";
             restriction.sourceViolationCount=(int)count;
             restrictions.save(restriction);

@@ -10,7 +10,7 @@ public class ResourceManager {
     @TableId(type=IdType.AUTO) public Long id;
     public Long resourceId;
     public Long userId;
-    public String managerType="APPROVER";
+    public String managerType="OWNER";
     public String scopeType="RESOURCE";
     public String scopeValue="";
     public LocalDateTime createdAt=LocalDateTime.now();

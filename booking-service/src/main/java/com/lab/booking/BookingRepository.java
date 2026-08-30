@@ -9,4 +9,7 @@ public interface BookingRepository extends CrudMapper<Booking>{
     default List<Booking> findByUserIdOrderByStartTimeDesc(Long userId) {
         return selectList(Wrappers.<Booking>query().eq("user_id", userId).orderByDesc("start_time"));
     }
+    default List<Booking> findByStatus(String status) {
+        return selectList(Wrappers.<Booking>query().eq("status", status));
+    }
 }

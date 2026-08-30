@@ -5,6 +5,7 @@ import com.lab.booking.controller.BookingController;
 import com.lab.booking.service.BookingService;
 import com.lab.common.exception.BusinessException;
 import com.lab.common.api.RoleGuard;
+import com.lab.common.api.Roles;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,6 +37,8 @@ public class BookingServiceImpl implements BookingService {
     private final int teacherMaxDailyMinutes;
     private final int maxAdvanceDays;
     private final int pendingHoldHours;
+    private final int checkinBeforeMinutes;
+    private final int checkinAfterMinutes;
 
     public BookingServiceImpl(BookingRepository bookings, BookingSlotRepository slots,
                               BookingQuotaLockRepository quotaLocks, ResourceRuleClient resourceRules,
@@ -50,7 +53,9 @@ public class BookingServiceImpl implements BookingService {
                               @Value("${booking.fair-use.max-daily-minutes:240}") int maxDailyMinutes,
                               @Value("${booking.fair-use.teacher-max-daily-minutes:480}") int teacherMaxDailyMinutes,
                               @Value("${booking.fair-use.max-advance-days:30}") int maxAdvanceDays,
-                              @Value("${booking.fair-use.pending-hold-hours:24}") int pendingHoldHours) {
+                              @Value("${booking.fair-use.pending-hold-hours:24}") int pendingHoldHours,
+                              @Value("${booking.checkin.before-minutes:15}") int checkinBeforeMinutes,
+                              @Value("${booking.checkin.after-minutes:30}") int checkinAfterMinutes) {
         this.bookings = bookings;
         this.slots = slots;
         this.quotaLocks = quotaLocks;
@@ -69,13 +74,15 @@ public class BookingServiceImpl implements BookingService {
         this.teacherMaxDailyMinutes = teacherMaxDailyMinutes;
         this.maxAdvanceDays = maxAdvanceDays;
         this.pendingHoldHours = pendingHoldHours;
+        this.checkinBeforeMinutes = checkinBeforeMinutes;
+        this.checkinAfterMinutes = checkinAfterMinutes;
     }
 
     @Override
     @Transactional
     public Booking create(BookingController.Create request, String key, HttpServletRequest servletRequest) {
         Long userId = currentUser(servletRequest);
-        roleGuard.requireAny(servletRequest, "STUDENT", "TEACHER", "LAB_ADMIN");
+        roleGuard.requireAny(servletRequest, Roles.STUDENT, Roles.TEACHER, Roles.LAB_ADMIN);
         if (key == null || key.isBlank() || key.length() > 64) {
             throw new BusinessException("IDEMPOTENCY_REQUIRED", "Idempotency-Key is required", HttpStatus.BAD_REQUEST);
         }
@@ -122,13 +129,18 @@ public class BookingServiceImpl implements BookingService {
             throw new BusinessException("BOOKING_CONFLICT", "The selected time is already occupied", HttpStatus.CONFLICT);
         }
         if (rule.approvalLevel() > 0) {
-            approvalTasks.create(booking, rule.approverUserId(), servletRequest.getHeader("Authorization"));
+            approvalTasks.create(booking, rule.approverUserId(), rule.approverRole(), servletRequest.getHeader("Authorization"));
         }
         return booking;
     }
 
     @Override
-    public List<Booking> my(HttpServletRequest servletRequest) { return bookings.findByUserIdOrderByStartTimeDesc(currentUser(servletRequest)); }
+    public List<Booking> my(HttpServletRequest servletRequest) {
+        LocalDateTime now = LocalDateTime.now();
+        return bookings.findByUserIdOrderByStartTimeDesc(currentUser(servletRequest)).stream()
+                .sorted((left, right) -> compareByProximity(left, right, now))
+                .toList();
+    }
 
     @Override
     public List<LocalDateTime> occupied(Long resourceId, LocalDateTime start, LocalDateTime end, HttpServletRequest servletRequest) {
@@ -172,7 +184,7 @@ public class BookingServiceImpl implements BookingService {
         Booking booking = find(bookingId);
         if (!Objects.equals(booking.userId, userId)) throw new BusinessException("FORBIDDEN", "You cannot check in for this booking", HttpStatus.FORBIDDEN);
         LocalDateTime now = LocalDateTime.now();
-        if (!"APPROVED".equals(booking.status) || now.isBefore(booking.startTime.minusMinutes(15)) || now.isAfter(booking.startTime.plusMinutes(30))) {
+        if (!"APPROVED".equals(booking.status) || now.isBefore(booking.startTime.minusMinutes(checkinBeforeMinutes)) || now.isAfter(booking.startTime.plusMinutes(checkinAfterMinutes))) {
             throw new BusinessException("CHECKIN_WINDOW", "Check-in is not currently available", HttpStatus.UNPROCESSABLE_ENTITY);
         }
         lifecycle.transition(booking, "CHECKED_IN", userId, null, requestId(servletRequest));
@@ -184,7 +196,7 @@ public class BookingServiceImpl implements BookingService {
     @Transactional
     public void autoComplete() {
         LocalDateTime now = LocalDateTime.now();
-        bookings.findAll().stream().filter(booking -> "APPROVED".equals(booking.status) && !booking.needCheckinSnapshot && booking.endTime != null && !booking.endTime.isAfter(now)).forEach(booking -> {
+        bookings.findByStatus("APPROVED").stream().filter(booking -> !booking.needCheckinSnapshot && booking.endTime != null && !booking.endTime.isAfter(now)).forEach(booking -> {
             lifecycle.transition(booking, "COMPLETED", null, "Automatically completed", null);
             booking.completedAt = now;
             bookings.save(booking);
@@ -196,7 +208,7 @@ public class BookingServiceImpl implements BookingService {
     @Transactional
     public void markNoShow() {
         LocalDateTime now = LocalDateTime.now();
-        bookings.findAll().stream().filter(booking -> "APPROVED".equals(booking.status) && booking.needCheckinSnapshot && booking.startTime != null && now.isAfter(booking.startTime.plusMinutes(30))).forEach(booking -> {
+        bookings.findByStatus("APPROVED").stream().filter(booking -> booking.needCheckinSnapshot && booking.startTime != null && now.isAfter(booking.startTime.plusMinutes(checkinAfterMinutes))).forEach(booking -> {
             lifecycle.transition(booking, "NO_SHOW", null, "Check-in deadline passed", null);
             bookings.save(booking);
             lifecycle.releaseSlots(booking.id, "NO_SHOW");
@@ -205,6 +217,17 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private Booking find(Long bookingId) { return bookings.findById(bookingId).orElseThrow(() -> new BusinessException("NOT_FOUND", "Booking does not exist", HttpStatus.NOT_FOUND)); }
+    private int compareByProximity(Booking left, Booking right, LocalDateTime now) {
+        boolean leftCurrentOrUpcoming = left.endTime != null && !left.endTime.isBefore(now);
+        boolean rightCurrentOrUpcoming = right.endTime != null && !right.endTime.isBefore(now);
+        if (leftCurrentOrUpcoming != rightCurrentOrUpcoming) return leftCurrentOrUpcoming ? -1 : 1;
+        Comparator<LocalDateTime> times = leftCurrentOrUpcoming
+                ? Comparator.nullsLast(Comparator.naturalOrder())
+                : Comparator.nullsLast(Comparator.reverseOrder());
+        int result = times.compare(left.startTime, right.startTime);
+        if (result != 0) return result;
+        return Comparator.nullsLast(Comparator.<Long>reverseOrder()).compare(left.id, right.id);
+    }
     private Long currentUser(HttpServletRequest request) {
         if (request.getAttribute("userId") instanceof Long userId) return userId;
         throw new BusinessException("UNAUTHORIZED", "Login required", HttpStatus.UNAUTHORIZED);
@@ -214,8 +237,7 @@ public class BookingServiceImpl implements BookingService {
     @Transactional
     public void expirePendingApprovals() {
         LocalDateTime now = LocalDateTime.now();
-        bookings.findAll().stream()
-                .filter(booking -> "PENDING_APPROVAL".equals(booking.status))
+        bookings.findByStatus("PENDING_APPROVAL").stream()
                 .forEach(booking -> {
                     if (booking.approvalDeadline == null) {
                         LocalDateTime createdDeadline = booking.createdAt.plusHours(pendingHoldHours);
@@ -236,7 +258,7 @@ public class BookingServiceImpl implements BookingService {
             throw new BusinessException("BOOKING_ADVANCE_LIMIT",
                     "预约开始时间必须在未来 " + maxAdvanceDays + " 天内", HttpStatus.UNPROCESSABLE_ENTITY);
         }
-        boolean teacher = roleGuard.hasRole(servletRequest, "TEACHER") || roleGuard.hasRole(servletRequest, "LAB_ADMIN");
+        boolean teacher = roleGuard.hasRole(servletRequest, Roles.TEACHER) || roleGuard.hasRole(servletRequest, Roles.LAB_ADMIN);
         int activeLimit = teacher ? teacherMaxActive : maxActive;
         int pendingLimit = teacher ? teacherMaxPending : maxPending;
         int resourceLimit = teacher ? teacherMaxPerResource : maxPerResource;

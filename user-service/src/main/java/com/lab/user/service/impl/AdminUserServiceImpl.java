@@ -2,6 +2,7 @@ package com.lab.user.service.impl;
 
 import com.lab.common.api.AdminOperationLogger;
 import com.lab.common.api.RoleGuard;
+import com.lab.common.api.Roles;
 import com.lab.common.exception.BusinessException;
 import com.lab.user.RefreshTokenRepository;
 import com.lab.user.Role;
@@ -24,7 +25,7 @@ import java.util.Set;
 @Service
 public class AdminUserServiceImpl implements AdminUserService {
     private static final Set<String> USER_STATUSES = Set.of("ACTIVE", "DISABLED", "LOCKED");
-    private static final Set<String> ASSIGNABLE_ROLES = Set.of("STUDENT", "TEACHER", "LAB_ADMIN", "SYSTEM_ADMIN");
+    private static final Set<String> ASSIGNABLE_ROLES = Set.of(Roles.STUDENT, Roles.TEACHER, Roles.LAB_ADMIN, Roles.SYSTEM_ADMIN);
     private final UserRepository users;
     private final RoleRepository roles;
     private final RefreshTokenRepository refreshTokens;
@@ -50,6 +51,24 @@ public class AdminUserServiceImpl implements AdminUserService {
                         || user.realName.toLowerCase().contains(keyword)
                         || Objects.toString(user.email, "").toLowerCase().contains(keyword))
                 .map(this::view).toList();
+        return Map.of("items", items, "total", items.size());
+    }
+
+    @Override
+    public Map<String, Object> teachers(HttpServletRequest request) {
+        roleGuard.requireAny(request, Roles.LAB_ADMIN, Roles.SYSTEM_ADMIN);
+        List<Map<String, Object>> items = users.findByDeletedFalseOrderByCreatedAtDesc().stream()
+                .filter(user -> "ACTIVE".equals(user.status))
+                .filter(user -> user.roles.stream().anyMatch(role -> Roles.TEACHER.equals(role.code)))
+                .map(user -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("id", user.id);
+                    item.put("username", user.username);
+                    item.put("employeeNo", user.employeeNo);
+                    item.put("realName", user.realName);
+                    return item;
+                })
+                .toList();
         return Map.of("items", items, "total", items.size());
     }
 
@@ -89,7 +108,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         if (roleCodes == null || roleCodes.isEmpty() || !ASSIGNABLE_ROLES.containsAll(roleCodes)) {
             throw new BusinessException("INVALID_ROLE", "At least one valid role is required", HttpStatus.BAD_REQUEST);
         }
-        if (Objects.equals(roleGuard.currentUserId(request), userId) && !roleCodes.contains("SYSTEM_ADMIN")) {
+        if (Objects.equals(roleGuard.currentUserId(request), userId) && !roleCodes.contains(Roles.SYSTEM_ADMIN)) {
             throw new BusinessException("SELF_ROLE_CHANGE_FORBIDDEN", "Current administrator cannot remove their own system role", HttpStatus.CONFLICT);
         }
         User user = find(userId);

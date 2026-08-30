@@ -3,6 +3,7 @@ package com.lab.approval.service.impl;
 import com.lab.approval.*;
 import com.lab.approval.service.ApprovalTaskService;
 import com.lab.common.api.RoleGuard;
+import com.lab.common.api.Roles;
 import com.lab.common.exception.BusinessException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
@@ -30,7 +31,10 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
     public List<ApprovalTask> mine(HttpServletRequest request) {
         requireApproverRole(request);
         Long userId = currentUser(request);
-        return tasks.findByAssignedUserIdAndStatus(userId, "PENDING").stream()
+        List<ApprovalTask> items = roleGuard.hasRole(request, Roles.LAB_ADMIN)
+                ? tasks.findPendingForLabAdmin(userId)
+                : tasks.findByAssignedUserIdAndStatus(userId, "PENDING");
+        return items.stream()
                 .filter(task -> !Objects.equals(task.applicantUserId, userId))
                 .filter(task -> !expired(task))
                 .toList();
@@ -42,7 +46,12 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         requireApproverRole(request);
         Long userId = currentUser(request);
         ApprovalTask task = tasks.findById(taskId).orElseThrow(() -> new BusinessException("NOT_FOUND", "Approval task does not exist", HttpStatus.NOT_FOUND));
-        if (userId == null || !Objects.equals(task.assignedUserId, userId)) throw new BusinessException("FORBIDDEN", "Approval task is not assigned to the current user", HttpStatus.FORBIDDEN);
+        boolean assignedToMe = Objects.equals(task.assignedUserId, userId);
+        boolean labAdminQueue = roleGuard.hasRole(request, Roles.LAB_ADMIN)
+                && Roles.LAB_ADMIN.equals(task.approverRole)
+                && task.assignedUserId == null;
+        if (userId == null || (!assignedToMe && !labAdminQueue)) throw new BusinessException("FORBIDDEN", "Approval task is not assigned to the current user", HttpStatus.FORBIDDEN);
+        if (labAdminQueue) task.assignedUserId = userId;
         if (Objects.equals(task.applicantUserId, userId)) throw new BusinessException("SELF_APPROVAL_FORBIDDEN", "Approver cannot approve own booking", HttpStatus.FORBIDDEN);
         if (!"PENDING".equals(task.status)) throw new BusinessException("INVALID_STATUS", "Approval task has already been processed", HttpStatus.UNPROCESSABLE_ENTITY);
         if (expired(task)) throw new BusinessException("APPROVAL_EXPIRED", "Approval task has expired", HttpStatus.UNPROCESSABLE_ENTITY);
@@ -68,7 +77,7 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         record.comment = normalizedComment;
         record.requestId = requestId.isBlank() ? null : requestId;
         records.save(record);
-        bookingDecisions.submit(saved.bookingId, saved.status, request.getHeader("Authorization"));
+        bookingDecisions.submit(saved.bookingId, saved.status, normalizedComment, request.getHeader("Authorization"));
         return saved;
     }
 
@@ -78,7 +87,7 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
     }
 
     private void requireApproverRole(HttpServletRequest request) {
-        roleGuard.requireAny(request, "TEACHER", "LAB_ADMIN");
+        roleGuard.requireAny(request, Roles.TEACHER, Roles.LAB_ADMIN);
     }
 
     private boolean expired(ApprovalTask task) {

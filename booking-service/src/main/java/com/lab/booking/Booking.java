@@ -23,6 +23,7 @@ public class Booking{
     public LocalDateTime completedAt;
     public LocalDateTime canceledAt;
     public String cancelReason;
+    public String rejectReason;
     @Version public int version;
     public LocalDateTime createdAt=LocalDateTime.now();
     public LocalDateTime updatedAt=LocalDateTime.now();

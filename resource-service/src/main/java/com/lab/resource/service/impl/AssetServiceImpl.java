@@ -45,7 +45,7 @@ public class AssetServiceImpl implements AssetService {
         apply(item, body); return categories.save(item);
     }
     public List<?> catalog(HttpServletRequest request) {
-        roles.requireLabAdmin(request);
+        roles.requireAny(request, "TEACHER", "LAB_ADMIN");
         return assets.findByDeletedFalseOrderByCreatedAtDesc().stream().filter(item -> !Set.of("SCRAPPED", "LOST").contains(item.status))
                 .map(item -> Map.of("id", item.id, "assetNo", item.assetNo, "name", item.name, "categoryId", item.categoryId,
                         "resourceId", item.resourceId == null ? "" : item.resourceId, "serialNo", Objects.toString(item.serialNo, ""),

@@ -31,3 +31,8 @@ mybatis-plus:
 security:
   jwt-secret: ${JWT_SECRET}
   internal-token: ${INTERNAL_SERVICE_TOKEN}
+  login:
+    max-failures: ${LOGIN_MAX_FAILURES:5}
+  jwt:
+    access-token-hours: ${JWT_ACCESS_TOKEN_HOURS:2}
+    refresh-token-days: ${JWT_REFRESH_TOKEN_DAYS:30}

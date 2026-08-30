@@ -1,0 +1,5 @@
+begin
+killed 37436
+mvn_exit=0
+final pids=10316
+finished

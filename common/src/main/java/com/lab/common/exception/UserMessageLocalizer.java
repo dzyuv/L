@@ -36,6 +36,8 @@ public final class UserMessageLocalizer {
             Map.entry("INVALID_SCHEDULE", "开放时间设置不正确"),
             Map.entry("INVALID_CLOSURE", "维护关闭时间设置不正确"),
             Map.entry("ESCALATION_APPROVER_NOT_CONFIGURED", "未配置可处理该申请的上级审批人"),
+            Map.entry("RESOURCE_OWNER_REQUIRED", "请先为该资源配置资源负责人"),
+            Map.entry("MANAGER_EXISTS", "该用户已经是此资源的负责人"),
             Map.entry("IDEMPOTENCY_REQUIRED", "请勿重复提交，请刷新后重试"),
             Map.entry("BOOKING_CONFLICT", "所选时段已被占用，请重新选择"),
             Map.entry("USER_TIME_CONFLICT", "你在该时段已有其他预约"),

@@ -32,6 +32,13 @@ security:
   jwt-secret: ${JWT_SECRET}
   internal-token: ${INTERNAL_SERVICE_TOKEN}
 booking:
+  checkin:
+    before-minutes: ${BOOKING_CHECKIN_BEFORE_MINUTES:15}
+    after-minutes: ${BOOKING_CHECKIN_AFTER_MINUTES:30}
+  violation:
+    max-count: ${BOOKING_VIOLATION_MAX_COUNT:3}
+    window-days: ${BOOKING_VIOLATION_WINDOW_DAYS:30}
+    restriction-days: ${BOOKING_VIOLATION_RESTRICTION_DAYS:30}
   fair-use:
     max-active: ${BOOKING_MAX_ACTIVE:5}
     teacher-max-active: ${BOOKING_TEACHER_MAX_ACTIVE:10}

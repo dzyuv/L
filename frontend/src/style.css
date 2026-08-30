@@ -815,6 +815,7 @@ header {
 .teacher-status.canceled,
 .teacher-status.no_show,
 .teacher-status.expired { background: #f3e9e7; color: #9a5a51; }
+.teacher-reject-reason { display: block; margin-top: 4px; max-width: 180px; color: #9a5a51; font-size: 10px; line-height: 1.4; white-space: normal; }
 .teacher-empty { padding: 34px 20px; color: #8d9a94; font-size: 12px; text-align: center; }
 .teacher-resource-filters { border-bottom: 1px solid #e8eeeb; }
 .teacher-resource-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
@@ -948,19 +949,22 @@ header {
 }
 .student-booking-list {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  padding: 16px 18px 18px;
+  grid-template-columns: 1fr;
+  gap: 0;
+  max-height: 280px;
+  overflow: auto;
+  padding: 0;
 }
 .student-booking-card {
   display: grid;
-  grid-template-columns: 54px 72px minmax(0, 1fr) auto;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
   align-items: center;
-  min-height: 94px;
-  padding: 12px;
-  border: 1px solid #e1e9e5;
-  border-radius: 7px;
+  min-height: 52px;
+  padding: 8px 16px;
+  border: 0;
+  border-bottom: 1px solid #edf1ef;
+  border-radius: 0;
   background: #fff;
 }
 .booking-date {
@@ -1014,7 +1018,7 @@ header {
   white-space: nowrap;
 }
 .booking-card-info h3 {
-  margin: 5px 0 7px;
+  margin: 0 0 4px;
   overflow: hidden;
   color: #263b32;
   font-size: 13px;
@@ -1037,12 +1041,19 @@ header {
   color: #98a29d;
   text-overflow: ellipsis;
 }
+.booking-reject-reason {
+  margin-top: 4px !important;
+  color: #96574e;
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: normal;
+}
 .booking-card-status {
-  align-self: start;
+  align-self: center;
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 7px;
+  padding: 4px 7px;
   border-radius: 3px;
   background: #fff0d8;
   color: #8f6a2f;
@@ -1069,8 +1080,6 @@ header {
   color: #96574e;
 }
 .booking-cancel {
-  grid-column: 4;
-  align-self: end;
   border: 0;
   background: transparent;
   color: #9a5a51;
@@ -1149,6 +1158,7 @@ header {
   }
   .student-booking-list {
     grid-template-columns: 1fr;
+    max-height: 240px;
   }
   .stats {
     grid-template-columns: 1fr;
@@ -1171,23 +1181,17 @@ header {
     padding: 12px;
   }
   .student-booking-list {
-    padding: 12px;
+    padding: 0;
   }
   .student-booking-card {
-    grid-template-columns: 46px 62px minmax(0, 1fr);
-    gap: 9px;
-  }
-  .booking-resource-thumb {
-    width: 62px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
   }
   .booking-card-status {
-    grid-column: 3;
-    grid-row: 2;
-    justify-self: start;
+    justify-self: end;
   }
   .booking-cancel {
-    grid-column: 3;
-    grid-row: 2;
+    grid-column: 2;
     justify-self: end;
   }
 }
