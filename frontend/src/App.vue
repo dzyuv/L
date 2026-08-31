@@ -812,66 +812,70 @@ onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
         </div>
         <div class="status-chip"><span></span>系统运行正常</div>
       </section>
-      <div class="student-content">
-        <section class="panel student-resource-gallery">
-          <div class="panel-head">
-            <div>
-              <h2>资源目录</h2>
-              <p>按类别和空闲状态筛选，选择资源后填写预约时段</p>
+      <div class="student-workspace">
+        <div class="student-main">
+          <section class="panel student-resource-gallery">
+            <div class="panel-head">
+              <div>
+                <h2>资源目录</h2>
+                <p>按类别和空闲状态筛选，选择资源后填写预约时段</p>
+              </div>
+              <button class="ghost" @click="load">
+                <RefreshCw :size="16" />刷新
+              </button>
             </div>
-            <button class="ghost" @click="load">
-              <RefreshCw :size="16" />刷新
-            </button>
-          </div>
-          <div class="resource-filters">
-            <label class="resource-search"><Search :size="15" /><input v-model="resourceQuery" placeholder="搜索实验室名称、位置或用途" /></label>
-            <select v-model="resourceTypeFilter"><option value="">全部类别</option><option v-for="type in resourceTypes" :key="type.id" :value="type.id">{{ type.name }}</option></select>
-            <label class="availability-filter"><input v-model="onlyAvailableResources" type="checkbox" />只看未来14天有空闲</label>
-            <button v-if="resourceQuery || resourceTypeFilter || onlyAvailableResources" class="clear-resource-filter" @click="resourceQuery = ''; resourceTypeFilter = ''; onlyAvailableResources = false">清除筛选</button>
-            <span class="resource-filter-count">显示 {{ filteredResources.length }} / {{ resources.length }}</span>
-          </div>
-          <div class="resource-card-grid">
-            <button
-              v-for="r in filteredResources"
-              :key="r.id"
-              class="resource-card"
-              :class="{ selected: bookingForm.resourceId === r.id }"
-              @click="selectResource(r)"
-            >
-              <div class="resource-card-image" :class="{ 'resource-image-fallback': !resourceImage(r) }"><img v-if="resourceImage(r)" :src="resourceImage(r)" :alt="`${resourceDisplayName(r)} 场景图`" loading="lazy" @error="handleResourceImageError" /><span v-else class="resource-image-empty">暂无图片</span><span class="resource-card-kind">{{ resourceTypeName(r) }}</span><span class="resource-card-status" :class="{ unavailable: !resourceHasAvailability(r) }"><i></i>{{ resourceHasAvailability(r) ? '有空闲' : '暂无空闲' }}</span></div>
-              <div class="resource-card-body"><div class="resource-card-title"><strong>{{ resourceDisplayName(r) }}</strong><ChevronRight :size="16" /></div><p>{{ resourceDisplayDescription(r) }}</p><div class="resource-card-meta"><span><CalendarDays :size="14" />{{ r.location }}</span><span><UsersIcon :size="14" />{{ r.capacity }} 人</span></div><div class="resource-card-footer"><span v-if="nextAvailableSlot(r)">最近开放 {{ nextAvailableSlot(r).date }} {{ nextAvailableSlot(r).startTime }}</span><span v-else>未来14天暂无开放时段</span><b>{{ resourceBookingCounts[r.id] || 0 }} 次我的预约</b></div></div>
-            </button>
-            <div v-if="!filteredResources.length" class="empty resource-card-empty">
-              {{ resources.length ? '没有符合当前筛选条件的资源。' : '暂无资源，请先在资源服务中配置。' }}
+            <div class="resource-filters">
+              <label class="resource-search"><Search :size="15" /><input v-model="resourceQuery" placeholder="搜索实验室名称、位置或用途" /></label>
+              <select v-model="resourceTypeFilter"><option value="">全部类别</option><option v-for="type in resourceTypes" :key="type.id" :value="type.id">{{ type.name }}</option></select>
+              <label class="availability-filter"><input v-model="onlyAvailableResources" type="checkbox" />只看未来14天有空闲</label>
+              <button v-if="resourceQuery || resourceTypeFilter || onlyAvailableResources" class="clear-resource-filter" @click="resourceQuery = ''; resourceTypeFilter = ''; onlyAvailableResources = false">清除筛选</button>
+              <span class="resource-filter-count">显示 {{ filteredResources.length }} / {{ resources.length }}</span>
             </div>
-          </div>
-        </section>
+            <div class="resource-card-grid">
+              <button
+                v-for="r in filteredResources"
+                :key="r.id"
+                class="resource-card"
+                :class="{ selected: bookingForm.resourceId === r.id }"
+                @click="selectResource(r)"
+              >
+                <div class="resource-card-image" :class="{ 'resource-image-fallback': !resourceImage(r) }"><img v-if="resourceImage(r)" :src="resourceImage(r)" :alt="`${resourceDisplayName(r)} 场景图`" loading="lazy" @error="handleResourceImageError" /><span v-else class="resource-image-empty">暂无图片</span><span class="resource-card-kind">{{ resourceTypeName(r) }}</span><span class="resource-card-status" :class="{ unavailable: !resourceHasAvailability(r) }"><i></i>{{ resourceHasAvailability(r) ? '有空闲' : '暂无空闲' }}</span></div>
+                <div class="resource-card-body"><div class="resource-card-title"><strong>{{ resourceDisplayName(r) }}</strong><ChevronRight :size="16" /></div><p>{{ resourceDisplayDescription(r) }}</p><div class="resource-card-meta"><span><CalendarDays :size="14" />{{ r.location }}</span><span><UsersIcon :size="14" />{{ r.capacity }} 人</span></div><div class="resource-card-footer"><span v-if="nextAvailableSlot(r)">最近开放 {{ nextAvailableSlot(r).date }} {{ nextAvailableSlot(r).startTime }}</span><span v-else>未来14天暂无开放时段</span><b>{{ resourceBookingCounts[r.id] || 0 }} 次我的预约</b></div></div>
+              </button>
+              <div v-if="!filteredResources.length" class="empty resource-card-empty">
+                {{ resources.length ? '没有符合当前筛选条件的资源。' : '暂无资源，请先在资源服务中配置。' }}
+              </div>
+            </div>
+          </section>
+        </div>
+        <aside class="student-side">
+          <section class="panel history student-bookings">
+            <div class="panel-head">
+              <div>
+                <h2>我的预约</h2>
+                <p>近期使用安排与状态</p>
+              </div>
+            </div>
+            <div class="student-booking-list">
+              <article v-for="b in orderedBookings" :key="b.id" class="student-booking-card">
+                <div class="booking-card-info">
+                  <h3>{{ resourceDisplayName(bookingResource(b)) }}</h3>
+                  <p><Clock3 :size="13" />{{ b.startTime?.replace('T', ' ').slice(0, 16) }} - {{ b.endTime?.slice(11, 16) }}<span>{{ b.purpose }}</span></p>
+                  <p v-if="b.status === 'REJECTED'" class="booking-reject-reason">驳回原因：{{ bookingRejectReason(b) || '暂无说明' }}</p>
+                  <p v-else-if="showCheckin(b)" class="booking-checkin-hint">{{ checkinHintText(b) }}</p>
+                </div>
+                <span class="booking-card-status" :class="b.status.toLowerCase()">{{ bookingStatusText(b.status) }}</span>
+                <div class="booking-card-actions">
+                  <button v-if="showCheckin(b)" class="booking-checkin" type="button" :disabled="!canCheckin(b)" :title="checkinTitle(b)" @click="checkin(b.id)">签到</button>
+                  <button v-if="canCancel(b)" class="booking-cancel" type="button" @click="cancel(b.id)">取消</button>
+                </div>
+              </article>
+              <div v-if="!bookings.length" class="empty">还没有预约记录</div>
+            </div>
+          </section>
+          <UserMaintenance :key="`student-maintenance-${user?.id}`" compact :resources="resources" :bookings="bookings" />
+        </aside>
       </div>
-      <section class="panel history student-bookings">
-        <div class="panel-head">
-          <div>
-            <h2>我的预约</h2>
-            <p>近期使用安排与状态</p>
-          </div>
-        </div>
-        <div class="student-booking-list">
-          <article v-for="b in orderedBookings" :key="b.id" class="student-booking-card">
-            <div class="booking-card-info">
-              <h3>{{ resourceDisplayName(bookingResource(b)) }}</h3>
-              <p><Clock3 :size="13" />{{ b.startTime?.replace('T', ' ').slice(0, 16) }} - {{ b.endTime?.slice(11, 16) }}<span>{{ b.purpose }}</span></p>
-              <p v-if="b.status === 'REJECTED'" class="booking-reject-reason">驳回原因：{{ bookingRejectReason(b) || '暂无说明' }}</p>
-              <p v-else-if="showCheckin(b)" class="booking-checkin-hint">{{ checkinHintText(b) }}</p>
-            </div>
-            <span class="booking-card-status" :class="b.status.toLowerCase()">{{ bookingStatusText(b.status) }}</span>
-            <div class="booking-card-actions">
-              <button v-if="showCheckin(b)" class="booking-checkin" type="button" :disabled="!canCheckin(b)" :title="checkinTitle(b)" @click="checkin(b.id)">签到</button>
-              <button v-if="canCancel(b)" class="booking-cancel" type="button" @click="cancel(b.id)">取消</button>
-            </div>
-          </article>
-          <div v-if="!bookings.length" class="empty">还没有预约记录</div>
-        </div>
-      </section>
-      <UserMaintenance :key="`student-maintenance-${user?.id}`" :resources="resources" :bookings="bookings" />
     </main>
     <div v-if="bookingModalOpen" class="booking-modal-backdrop" @click.self="closeBookingModal">
       <section class="booking-modal" role="dialog" aria-modal="true">
