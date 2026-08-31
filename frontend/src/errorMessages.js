@@ -58,6 +58,7 @@ const ERROR_MESSAGES = {
   SELF_ROLE_CHANGE_FORBIDDEN: "不能移除当前账号的系统管理员角色",
   CATEGORY_EXISTS: "分类名称已存在",
   ASSET_EXISTS: "资产编号或序列号已存在",
+  ASSET_NO_REQUIRED: "未开启自动编号时必须填写资产编号",
   SERIAL_NO_REQUIRED: "序列化或贵重资产必须填写唯一序列号",
   ASSET_UNAVAILABLE: "该资产当前不能提交报修",
   ASSET_REQUIRED: "开始维修前必须绑定具体资产",

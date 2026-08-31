@@ -2,9 +2,10 @@
 import { computed, onMounted, ref } from "vue";
 import axios from "axios";
 import AssetAdminPanel from "./AssetAdminPanel.vue";
+import AssetManagePanel from "./AssetManagePanel.vue";
 import MaintenanceAdminPanel from "./MaintenanceAdminPanel.vue";
 import {
-  AlertTriangle, BarChart3, CalendarClock, Check, ChevronRight, ClipboardCheck,
+  AlertTriangle, BarChart3, Boxes, CalendarClock, Check, ChevronRight, ClipboardCheck,
   FlaskConical, PackageSearch, Plus, RefreshCw, Save, Search, Settings, Shield, ScrollText, Users, Wrench, X,
 } from "lucide-vue-next";
 const PIE_COLORS = ["#2f7a5f", "#d4a24c", "#5b7fa6", "#c36b5a", "#8b6dad", "#4d8f7a", "#b08968", "#6aa88a"];
@@ -23,7 +24,7 @@ const props = defineProps({ user: { type: Object, required: true }, initialResou
 const isSystemAdmin = computed(() => (props.user?.roles || []).includes("SYSTEM_ADMIN"));
 const tabs = computed(() => isSystemAdmin.value
   ? [{ id: "overview", label: "总览", icon: BarChart3 }, { id: "users", label: "用户与角色", icon: Users }, { id: "configs", label: "系统配置", icon: Settings }, { id: "logs", label: "管理员日志", icon: ScrollText }]
-  : [{ id: "overview", label: "运营总览", icon: BarChart3 }, { id: "resources", label: "资源管理", icon: FlaskConical }, { id: "resource-types", label: "资源类别", icon: FlaskConical }, { id: "assets", label: "资产台账", icon: PackageSearch }, { id: "maintenance", label: "报修处理", icon: Wrench }, { id: "bookings", label: "预约", icon: ClipboardCheck }, { id: "violations", label: "违约处理", icon: AlertTriangle }]);
+  : [{ id: "overview", label: "运营总览", icon: BarChart3 }, { id: "resources", label: "资源管理", icon: FlaskConical }, { id: "resource-types", label: "资源类别", icon: FlaskConical }, { id: "assets", label: "资产台账", icon: PackageSearch }, { id: "asset-manage", label: "资产管理", icon: Boxes }, { id: "maintenance", label: "报修处理", icon: Wrench }, { id: "bookings", label: "预约", icon: ClipboardCheck }, { id: "violations", label: "违约处理", icon: AlertTriangle }]);
 const activeTab = ref("overview");
 const loading = ref(false);
 const notice = ref("");
@@ -631,6 +632,9 @@ onMounted(loadAll);
 
       <template v-else-if="activeTab === 'assets'">
         <AssetAdminPanel :assets="assets" :categories="assetCategories" :resources="resources" :loading="loading" @refresh="loadAll" />
+      </template>
+      <template v-else-if="activeTab === 'asset-manage'">
+        <AssetManagePanel :assets="assets" :categories="assetCategories" :resources="resources" :loading="loading" @refresh="loadAll" />
       </template>
 
       <template v-else-if="activeTab === 'maintenance'">

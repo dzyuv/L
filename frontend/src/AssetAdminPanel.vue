@@ -163,6 +163,7 @@ async function saveAsset() {
   if (!form.value.assetNo.trim() || !form.value.name.trim() || !form.value.categoryId) {
     return show(formMode.value === "existing" ? "请填写这一台设备的资产编号" : "请填写资产编号、名称和分类", true);
   }
+  if (formMode.value === "new" && !form.value.serialNo.trim()) return show("新资产类型的第一台设备必须填写资产编号和序列号", true);
   if ((selectedFormCategory.value?.serialized || selectedFormCategory.value?.highValue) && !form.value.serialNo.trim()) return show("序列化或贵重资产必须填写唯一序列号", true);
   saving.value = true;
   try {
@@ -300,8 +301,8 @@ async function openHistory(item) {
       <label>型号<input v-model="form.model" /></label>
       <label class="asset-wide">规格<input v-model="form.specification" /></label>
       <div class="form-section-title asset-wide">{{ formMode === 'edit' ? '这一台设备' : '第一台设备' }}</div>
-      <label>资产编号<input v-model.trim="form.assetNo" maxlength="50" /></label>
-      <label>唯一序列号<input v-model.trim="form.serialNo" :placeholder="selectedFormCategory?.serialized || selectedFormCategory?.highValue ? '必填' : '选填'" /></label>
+      <label>资产编号<input v-model.trim="form.assetNo" maxlength="50" :placeholder="formMode === 'new' ? '必填' : ''" /></label>
+      <label>唯一序列号<input v-model.trim="form.serialNo" :placeholder="formMode === 'new' || selectedFormCategory?.serialized || selectedFormCategory?.highValue ? '必填' : '选填'" /></label>
       <label>关联预约资源<select v-model="form.resourceId"><option value="">不关联</option><option v-for="resource in resources" :key="resource.id" :value="resource.id">{{ resource.name }}</option></select></label>
       <label>存放位置<input v-model="form.location" /></label>
       <label>资产状态<select v-model="form.status"><option value="IN_STOCK">在库</option><option value="IN_USE">使用中</option><option value="REPORTED">已上报</option><option value="MAINTENANCE">维修中</option><option value="LOST">丢失</option><option value="SCRAPPED">已报废</option></select></label>

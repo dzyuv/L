@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class AssetServiceImpl implements AssetService {
@@ -52,6 +54,120 @@ public class AssetServiceImpl implements AssetService {
                         "brand", Objects.toString(item.brand, ""), "model", Objects.toString(item.model, ""),
                         "status", item.status, "location", Objects.toString(item.location, "")))
                 .toList();
+    }
+    public List<?> publicTypes(HttpServletRequest request) {
+        roles.currentUserId(request);
+        Map<String, Map<String, Object>> grouped = new LinkedHashMap<>();
+        for (Asset item : assets.findByDeletedFalseOrderByCreatedAtDesc()) {
+            if (Set.of("SCRAPPED", "LOST").contains(item.status) || item.resourceId == null) continue;
+            String key = item.categoryId + "\u0001" + item.name + "\u0001" + Objects.toString(item.brand, "") + "\u0001" + Objects.toString(item.model, "");
+            Map<String, Object> row = grouped.computeIfAbsent(key, ignored -> {
+                Map<String, Object> created = new LinkedHashMap<>();
+                created.put("key", key);
+                created.put("name", item.name);
+                created.put("brand", Objects.toString(item.brand, ""));
+                created.put("model", Objects.toString(item.model, ""));
+                created.put("categoryId", item.categoryId);
+                created.put("resourceIds", new LinkedHashSet<Long>());
+                created.put("count", 0);
+                return created;
+            });
+            @SuppressWarnings("unchecked")
+            Set<Long> resourceIds = (Set<Long>) row.get("resourceIds");
+            resourceIds.add(item.resourceId);
+            row.put("count", ((Integer) row.get("count")) + 1);
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map<String, Object> row : grouped.values()) {
+            @SuppressWarnings("unchecked")
+            Set<Long> resourceIds = (Set<Long>) row.get("resourceIds");
+            Map<String, Object> copy = new LinkedHashMap<>(row);
+            copy.put("resourceIds", List.copyOf(resourceIds));
+            result.add(copy);
+        }
+        return result;
+    }
+    public Map<String, Object> nextAssetNo(String prefix, HttpServletRequest request) {
+        roles.requireLabAdmin(request);
+        return Map.of("assetNo", generateAssetNo(prefix), "prefix", normalizePrefix(prefix));
+    }
+    @Transactional
+    public Map<String, Object> batchCreate(AssetController.BatchCreateRequest body, HttpServletRequest request) {
+        roles.requireLabAdmin(request);
+        validateCategory(body.categoryId());
+        validateResource(body.resourceId());
+        validateStatus(body.status());
+        AssetCategory category = categories.findById(body.categoryId()).orElseThrow(() -> notFound("Asset category does not exist"));
+        boolean requireSerial = category.serialized || category.highValue;
+        List<Asset> created = new ArrayList<>();
+        String prefix = normalizePrefix(body.numberPrefix() != null && !body.numberPrefix().isBlank() ? body.numberPrefix() : suggestPrefix(body.name()));
+        int generated = 0;
+        for (AssetController.BatchAssetItem row : body.items()) {
+            Asset item = new Asset();
+            item.categoryId = body.categoryId();
+            item.name = body.name().trim();
+            item.brand = body.brand();
+            item.model = body.model();
+            item.specification = body.specification();
+            item.status = body.status() == null || body.status().isBlank() ? "IN_STOCK" : body.status();
+            item.resourceId = row.resourceId() != null ? row.resourceId() : body.resourceId();
+            validateResource(item.resourceId);
+            item.location = row.location();
+            item.originalCost = row.originalCost();
+            item.remark = row.remark();
+            item.serialNo = row.serialNo() == null || row.serialNo().isBlank() ? null : row.serialNo().trim();
+            if (requireSerial && item.serialNo == null) throw new BusinessException("SERIAL_NO_REQUIRED", "Serialized or high-value assets require a serial number", HttpStatus.BAD_REQUEST);
+            if (row.assetNo() != null && !row.assetNo().isBlank()) item.assetNo = row.assetNo().trim();
+            else if (body.autoNumber()) {
+                item.assetNo = generateAssetNo(prefix);
+                generated++;
+            } else throw new BusinessException("ASSET_NO_REQUIRED", "Asset number is required when auto numbering is disabled", HttpStatus.BAD_REQUEST);
+            validateSerialized(item);
+            try { created.add(assets.saveAndFlush(item)); }
+            catch (DataIntegrityViolationException e) { throw new BusinessException("ASSET_EXISTS", "Asset number or serial number already exists", HttpStatus.CONFLICT); }
+            record(item, null, item.status, "Batch asset created", roles.currentUserId(request));
+        }
+        return Map.of("items", created, "total", created.size(), "generated", generated);
+    }
+    @Transactional
+    public Map<String, Object> moveAssets(AssetController.MoveAssetsRequest body, HttpServletRequest request) {
+        roles.requireLabAdmin(request);
+        validateResource(body.resourceId());
+        List<Asset> moved = new ArrayList<>();
+        for (Long id : body.assetIds()) {
+            Asset item = findAsset(id);
+            item.resourceId = body.resourceId();
+            if (body.location() != null && !body.location().isBlank()) item.location = body.location().trim();
+            item.updatedAt = LocalDateTime.now();
+            moved.add(assets.save(item));
+            record(item, item.status, item.status, "Moved to resource " + body.resourceId(), roles.currentUserId(request));
+        }
+        return Map.of("items", moved, "total", moved.size());
+    }
+    private String normalizePrefix(String prefix) {
+        String value = prefix == null ? "" : prefix.trim().toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9-]", "");
+        if (value.isBlank()) return "AST";
+        return value.endsWith("-") ? value.substring(0, value.length() - 1) : value;
+    }
+    private String suggestPrefix(String name) {
+        if (name == null || name.isBlank()) return "AST";
+        String letters = name.replaceAll("[^A-Za-z0-9]", "").toUpperCase(Locale.ROOT);
+        if (letters.length() >= 3) return letters.substring(0, 3);
+        return "AST";
+    }
+    private String generateAssetNo(String prefix) {
+        String normalized = normalizePrefix(prefix);
+        Pattern pattern = Pattern.compile("^" + Pattern.quote(normalized) + "-(\\d+)$", Pattern.CASE_INSENSITIVE);
+        int max = 0;
+        int width = 3;
+        for (Asset item : assets.findByDeletedFalseOrderByCreatedAtDesc()) {
+            Matcher matcher = pattern.matcher(item.assetNo);
+            if (!matcher.matches()) continue;
+            String digits = matcher.group(1);
+            width = Math.max(width, digits.length());
+            max = Math.max(max, Integer.parseInt(digits));
+        }
+        return normalized + "-" + String.format("%0" + width + "d", max + 1);
     }
     public Map<String, Object> listAssets(String query, String status, Long categoryId, HttpServletRequest request) {
         roles.requireLabAdmin(request);

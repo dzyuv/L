@@ -26,6 +26,11 @@ const resourceTypes = ref([]);
 const resourceQuery = ref("");
 const resourceTypeFilter = ref("");
 const onlyAvailableResources = ref(false);
+const filterDate = ref("");
+const filterStartTime = ref("");
+const filterEndTime = ref("");
+const selectedDeviceKeys = ref([]);
+const publicAssetTypes = ref([]);
 const availabilityByResource = ref({});
 const bookings = ref([]);
 const currentTime = ref(new Date());
@@ -75,13 +80,14 @@ const resourceBookingCounts = computed(() => bookings.value.reduce((counts, item
   return counts;
 }, {}));
 const resourceTypeMap = computed(() => Object.fromEntries(resourceTypes.value.map((item) => [item.id, item])));
+const hasBookingFilters = computed(() => Boolean(resourceQuery.value || resourceTypeFilter.value || onlyAvailableResources.value || filterDate.value || filterStartTime.value || filterEndTime.value || selectedDeviceKeys.value.length));
 const filteredResources = computed(() => {
   const query = resourceQuery.value.trim().toLowerCase();
   return resources.value.filter((resource) => {
     const matchesQuery = !query || [resource.name, resource.location, resource.description].some((value) => String(value || "").toLowerCase().includes(query));
     const matchesType = !resourceTypeFilter.value || resource.typeId === Number(resourceTypeFilter.value);
     const hasAvailability = resourceHasAvailability(resource);
-    return matchesQuery && matchesType && (!onlyAvailableResources.value || hasAvailability);
+    return matchesQuery && matchesType && (!onlyAvailableResources.value || hasAvailability) && resourceMatchesTime(resource) && resourceMatchesDevices(resource);
   });
 });
 const teacherAvailableResourceCount = computed(() => resources.value.filter(resourceHasAvailability).length);
@@ -386,14 +392,16 @@ async function load() {
       approvals.value = [];
       return;
     }
-    const [r, b, types] = await Promise.all([
+    const [r, b, types, assetTypes] = await Promise.all([
       axios.get("/api/v1/resources"),
       axios.get("/api/v1/bookings/my"),
       axios.get("/api/v1/resource-types"),
+      axios.get("/api/v1/assets/types").catch(() => ({ data: { data: [] } })),
     ]);
     resources.value = r.data.data;
     bookings.value = b.data.data;
     resourceTypes.value = types.data?.data || [];
+    publicAssetTypes.value = assetTypes.data?.data || [];
     if (isTeacher.value) {
       const approvalResponse = await axios.get("/api/v1/approvals/mine");
       approvals.value = approvalResponse.data?.data || [];
@@ -468,6 +476,43 @@ function nextAvailableSlot(resource) {
 }
 function resourceHasAvailability(resource) {
   return Boolean(nextAvailableSlot(resource));
+}
+function resourceMatchesTime(resource) {
+  if (!filterDate.value && !filterStartTime.value && !filterEndTime.value) return true;
+  const slots = availabilityByResource.value[resource?.id]?.slots || [];
+  const date = filterDate.value;
+  const start = filterStartTime.value || "00:00";
+  const end = filterEndTime.value || "23:59";
+  return slots.some((slot) => {
+    if (!slot.available) return false;
+    if (date && slot.date !== date) return false;
+    return slot.startTime < end && slot.endTime > start;
+  });
+}
+function resourceMatchesDevices(resource) {
+  if (!selectedDeviceKeys.value.length) return true;
+  return selectedDeviceKeys.value.every((key) => {
+    const type = publicAssetTypes.value.find((item) => item.key === key);
+    return Boolean(type?.resourceIds?.some((id) => Number(id) === Number(resource.id)));
+  });
+}
+function toggleDeviceFilter(key) {
+  selectedDeviceKeys.value = selectedDeviceKeys.value.includes(key)
+    ? selectedDeviceKeys.value.filter((item) => item !== key)
+    : [...selectedDeviceKeys.value, key];
+}
+function clearResourceFilters() {
+  resourceQuery.value = "";
+  resourceTypeFilter.value = "";
+  onlyAvailableResources.value = false;
+  filterDate.value = "";
+  filterStartTime.value = "";
+  filterEndTime.value = "";
+  selectedDeviceKeys.value = [];
+}
+function deviceTypeLabel(item) {
+  const spec = [item.brand, item.model].filter(Boolean).join(" ");
+  return spec ? `${item.name} · ${spec}` : item.name;
 }
 async function loadAvailability(items) {
   const now = new Date();
@@ -777,8 +822,15 @@ onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
           <div class="resource-filters teacher-resource-filters">
             <label class="resource-search"><Search :size="15" /><input v-model="resourceQuery" placeholder="搜索资源名称、位置或用途" /></label>
             <select v-model="resourceTypeFilter"><option value="">全部类别</option><option v-for="type in resourceTypes" :key="type.id" :value="type.id">{{ type.name }}</option></select>
+            <label class="time-filter">日期<input v-model="filterDate" type="date" /></label>
+            <label class="time-filter">开始<input v-model="filterStartTime" type="time" /></label>
+            <label class="time-filter">结束<input v-model="filterEndTime" type="time" /></label>
             <label class="availability-filter"><input v-model="onlyAvailableResources" type="checkbox" />只看未来 14 天有空闲</label>
-            <button v-if="resourceQuery || resourceTypeFilter || onlyAvailableResources" class="clear-resource-filter" type="button" @click="resourceQuery = ''; resourceTypeFilter = ''; onlyAvailableResources = false">清除筛选</button>
+            <button v-if="hasBookingFilters" class="clear-resource-filter" type="button" @click="clearResourceFilters">清除筛选</button>
+          </div>
+          <div v-if="publicAssetTypes.length" class="device-filter-row teacher-device-filter">
+            <span>设备组合</span>
+            <button v-for="item in publicAssetTypes" :key="item.key" type="button" class="device-chip" :class="{ active: selectedDeviceKeys.includes(item.key) }" @click="toggleDeviceFilter(item.key)">{{ deviceTypeLabel(item) }}</button>
           </div>
           <div class="resource-card-grid teacher-resource-grid">
             <button v-for="r in filteredResources" :key="r.id" class="resource-card" :class="{ selected: bookingForm.resourceId === r.id }" type="button" @click="selectResource(r)">
@@ -827,9 +879,16 @@ onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
             <div class="resource-filters">
               <label class="resource-search"><Search :size="15" /><input v-model="resourceQuery" placeholder="搜索实验室名称、位置或用途" /></label>
               <select v-model="resourceTypeFilter"><option value="">全部类别</option><option v-for="type in resourceTypes" :key="type.id" :value="type.id">{{ type.name }}</option></select>
+              <label class="time-filter">日期<input v-model="filterDate" type="date" /></label>
+              <label class="time-filter">开始<input v-model="filterStartTime" type="time" /></label>
+              <label class="time-filter">结束<input v-model="filterEndTime" type="time" /></label>
               <label class="availability-filter"><input v-model="onlyAvailableResources" type="checkbox" />只看未来14天有空闲</label>
-              <button v-if="resourceQuery || resourceTypeFilter || onlyAvailableResources" class="clear-resource-filter" @click="resourceQuery = ''; resourceTypeFilter = ''; onlyAvailableResources = false">清除筛选</button>
+              <button v-if="hasBookingFilters" class="clear-resource-filter" @click="clearResourceFilters">清除筛选</button>
               <span class="resource-filter-count">显示 {{ filteredResources.length }} / {{ resources.length }}</span>
+            </div>
+            <div v-if="publicAssetTypes.length" class="device-filter-row">
+              <span>设备组合</span>
+              <button v-for="item in publicAssetTypes" :key="item.key" type="button" class="device-chip" :class="{ active: selectedDeviceKeys.includes(item.key) }" @click="toggleDeviceFilter(item.key)">{{ deviceTypeLabel(item) }}</button>
             </div>
             <div class="resource-card-grid">
               <button
