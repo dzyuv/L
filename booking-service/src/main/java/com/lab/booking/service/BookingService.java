@@ -19,7 +19,6 @@ public interface BookingService {
     void markNoShow();
     void expirePendingApprovals();
     Map<String, Object> adminList(Long resourceId, Long userId, String status, HttpServletRequest servletRequest);
-    Map<String, Object> statisticsSource(LocalDateTime start, LocalDateTime end);
     Map<String, Object> violations(HttpServletRequest servletRequest);
     Object processViolation(Long violationId, String status, String comment, HttpServletRequest servletRequest);
     Map<String, Object> cancelOverlappingForClosure(Long resourceId, LocalDateTime start, LocalDateTime end, String reason, HttpServletRequest servletRequest);

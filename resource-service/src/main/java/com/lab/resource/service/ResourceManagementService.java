@@ -22,6 +22,5 @@ public interface ResourceManagementService {
     List<?> listManagers(Long id, HttpServletRequest servletRequest);
     void removeManager(Long id, Long managerId, HttpServletRequest servletRequest);
     Map<String, Object> calendar(Long id, LocalDate start, LocalDate end);
-    List<Map<String, Object>> statisticsCatalog(HttpServletRequest servletRequest);
     ResourceController.BookingRule bookingRule(Long id, LocalDateTime startTime, LocalDateTime endTime, int participants, Long applicantUserId, HttpServletRequest servletRequest);
 }

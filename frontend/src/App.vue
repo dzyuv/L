@@ -16,7 +16,6 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
-  Users as UsersIcon,
   X,
 } from "lucide-vue-next";
 const token = ref(localStorage.getItem("token") || "");
@@ -846,7 +845,7 @@ onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
           <div class="resource-card-grid teacher-resource-grid">
             <button v-for="r in filteredResources" :key="r.id" class="resource-card" :class="{ selected: bookingForm.resourceId === r.id }" type="button" @click="selectResource(r)">
               <div class="resource-card-image" :class="{ 'resource-image-fallback': !resourceImage(r) }"><img v-if="resourceImage(r)" :src="resourceImage(r)" :alt="`${resourceDisplayName(r)} 场景图`" loading="lazy" @error="handleResourceImageError" /><span v-else class="resource-image-empty">暂无图片</span><span class="resource-card-kind">{{ resourceTypeName(r) }}</span><span class="resource-card-status" :class="{ unavailable: !resourceHasAvailability(r) }"><i></i>{{ resourceHasAvailability(r) ? '有空闲' : '暂无空闲' }}</span></div>
-              <div class="resource-card-body"><div class="resource-card-title"><strong>{{ resourceDisplayName(r) }}</strong><ChevronRight :size="16" /></div><p>{{ resourceDisplayDescription(r) }}</p><div class="resource-card-meta"><span><CalendarDays :size="14" />{{ r.location }}</span><span><UsersIcon :size="14" />{{ r.capacity }} 人</span></div><div class="resource-card-footer"><span v-if="nextAvailableSlot(r)">最近开放 {{ nextAvailableSlot(r).date }} {{ nextAvailableSlot(r).startTime }}</span><span v-else>未来 14 天暂无开放时段</span><b>申请预约</b></div></div>
+              <div class="resource-card-body"><div class="resource-card-title"><strong>{{ resourceDisplayName(r) }}</strong><ChevronRight :size="16" /></div><p>{{ resourceDisplayDescription(r) }}</p><div class="resource-card-meta"><span><CalendarDays :size="14" />{{ r.location }}</span></div><div class="resource-card-footer"><span v-if="nextAvailableSlot(r)">最近开放 {{ nextAvailableSlot(r).date }} {{ nextAvailableSlot(r).startTime }}</span><span v-else>未来 14 天暂无开放时段</span><b>申请预约</b></div></div>
             </button>
             <div v-if="!filteredResources.length" class="teacher-empty resource-card-empty">{{ resources.length ? '没有符合筛选条件的资源' : '暂无可预约资源' }}</div>
           </div>
@@ -913,7 +912,7 @@ onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
                 @click="selectResource(r)"
               >
                 <div class="resource-card-image" :class="{ 'resource-image-fallback': !resourceImage(r) }"><img v-if="resourceImage(r)" :src="resourceImage(r)" :alt="`${resourceDisplayName(r)} 场景图`" loading="lazy" @error="handleResourceImageError" /><span v-else class="resource-image-empty">暂无图片</span><span class="resource-card-kind">{{ resourceTypeName(r) }}</span><span class="resource-card-status" :class="{ unavailable: !resourceHasAvailability(r) }"><i></i>{{ resourceHasAvailability(r) ? '有空闲' : '暂无空闲' }}</span></div>
-                <div class="resource-card-body"><div class="resource-card-title"><strong>{{ resourceDisplayName(r) }}</strong><ChevronRight :size="16" /></div><p>{{ resourceDisplayDescription(r) }}</p><div class="resource-card-meta"><span><CalendarDays :size="14" />{{ r.location }}</span><span><UsersIcon :size="14" />{{ r.capacity }} 人</span></div><div class="resource-card-footer"><span v-if="nextAvailableSlot(r)">最近开放 {{ nextAvailableSlot(r).date }} {{ nextAvailableSlot(r).startTime }}</span><span v-else>未来14天暂无开放时段</span><b>{{ resourceBookingCounts[r.id] || 0 }} 次我的预约</b></div></div>
+                <div class="resource-card-body"><div class="resource-card-title"><strong>{{ resourceDisplayName(r) }}</strong><ChevronRight :size="16" /></div><p>{{ resourceDisplayDescription(r) }}</p><div class="resource-card-meta"><span><CalendarDays :size="14" />{{ r.location }}</span></div><div class="resource-card-footer"><span v-if="nextAvailableSlot(r)">最近开放 {{ nextAvailableSlot(r).date }} {{ nextAvailableSlot(r).startTime }}</span><span v-else>未来14天暂无开放时段</span><b>{{ resourceBookingCounts[r.id] || 0 }} 次我的预约</b></div></div>
               </button>
               <div v-if="!filteredResources.length" class="empty resource-card-empty">
                 {{ resources.length ? '没有符合当前筛选条件的资源。' : '暂无资源，请先在资源服务中配置。' }}
@@ -980,7 +979,6 @@ onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
           </div>
           <div class="modal-form">
             <label>使用目的<input v-model="bookingForm.purpose" placeholder="请输入本次使用目的" /></label>
-            <label>参与人数<input v-model.number="bookingForm.participants" type="number" min="1" :max="bookingForm.capacity" /></label>
           </div>
         </div>
         <footer class="booking-modal-footer">

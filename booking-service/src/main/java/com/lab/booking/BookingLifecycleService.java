@@ -1,15 +1,10 @@
 package com.lab.booking;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lab.common.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.UUID;
 
 @Component
 public class BookingLifecycleService {
@@ -21,10 +16,8 @@ public class BookingLifecycleService {
     private final BookingSlotRepository slots;
     private final ViolationRecordRepository violations;
     private final UserRestrictionRepository restrictions;
-    private final OutboxEventRepository outbox;
-    private final ObjectMapper json;
 
-    BookingLifecycleService(BookingStatusHistoryRepository h,BookingSlotRepository s,ViolationRecordRepository v,UserRestrictionRepository r,OutboxEventRepository o,ObjectMapper objectMapper,
+    BookingLifecycleService(BookingStatusHistoryRepository h,BookingSlotRepository s,ViolationRecordRepository v,UserRestrictionRepository r,
                             @Value("${booking.violation.max-count:3}") int noShowThreshold,
                             @Value("${booking.violation.window-days:30}") int noShowWindowDays,
                             @Value("${booking.violation.restriction-days:30}") int restrictionDays){
@@ -32,8 +25,6 @@ public class BookingLifecycleService {
         slots=s;
         violations=v;
         restrictions=r;
-        outbox=o;
-        json=objectMapper;
         this.noShowThreshold=noShowThreshold;
         this.noShowWindowDays=noShowWindowDays;
         this.restrictionDays=restrictionDays;
@@ -111,30 +102,5 @@ public class BookingLifecycleService {
         history.reason=reason;
         history.requestId=requestId;
         histories.save(history);
-        writeStatusEvent(booking,from,to,operatorId,reason,requestId);
-    }
-
-    private void writeStatusEvent(Booking booking,String from,String to,Long operatorId,String reason,String requestId){
-        Map<String,Object> payload=new LinkedHashMap<>();
-        payload.put("bookingId",booking.id);
-        payload.put("bookingNo",booking.bookingNo);
-        payload.put("userId",booking.userId);
-        payload.put("resourceId",booking.resourceId);
-        payload.put("fromStatus",from);
-        payload.put("toStatus",to);
-        payload.put("operatorId",operatorId);
-        payload.put("reason",reason);
-        payload.put("requestId",requestId);
-        OutboxEvent event=new OutboxEvent();
-        event.eventId=UUID.randomUUID().toString();
-        event.eventType="booking.status.changed";
-        event.aggregateType="BOOKING";
-        event.aggregateId=booking.id;
-        try{
-            event.payload=json.writeValueAsString(payload);
-        }catch(JsonProcessingException exception){
-            throw new IllegalStateException("Cannot serialize booking outbox event",exception);
-        }
-        outbox.save(event);
     }
 }

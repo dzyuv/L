@@ -385,14 +385,6 @@ UPDATE approval_task SET
   assigned_user_id = @lab_admin_id, status = 'PENDING', deadline = TIMESTAMP(@next_monday, '18:00:00')
 WHERE booking_id = @teacher_pending_booking_id AND level = 1 AND sequence_no = 1;
 
-SET @student_pending_task_id = (SELECT MIN(id) FROM approval_task WHERE booking_id = @student_pending_booking_id AND level = 1 AND sequence_no = 1);
-SET @teacher_pending_task_id = (SELECT MIN(id) FROM approval_task WHERE booking_id = @teacher_pending_booking_id AND level = 1 AND sequence_no = 1);
-
-INSERT INTO approval_task_assignee (task_id, user_id, status, created_at) VALUES
-  (@student_pending_task_id, @teacher_id, 'CANDIDATE', @seed_now),
-  (@teacher_pending_task_id, @lab_admin_id, 'CANDIDATE', @seed_now)
-ON DUPLICATE KEY UPDATE status = 'CANDIDATE';
-
 -- ---------------------------------------------------------------------------
 -- Common system configuration
 -- ---------------------------------------------------------------------------

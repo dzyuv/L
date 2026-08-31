@@ -351,39 +351,6 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
-    public Map<String, Object> statisticsSource(LocalDateTime start, LocalDateTime end) {
-        List<Map<String, Object>> bookingItems = bookings.findAll().stream()
-                .filter(item -> item.startTime != null && item.endTime != null)
-                .filter(item -> item.startTime.isBefore(end) && item.endTime.isAfter(start))
-                .map(item -> {
-                    Map<String, Object> row = new LinkedHashMap<>();
-                    row.put("id", item.id);
-                    row.put("userId", item.userId);
-                    row.put("resourceId", item.resourceId);
-                    row.put("resourceName", item.resourceNameSnapshot);
-                    row.put("startTime", item.startTime);
-                    row.put("endTime", item.endTime);
-                    row.put("status", item.status);
-                    return row;
-                })
-                .toList();
-        List<Map<String, Object>> violationItems = violations.findAllByOrderByCreatedAtDesc().stream()
-                .filter(item -> item.createdAt != null && !item.createdAt.isBefore(start) && item.createdAt.isBefore(end))
-                .map(item -> {
-                    Map<String, Object> row = new LinkedHashMap<>();
-                    row.put("id", item.id);
-                    row.put("userId", item.userId);
-                    row.put("bookingId", item.bookingId);
-                    row.put("violationType", item.violationType);
-                    row.put("status", item.status);
-                    row.put("createdAt", item.createdAt);
-                    return row;
-                })
-                .toList();
-        return Map.of("bookings", bookingItems, "violations", violationItems);
-    }
-
-    @Override
     public Map<String, Object> violations(HttpServletRequest servletRequest) {
         roleGuard.requireLabAdmin(servletRequest);
         List<Map<String, Object>> items = violations.findAllByOrderByCreatedAtDesc().stream().map(item -> {

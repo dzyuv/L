@@ -18,7 +18,7 @@
 - 审批任务查询、通过和驳回
 - 统一响应格式、请求 ID、错误码和基础鉴权
 
-以下功能在当前版本属于开发占位或简化实现，测试时不要按生产完成度验收：RabbitMQ Outbox、邮件通知、完整多级审批自动编排、角色管理、违约记录持久化、统计数据聚合、二维码签到、管理员前端页面。
+以下功能在当前版本属于开发占位或简化实现，测试时不要按生产完成度验收：完整多级审批自动编排、二维码签到。
 
 ## 2. 环境要求
 
@@ -67,8 +67,6 @@ java -jar user-service/target/user-service-1.0.0.jar
 java -jar resource-service/target/resource-service-1.0.0.jar
 java -jar booking-service/target/booking-service-1.0.0.jar
 java -jar approval-service/target/approval-service-1.0.0.jar
-java -jar notification-service/target/notification-service-1.0.0.jar
-java -jar statistics-service/target/statistics-service-1.0.0.jar
 java -jar system-service/target/system-service-1.0.0.jar
 java -jar gateway/target/gateway-1.0.0.jar
 ```
@@ -82,8 +80,6 @@ java -jar gateway/target/gateway-1.0.0.jar
 | resource-service | 8082 |
 | booking-service | 8083 |
 | approval-service | 8084 |
-| notification-service | 8085 |
-| statistics-service | 8086 |
 | system-service | 8087 |
 
 ### 3.4 启动前端

@@ -12,8 +12,6 @@
     <module>resource-service</module>
     <module>booking-service</module>
     <module>approval-service</module>
-    <module>notification-service</module>
-    <module>statistics-service</module>
     <module>system-service</module>
     <module>gateway</module>
   </modules>

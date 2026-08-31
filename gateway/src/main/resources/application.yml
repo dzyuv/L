@@ -43,21 +43,6 @@ spring:
       predicates:
         - Path=/api/v1/approvals/**
 
-    - id: approval-admin-service
-      uri: lb://approval-service
-      predicates:
-        - Path=/api/v1/admin/approval-flows/**
-
-    - id: notification-service
-      uri: lb://notification-service
-      predicates:
-        - Path=/api/v1/notifications/**
-
-    - id: statistics-service
-      uri: lb://statistics-service
-      predicates:
-        - Path=/api/v1/statistics/**
-
     - id: system-service
       uri: lb://system-service
       predicates:

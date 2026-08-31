@@ -38,10 +38,4 @@ public class InternalBookingController {
         return ApiResponse.success(bookings.cancelOverlappingForClosure(body.resourceId(), body.startTime(), body.endTime(), body.reason(), request),
                 Objects.toString(request.getAttribute("X-Request-Id"), ""));
     }
-
-    @GetMapping("/statistics-source")
-    public ApiResponse<?> statisticsSource(@RequestParam("start") LocalDateTime start, @RequestParam("end") LocalDateTime end, HttpServletRequest request) {
-        internalServices.require(request);
-        return ApiResponse.success(bookings.statisticsSource(start, end), Objects.toString(request.getAttribute("X-Request-Id"), ""));
-    }
 }

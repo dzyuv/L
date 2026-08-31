@@ -1,16 +1,26 @@
 -- Laboratory equipment booking database structure.
--- Baseline: the live MySQL instance currently used by the services.
--- Unused leftover tables lab_user.users and lab_resource.resources are omitted.
--- Run on a fresh MySQL 8 instance, then load demonstration data with test-data.sql.
+-- This file is the source of truth. Running it on MySQL 8 creates the five
+-- business databases, drops leftover unused databases/tables, and creates current tables.
+-- Load demonstration data afterwards with test-data.sql.
 SET NAMES utf8mb4;
 
 CREATE DATABASE IF NOT EXISTS lab_user DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS lab_resource DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS lab_booking DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS lab_approval DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE DATABASE IF NOT EXISTS lab_notification DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE DATABASE IF NOT EXISTS lab_statistics DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS lab_system DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+DROP DATABASE IF EXISTS lab_notification;
+DROP DATABASE IF EXISTS lab_statistics;
+DROP TABLE IF EXISTS lab_user.users;
+DROP TABLE IF EXISTS lab_resource.resources;
+DROP TABLE IF EXISTS lab_booking.booking_participant;
+DROP TABLE IF EXISTS lab_booking.idempotency_record;
+DROP TABLE IF EXISTS lab_booking.outbox_event;
+DROP TABLE IF EXISTS lab_approval.approval_task_assignee;
+DROP TABLE IF EXISTS lab_approval.approval_node;
+DROP TABLE IF EXISTS lab_approval.approval_flow;
+DROP TABLE IF EXISTS lab_system.data_dictionary;
 
 USE lab_user;
 CREATE TABLE IF NOT EXISTS `user` (
@@ -286,15 +296,6 @@ CREATE TABLE IF NOT EXISTS booking_slot (
   PRIMARY KEY (id),
   UNIQUE KEY uk_resource_slot_active (active_slot_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-CREATE TABLE IF NOT EXISTS booking_participant (
-  id BIGINT NOT NULL AUTO_INCREMENT,
-  booking_id BIGINT NOT NULL,
-  user_id BIGINT NULL,
-  name_snapshot VARCHAR(50) NOT NULL,
-  phone_snapshot VARCHAR(30) NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS booking_status_history (
   id BIGINT NOT NULL AUTO_INCREMENT,
   booking_id BIGINT NOT NULL,
@@ -333,64 +334,8 @@ CREATE TABLE IF NOT EXISTS user_restriction (
   PRIMARY KEY (id),
   KEY idx_restriction_user_status (user_id, status, restricted_until)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-CREATE TABLE IF NOT EXISTS idempotency_record (
-  id BIGINT NOT NULL AUTO_INCREMENT,
-  idempotency_key VARCHAR(64) NOT NULL,
-  operator_id BIGINT NOT NULL,
-  request_uri VARCHAR(200) NOT NULL,
-  request_hash VARCHAR(64) NOT NULL,
-  response_status INT NULL,
-  response_body JSON NULL,
-  status VARCHAR(20) NOT NULL,
-  expires_at DATETIME(3) NOT NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (id),
-  UNIQUE KEY uk_idempotency (operator_id, idempotency_key, request_uri)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-CREATE TABLE IF NOT EXISTS outbox_event (
-  id BIGINT NOT NULL AUTO_INCREMENT,
-  event_id VARCHAR(255) NOT NULL,
-  event_type VARCHAR(255) NULL,
-  aggregate_type VARCHAR(255) NULL,
-  aggregate_id BIGINT NOT NULL,
-  payload JSON NULL,
-  status VARCHAR(255) NULL,
-  retry_count INT NOT NULL DEFAULT 0,
-  next_retry_at DATETIME(3) NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  last_error VARCHAR(255) NULL,
-  sent_at DATETIME(3) NULL,
-  PRIMARY KEY (id),
-  UNIQUE KEY event_id (event_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 USE lab_approval;
-CREATE TABLE IF NOT EXISTS approval_flow (
-  id BIGINT NOT NULL AUTO_INCREMENT,
-  resource_type_id BIGINT NOT NULL,
-  version INT NOT NULL,
-  enabled TINYINT(1) NOT NULL DEFAULT 1,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  created_by BIGINT NOT NULL DEFAULT 0,
-  PRIMARY KEY (id),
-  UNIQUE KEY uk_approval_flow (resource_type_id, version)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-CREATE TABLE IF NOT EXISTS approval_node (
-  id BIGINT NOT NULL AUTO_INCREMENT,
-  flow_id BIGINT NOT NULL,
-  level INT NOT NULL,
-  approver_role VARCHAR(255) NULL,
-  approver_scope VARCHAR(100) NULL,
-  sequence_no INT NOT NULL DEFAULT 1,
-  scope_type VARCHAR(255) NULL,
-  scope_value VARCHAR(255) NULL,
-  approval_rule VARCHAR(255) NULL,
-  quorum_count INT NULL,
-  deadline_minutes INT NOT NULL DEFAULT 1440,
-  PRIMARY KEY (id),
-  UNIQUE KEY uk_approval_node (flow_id, level, sequence_no)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS approval_task (
   id BIGINT NOT NULL AUTO_INCREMENT,
   approver_role VARCHAR(255) NULL,
@@ -418,15 +363,6 @@ CREATE TABLE IF NOT EXISTS approval_task (
   total_levels INT NOT NULL DEFAULT 1,
   PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-CREATE TABLE IF NOT EXISTS approval_task_assignee (
-  id BIGINT NOT NULL AUTO_INCREMENT,
-  task_id BIGINT NOT NULL,
-  user_id BIGINT NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'CANDIDATE',
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (id),
-  UNIQUE KEY uk_task_assignee (task_id, user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS approval_record (
   id BIGINT NOT NULL AUTO_INCREMENT,
   task_id BIGINT NOT NULL,
@@ -439,93 +375,7 @@ CREATE TABLE IF NOT EXISTS approval_record (
   PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-USE lab_notification;
-CREATE TABLE IF NOT EXISTS announcement (
-  id BIGINT NOT NULL AUTO_INCREMENT,
-  title VARCHAR(200) NOT NULL,
-  content TEXT NOT NULL,
-  publisher_id BIGINT NOT NULL,
-  status VARCHAR(20) NOT NULL,
-  published_at DATETIME(3) NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-CREATE TABLE IF NOT EXISTS notification (
-  id BIGINT NOT NULL AUTO_INCREMENT,
-  user_id BIGINT NOT NULL,
-  type VARCHAR(255) NULL,
-  title VARCHAR(255) NULL,
-  content VARCHAR(255) NULL,
-  is_read TINYINT(1) NOT NULL DEFAULT 0,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  read_at DATETIME(3) NULL,
-  PRIMARY KEY (id),
-  KEY idx_notification_user_read_time (user_id, is_read, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-CREATE TABLE IF NOT EXISTS notification_delivery (
-  id BIGINT NOT NULL AUTO_INCREMENT,
-  notification_id BIGINT NOT NULL,
-  channel VARCHAR(20) NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-  retry_count INT NOT NULL DEFAULT 0,
-  last_error VARCHAR(1000) NULL,
-  sent_at DATETIME(3) NULL,
-  next_retry_at DATETIME(3) NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (id),
-  KEY idx_delivery_dispatch (status, next_retry_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-CREATE TABLE IF NOT EXISTS notification_template (
-  id BIGINT NOT NULL AUTO_INCREMENT,
-  template_code VARCHAR(50) NOT NULL,
-  channel VARCHAR(20) NOT NULL,
-  title_template VARCHAR(200) NOT NULL,
-  content_template TEXT NOT NULL,
-  enabled TINYINT(1) NOT NULL DEFAULT 1,
-  version INT NOT NULL DEFAULT 0,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (id),
-  UNIQUE KEY template_code (template_code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-USE lab_statistics;
-CREATE TABLE IF NOT EXISTS statistics_event_offset (
-  consumer_name VARCHAR(100) NOT NULL,
-  last_event_id VARCHAR(64) NULL,
-  last_created_at DATETIME(3) NULL,
-  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (consumer_name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-CREATE TABLE IF NOT EXISTS statistics_snapshot (
-  id BIGINT NOT NULL AUTO_INCREMENT,
-  metric_type VARCHAR(255) NULL,
-  resource_id BIGINT NULL,
-  user_id BIGINT NULL,
-  period_start DATETIME(3) NOT NULL,
-  period_end DATETIME(3) NOT NULL,
-  numerator DECIMAL(38,2) NULL,
-  denominator DECIMAL(38,2) NULL,
-  metric_value DECIMAL(38,2) NULL,
-  calculated_until DATETIME(3) NOT NULL,
-  data_version BIGINT NOT NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (id),
-  UNIQUE KEY uk_statistics_metric (metric_type, resource_id, user_id, period_start, period_end)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 USE lab_system;
-CREATE TABLE IF NOT EXISTS data_dictionary (
-  id BIGINT NOT NULL AUTO_INCREMENT,
-  dict_type VARCHAR(50) NOT NULL,
-  dict_code VARCHAR(50) NOT NULL,
-  dict_label VARCHAR(100) NOT NULL,
-  sort_no INT NOT NULL DEFAULT 0,
-  enabled TINYINT(1) NOT NULL DEFAULT 1,
-  version INT NOT NULL DEFAULT 0,
-  PRIMARY KEY (id),
-  UNIQUE KEY uk_dictionary (dict_type, dict_code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS operation_log (
   id BIGINT NOT NULL AUTO_INCREMENT,
   operator_id BIGINT NOT NULL,

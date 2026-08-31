@@ -100,33 +100,6 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
         }
         return Map.of("resource",resource,"days",days,"calculatedUntil",Instant.now());
     }
-    public List<Map<String, Object>> statisticsCatalog(HttpServletRequest servletRequest) {
-        internalServices.require(servletRequest);
-        return resources.findAll().stream().filter(item -> !item.deleted).map(resource -> {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("id", resource.id);
-            row.put("name", resource.name);
-            row.put("status", resource.status);
-            row.put("schedules", schedules.findByResourceIdOrderByWeekdayAscOpenTimeAsc(resource.id).stream().map(item -> {
-                Map<String, Object> schedule = new LinkedHashMap<>();
-                schedule.put("weekday", item.weekday);
-                schedule.put("openTime", item.openTime);
-                schedule.put("closeTime", item.closeTime);
-                schedule.put("enabled", item.enabled);
-                schedule.put("effectiveFrom", item.effectiveFrom);
-                schedule.put("effectiveTo", item.effectiveTo);
-                return schedule;
-            }).toList());
-            row.put("closures", closures.findByResourceIdAndStatusNot(resource.id, "CANCELED").stream().map(item -> {
-                Map<String, Object> closure = new LinkedHashMap<>();
-                closure.put("startTime", item.startTime);
-                closure.put("endTime", item.endTime);
-                closure.put("status", item.status);
-                return closure;
-            }).toList());
-            return row;
-        }).toList();
-    }
     public ResourceController.BookingRule bookingRule(Long id, LocalDateTime startTime, LocalDateTime endTime, int participants, Long applicantUserId, HttpServletRequest servletRequest) {
         internalServices.require(servletRequest);
         if(!startTime.isBefore(endTime)||!startTime.toLocalDate().equals(endTime.toLocalDate())) throw new BusinessException("INVALID_TIME","Booking interval must be within one day",HttpStatus.BAD_REQUEST);
