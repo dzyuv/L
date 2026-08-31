@@ -31,7 +31,15 @@ const nextActions = computed(() => ({
 })[selectedTicket.value?.status] || []);
 
 function emptyForm() {
-  return { assetId: "", assignedTo: "", estimatedCost: "", actualCost: "", resolution: "" };
+  return { deviceKind: "LEDGER", assetId: "", assetClue: "", assignedTo: "", estimatedCost: "", actualCost: "", resolution: "" };
+}
+function isOtherDevice(item) {
+  return !item?.assetId && String(item?.assetClue || "").startsWith("其他设备");
+}
+function otherDeviceClue(value) {
+  const text = String(value || "").trim();
+  if (!text) return "其他设备";
+  return text.startsWith("其他设备") ? text : `其他设备：${text}`;
 }
 function statusText(value) {
   return ({ REPORTED: "待受理", TRIAGED: "已受理", REPAIRING: "维修中", WAITING_ACCEPTANCE: "待验收", CLOSED: "已关闭", REJECTED: "已驳回" })[value] || value;
@@ -50,12 +58,17 @@ function openTicket(item) {
   actionStatus.value = "";
   notice.value = "";
   form.value = {
+    deviceKind: isOtherDevice(item) ? "OTHER" : "LEDGER",
     assetId: item.assetId ?? "",
+    assetClue: String(item.assetClue || "").replace(/^其他设备：/, ""),
     assignedTo: item.assignedTo ?? "",
     estimatedCost: item.estimatedCost ?? "",
     actualCost: item.actualCost ?? "",
     resolution: item.resolution || "",
   };
+}
+function onDeviceKindChange() {
+  if (form.value.deviceKind === "OTHER") form.value.assetId = "";
 }
 function chooseAction(status) {
   actionStatus.value = status;
@@ -66,7 +79,9 @@ function show(message, isFailed = false) {
 }
 async function submitUpdate() {
   if (!actionStatus.value) return show("请选择本次处理动作", true);
-  if (["REPAIRING", "WAITING_ACCEPTANCE", "CLOSED"].includes(actionStatus.value) && !form.value.assetId) return show("开始维修前需先绑定具体资产", true);
+  const other = form.value.deviceKind === "OTHER";
+  if (["REPAIRING", "WAITING_ACCEPTANCE", "CLOSED"].includes(actionStatus.value) && !other && !form.value.assetId) return show("开始维修前需先绑定具体资产，或认定为其他设备", true);
+  if (other && !form.value.assetClue.trim()) return show("请填写其他设备的名称或明显特征", true);
   const phone = form.value.assignedTo.trim().replace(/[\s-]/g, "").replace(/^\+?86/, "");
   if (phone && !/^1\d{10}$/.test(phone) && !/^\d{7,12}$/.test(phone)) return show("请填写有效的维修负责人电话", true);
   if (["WAITING_ACCEPTANCE", "CLOSED", "REJECTED"].includes(actionStatus.value) && !form.value.resolution.trim()) return show("提交验收、关闭或驳回时需填写处理结果", true);
@@ -74,7 +89,9 @@ async function submitUpdate() {
   try {
     await axios.put(`/api/v1/admin/maintenance/tickets/${selectedTicket.value.id}`, {
       status: actionStatus.value,
-      assetId: form.value.assetId === "" ? null : Number(form.value.assetId),
+      assetId: other ? null : (form.value.assetId === "" ? null : Number(form.value.assetId)),
+      unlistedDevice: other,
+      assetClue: other ? otherDeviceClue(form.value.assetClue) : selectedTicket.value.assetClue,
       assignedTo: form.value.assignedTo.trim() || null,
       resolution: form.value.resolution.trim() || null,
       estimatedCost: form.value.estimatedCost === "" ? null : Number(form.value.estimatedCost),
@@ -105,7 +122,7 @@ async function submitUpdate() {
     <div class="ticket-detail">
     <div class="ticket-asset"><Wrench :size="20" /><span><b>{{ assetMap[selectedTicket.assetId]?.name || resourceMap[selectedTicket.resourceId]?.name || '待确认具体设备' }}</b><small>{{ assetMap[selectedTicket.assetId]?.assetNo || selectedTicket.locationSnapshot || '位置未登记' }}</small></span><em class="ticket-status" :class="selectedTicket.status.toLowerCase()">{{ statusText(selectedTicket.status) }}</em></div>
     <dl><div><dt>上报人</dt><dd>用户 {{ selectedTicket.reportedBy }}</dd></div><div><dt>问题类型</dt><dd>{{ reportTypeText(selectedTicket.reportType) }} · {{ severityText(selectedTicket.severity) }}</dd></div><div><dt>问题位置</dt><dd>{{ resourceMap[selectedTicket.resourceId]?.name || '-' }} · {{ selectedTicket.locationSnapshot || '未填写' }}</dd></div><div><dt>设备线索</dt><dd>{{ selectedTicket.assetClue || '未填写' }}</dd></div><div><dt>维修负责人电话</dt><dd>{{ selectedTicket.assignedTo || '未填写' }}</dd></div><div class="wide"><dt>问题描述</dt><dd>{{ selectedTicket.description }}</dd></div></dl>
-    <template v-if="nextActions.length"><div class="action-title">下一步处理</div><div class="action-buttons"><button v-for="action in nextActions" :key="action.value" :class="{ active: actionStatus === action.value, danger: action.value === 'REJECTED' }" @click="chooseAction(action.value)"><Check v-if="actionStatus === action.value" :size="14" />{{ action.label }}</button></div><div class="ticket-form"><label class="wide"><Wrench :size="14" />绑定具体资产<select v-model="form.assetId"><option value="">尚未确认</option><option v-for="asset in assets" :key="asset.id" :value="asset.id">{{ asset.assetNo }} · {{ asset.name }} · {{ asset.location || '位置未登记' }}</option></select></label><label><UserRound :size="14" />维修负责人电话<input v-model="form.assignedTo" type="tel" maxlength="20" placeholder="非系统用户，填写联系电话" /></label><label><CircleDollarSign :size="14" />预计费用<input v-model="form.estimatedCost" type="number" min="0" step="0.01" /></label><label><CircleDollarSign :size="14" />实际费用<input v-model="form.actualCost" type="number" min="0" step="0.01" /></label><label class="wide">处理记录<textarea v-model="form.resolution" maxlength="2000" placeholder="记录诊断结果、维修内容或驳回原因"></textarea></label><button class="submit-ticket wide" :disabled="saving || !actionStatus" @click="submitUpdate"><Check :size="16" />确认处理</button></div></template>
+    <template v-if="nextActions.length"><div class="action-title">下一步处理</div><div class="action-buttons"><button v-for="action in nextActions" :key="action.value" :class="{ active: actionStatus === action.value, danger: action.value === 'REJECTED' }" @click="chooseAction(action.value)"><Check v-if="actionStatus === action.value" :size="14" />{{ action.label }}</button></div><div class="ticket-form"><label class="wide"><Wrench :size="14" />设备认定<select v-model="form.deviceKind" @change="onDeviceKindChange"><option value="LEDGER">台账设备</option><option value="OTHER">其他设备（未在台账登记）</option></select></label><p v-if="form.deviceKind === 'OTHER'" class="device-kind-hint wide">用于认定上报线索对应的是未登记编号的临时设备、配件或外接仪器，无需绑定资产台账。</p><label v-if="form.deviceKind !== 'OTHER'" class="wide">绑定具体资产<select v-model="form.assetId"><option value="">尚未确认</option><option v-for="asset in assets" :key="asset.id" :value="asset.id">{{ asset.assetNo }} · {{ asset.name }} · {{ asset.location || '位置未登记' }}</option></select></label><label v-else class="wide">设备名称或特征<input v-model="form.assetClue" maxlength="500" placeholder="例如：移动投影仪、无资产编号的旧示波器" /></label><label><UserRound :size="14" />维修负责人电话<input v-model="form.assignedTo" type="tel" maxlength="20" placeholder="非系统用户，填写联系电话" /></label><label><CircleDollarSign :size="14" />预计费用<input v-model="form.estimatedCost" type="number" min="0" step="0.01" /></label><label><CircleDollarSign :size="14" />实际费用<input v-model="form.actualCost" type="number" min="0" step="0.01" /></label><label class="wide">处理记录<textarea v-model="form.resolution" maxlength="2000" placeholder="记录诊断结果、维修内容或驳回原因"></textarea></label><button class="submit-ticket wide" :disabled="saving || !actionStatus" @click="submitUpdate"><Check :size="16" />确认处理</button></div></template>
     <div v-else class="closed-result"><b>处理结果</b><p>{{ selectedTicket.resolution || '未填写处理结果' }}</p><span>维修负责人：{{ selectedTicket.assignedTo || '-' }} · 预计费用：{{ selectedTicket.estimatedCost ?? '-' }} · 实际费用：{{ selectedTicket.actualCost ?? '-' }}</span></div>
   </div></section></div>
 </template>
@@ -113,5 +130,6 @@ async function submitUpdate() {
 <style scoped>
 .ticket-form-notice{min-height:38px;margin:16px 20px 0;padding:0 12px;background:#eaf5ee;color:#347458;display:flex;align-items:center;gap:7px;font-size:12px;border:1px solid #dcebe2;border-radius:5px}.ticket-form-notice.failed{background:#faece9;color:#a24d42;border-color:#ead1cc}.ticket-form-notice button{margin-left:auto;border:0;background:transparent;color:inherit}
 .ticket-notice{min-height:38px;padding:0 12px;margin-bottom:12px;background:#e8f5ed;color:#347458;display:flex;align-items:center;border-left:3px solid #4d9a70;font-size:12px}.ticket-notice.failed{background:#faece9;color:#a24d42;border-color:#bd655a}.ticket-notice button{margin-left:auto;border:0;background:transparent;color:inherit}.ticket-summary{display:grid;grid-template-columns:repeat(4,1fr);background:#fff;border:1px solid #dfe7e3;margin-bottom:12px}.ticket-summary>div{padding:15px 18px;border-right:1px solid #e8eeeb}.ticket-summary>div:last-child{border:0}.ticket-summary span,.ticket-summary strong{display:block}.ticket-summary span{color:#7d8c85;font-size:10px}.ticket-summary strong{font-size:22px;margin-top:5px}.ticket-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:12px}.ticket-toolbar select{height:36px;border:1px solid #d8e2dd;border-radius:4px;padding:0 9px;background:#fff;color:#243b31}.ticket-toolbar span{margin-left:auto;color:#7b8b84;font-size:11px}.ticket-toolbar button{width:36px;height:36px;border:1px solid #d7e1dc;background:#fff;color:#597068;border-radius:5px;display:grid;place-items:center}.ticket-table-wrap{background:#fff;border:1px solid #dfe7e3;border-radius:6px;overflow:auto}.ticket-row{min-width:1080px;display:grid;grid-template-columns:1.45fr .75fr .85fr 1.7fr 1fr .75fr .55fr;gap:14px;align-items:center;min-height:61px;padding:0 18px;border-bottom:1px solid #edf1ef;font-size:11px}.ticket-head{min-height:38px;background:#fafbfa;color:#839089;font-size:10px}.ticket-row b,.ticket-row small{display:block}.ticket-row small{margin-top:4px;color:#7d8c85}.ticket-description{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.severity-critical{color:#a54d46!important}.severity-high{color:#9a6c31!important}.ticket-status{width:max-content;padding:5px 7px;border-radius:3px;background:#fff0d8;color:#8f6a2f;font-size:10px;font-style:normal}.ticket-status.repairing{background:#e5eef6;color:#426d8b}.ticket-status.waiting_acceptance{background:#eee9f7;color:#68568d}.ticket-status.closed{background:#e4f3e9;color:#347658}.ticket-status.rejected{background:#f3e9e7;color:#9a5a51}.process-button{height:30px;border:1px solid #d4e1da;background:#fff;color:#3d6c5a;border-radius:4px;padding:0 9px;font-size:10px}.ticket-empty{padding:36px;display:flex;justify-content:center;align-items:center;gap:8px;color:#8d9a94;font-size:12px}.ticket-modal-bg{position:fixed;z-index:60;inset:0;background:rgba(18,31,26,.48);display:grid;place-items:center;padding:20px}.ticket-modal{width:min(680px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:7px}.ticket-modal-title{padding:19px 21px;border-bottom:1px solid #e6ece9;display:flex;justify-content:space-between}.ticket-modal-title h2{font-size:17px;margin:0 0 4px}.ticket-modal-title p{font-size:11px;color:#82918a;margin:0}.ticket-modal-title button{border:0;background:transparent}.ticket-detail{padding:20px}.ticket-asset{display:grid;grid-template-columns:30px 1fr auto;align-items:center;padding:13px;background:#f2f7f4}.ticket-asset b,.ticket-asset small{display:block}.ticket-asset small{margin-top:4px;color:#799087;font-size:10px}.ticket-detail dl{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:17px 0}.ticket-detail dl div{padding-bottom:10px;border-bottom:1px solid #edf1ef}.ticket-detail dt{font-size:10px;color:#87948e}.ticket-detail dd{margin:5px 0 0;font-size:12px;line-height:1.5}.wide{grid-column:1/-1}.action-title{font-size:11px;color:#778880;margin-bottom:8px}.action-buttons{display:flex;flex-wrap:wrap;gap:7px}.action-buttons button{height:34px;padding:0 11px;border:1px solid #d5e1da;background:#fff;color:#426b5b;border-radius:4px;display:flex;align-items:center;gap:5px}.action-buttons button.active{background:#225c4d;border-color:#225c4d;color:#fff}.action-buttons button.danger{color:#9b5149;border-color:#e3cfcb}.action-buttons button.danger.active{background:#9b5149;color:#fff}.ticket-form{display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px;margin-top:16px}.ticket-form label{display:flex;flex-wrap:wrap;align-items:center;gap:5px;color:#607169;font-size:10px}.ticket-form input,.ticket-form textarea{width:100%;height:36px;border:1px solid #d8e2dd;border-radius:4px;padding:0 9px;color:#243b31;background:#fff}.ticket-form textarea{height:78px;padding:8px;resize:vertical}.submit-ticket{height:38px;border:0;border-radius:5px;background:#225c4d;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px}.submit-ticket:disabled{opacity:.5}.closed-result{padding:14px;background:#f6f8f7}.closed-result b{font-size:12px}.closed-result p{font-size:12px;line-height:1.6}.closed-result span{font-size:10px;color:#7c8c85}.mono{font-family:ui-monospace,monospace}@media(max-width:650px){.ticket-summary{grid-template-columns:1fr 1fr}.ticket-summary>div:nth-child(2){border-right:0}.ticket-summary>div{border-bottom:1px solid #e8eeeb}.ticket-toolbar{flex-wrap:wrap}.ticket-toolbar select{flex:1;min-width:120px}.ticket-toolbar span{display:none}.ticket-detail dl,.ticket-form{grid-template-columns:1fr}.wide{grid-column:auto}.ticket-asset{grid-template-columns:25px 1fr}.ticket-asset em{grid-column:2;margin-top:7px}}
+.device-kind-hint{margin:0;color:#6f8279;font-size:11px;line-height:1.5}
 .ticket-form select{width:100%;height:36px;border:1px solid #d8e2dd;border-radius:4px;padding:0 9px;color:#243b31;background:#fff}
 </style>

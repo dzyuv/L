@@ -1,6 +1,4 @@
-begin
-mysql_exit=0
-killed 5988
-mvn_exit=0
-final pids=26280
-finished
+﻿begin
+killed 6568
+build exit=0
+PORT 8082 LISTENING pid=18184

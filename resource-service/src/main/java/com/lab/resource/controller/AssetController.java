@@ -34,6 +34,8 @@ public class AssetController {
     public record TicketUpdateRequest(@NotBlank @Size(max = 30) String status, Long assetId,
                                       @Size(max = 30) String assignedTo,
                                       @Size(max = 2000) String resolution,
+                                      @Size(max = 500) String assetClue,
+                                      Boolean unlistedDevice,
                                       @DecimalMin(value = "0.0", inclusive = true) BigDecimal estimatedCost,
                                       @DecimalMin(value = "0.0", inclusive = true) BigDecimal actualCost) {}
 

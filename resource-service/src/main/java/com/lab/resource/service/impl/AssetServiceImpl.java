@@ -122,8 +122,12 @@ public class AssetServiceImpl implements AssetService {
             if (ticket.resourceId == null) ticket.resourceId = selected.resourceId;
             if (ticket.locationSnapshot == null || ticket.locationSnapshot.isBlank()) ticket.locationSnapshot = selected.location;
         }
+        boolean unlisted = Boolean.TRUE.equals(body.unlistedDevice());
+        if (unlisted && body.assetClue() != null && !body.assetClue().isBlank()) {
+            ticket.assetClue = body.assetClue().trim();
+        }
         Asset asset = ticket.assetId == null ? null : findAsset(ticket.assetId);
-        if (asset == null && Set.of("REPAIRING", "WAITING_ACCEPTANCE", "CLOSED").contains(body.status())) {
+        if (asset == null && !unlisted && Set.of("REPAIRING", "WAITING_ACCEPTANCE", "CLOSED").contains(body.status())) {
             throw new BusinessException("ASSET_REQUIRED", "Bind the concrete asset before starting repair", HttpStatus.UNPROCESSABLE_ENTITY);
         }
         ticket.status = body.status();
