@@ -16,6 +16,8 @@ const dialogOpen = ref(false);
 const selectedTicket = ref(null);
 const notice = ref("");
 const failed = ref(false);
+const formNotice = ref("");
+const formFailed = ref(false);
 const form = ref(emptyForm());
 const assetQuery = ref("");
 
@@ -79,14 +81,16 @@ async function loadMaintenance() {
 function openDialog() {
   form.value = emptyForm();
   assetQuery.value = "";
-  notice.value = "";
+  formNotice.value = "";
+  formFailed.value = false;
   dialogOpen.value = true;
 }
 async function submitReport() {
-  if (props.internal && !form.value.assetId) return show("请选择需要上报的具体设备", true);
-  if (!props.internal && !form.value.resourceId && !form.value.location.trim()) return show("请选择问题发生的实验室或填写位置", true);
-  if (!form.value.description.trim()) return show("请填写具体的问题描述", true);
+  if (props.internal && !form.value.assetId) return showForm("请选择需要上报的具体设备", true);
+  if (!props.internal && !form.value.resourceId && !form.value.location.trim()) return showForm("请选择问题发生的实验室或填写位置", true);
+  if (!form.value.description.trim()) return showForm("请填写具体的问题描述", true);
   loading.value = true;
+  formNotice.value = "";
   try {
     await axios.post("/api/v1/maintenance/tickets", {
       ...form.value,
@@ -100,7 +104,7 @@ async function submitReport() {
     show("报修已提交，管理员受理后可在此查看进度");
     await loadMaintenance();
   } catch (e) {
-    show(e.response?.data?.message || "报修提交失败", true);
+    showForm(e.response?.data?.message || "报修提交失败", true);
   } finally {
     loading.value = false;
   }
@@ -108,6 +112,10 @@ async function submitReport() {
 function show(message, isFailed = false) {
   notice.value = message;
   failed.value = isFailed;
+}
+function showForm(message, isFailed = false) {
+  formNotice.value = message;
+  formFailed.value = isFailed;
 }
 
 onMounted(loadMaintenance);
@@ -162,6 +170,7 @@ onMounted(loadMaintenance);
   <div v-if="dialogOpen" class="maintenance-modal-bg" @click.self="dialogOpen = false">
     <section class="maintenance-modal" role="dialog" aria-modal="true">
       <div class="maintenance-modal-title"><div><h2>{{ internal ? '内部设备报修' : '设施问题反馈' }}</h2><p>{{ internal ? '按位置检索并确认具体资产，贵重设备需核对唯一编号' : '管理员会根据位置和设备线索确认具体资产' }}</p></div><button class="modal-close" title="关闭" aria-label="关闭报修窗口" @click="dialogOpen = false"><X :size="22" /></button></div>
+      <div v-if="formNotice" class="maintenance-form-notice" :class="{ failed: formFailed }" role="alert"><AlertTriangle v-if="formFailed" :size="15" /><Wrench v-else :size="15" />{{ formNotice }}<button type="button" title="关闭提示" @click="formNotice = ''"><X :size="14" /></button></div>
       <div class="maintenance-form">
         <label class="wide">问题发生区域<select v-model="form.resourceId"><option value="">无法确认或不在列表中</option><option v-for="resource in reportableResources" :key="resource.id" :value="resource.id">{{ resource.name }} · {{ resource.location }}</option></select></label>
         <template v-if="internal"><label class="wide">检索设备<input v-model="assetQuery" placeholder="输入资产编号、设备名称、序列号或位置" /></label><label class="wide">具体资产<select v-model="form.assetId"><option value="" disabled>请选择检索到的设备</option><option v-for="asset in filteredAssets" :key="asset.id" :value="asset.id">{{ asset.assetNo }} · {{ asset.name }} · {{ asset.location || '位置未登记' }}{{ asset.serialNo ? ` · SN ${asset.serialNo}` : '' }}</option></select></label></template>
@@ -194,5 +203,6 @@ onMounted(loadMaintenance);
 .maintenance-panel.compact .maintenance-row>.maintenance-view{grid-column:2;grid-row:3;justify-self:end}
 .maintenance-panel.compact .maintenance-row small{max-width:none;white-space:normal;line-height:1.45}
 .maintenance-panel.compact .maintenance-empty{background:#fff}
+.maintenance-form-notice{min-height:38px;margin:0 20px;padding:0 12px;background:#eaf5ee;color:#347458;display:flex;align-items:center;gap:7px;font-size:12px;border:1px solid #dcebe2;border-radius:5px}.maintenance-form-notice.failed{background:#faece9;color:#a24d42;border-color:#ead1cc}.maintenance-form-notice button{margin-left:auto;border:0;background:transparent;color:inherit}.maintenance-modal .maintenance-form-notice{margin-top:16px}
 .maintenance-form input{height:38px;border:1px solid #d8e2dd;border-radius:4px;padding:0 9px;background:#fff;color:#243b31}
 </style>
