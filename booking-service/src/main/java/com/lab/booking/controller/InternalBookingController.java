@@ -26,9 +26,17 @@ public class InternalBookingController {
         this.internalServices = internalServices;
     }
     public record ApprovalDecision(@NotBlank String status, @Size(max = 500) String comment, Integer level, Integer totalLevels) {}
+    public record CloseForMaintenance(Long resourceId, LocalDateTime startTime, LocalDateTime endTime, String reason) {}
     @PostMapping("/{id}/approval-decision")
     public ApiResponse<Booking> apply(@PathVariable("id") Long id, @Valid @RequestBody ApprovalDecision decision, HttpServletRequest request) {
         return ApiResponse.success(service.apply(id, decision, request), Objects.toString(request.getAttribute("X-Request-Id"), ""));
+    }
+
+    @PostMapping("/close-for-maintenance")
+    public ApiResponse<?> closeForMaintenance(@RequestBody CloseForMaintenance body, HttpServletRequest request) {
+        internalServices.require(request);
+        return ApiResponse.success(bookings.cancelOverlappingForClosure(body.resourceId(), body.startTime(), body.endTime(), body.reason(), request),
+                Objects.toString(request.getAttribute("X-Request-Id"), ""));
     }
 
     @GetMapping("/statistics-source")

@@ -18,17 +18,12 @@ import java.util.List;
 @Service
 public class ApprovalInternalServiceImpl implements ApprovalInternalService {
     private final ApprovalTaskRepository tasks;
-    private final ApprovalFlowRepository flows;
-    private final ApprovalNodeRepository nodes;
     private final InternalServiceGuard internalServices;
     private final int timeoutHours;
 
-    public ApprovalInternalServiceImpl(ApprovalTaskRepository tasks, ApprovalFlowRepository flows,
-                                       ApprovalNodeRepository nodes, InternalServiceGuard internalServices,
+    public ApprovalInternalServiceImpl(ApprovalTaskRepository tasks, InternalServiceGuard internalServices,
                                        @Value("${approval.timeout-hours:24}") int timeoutHours) {
         this.tasks = tasks;
-        this.flows = flows;
-        this.nodes = nodes;
         this.internalServices = internalServices;
         this.timeoutHours = timeoutHours;
     }
@@ -71,7 +66,7 @@ public class ApprovalInternalServiceImpl implements ApprovalInternalService {
 
     private ApprovalTask upsert(InternalApprovalController.CreateTask request) {
         int level = Math.max(1, request.level());
-        int totalLevels = Math.max(level, Math.max(request.totalLevels(), flowLevelCount(request.resourceTypeId())));
+        int totalLevels = Math.max(level, request.totalLevels());
         ApprovalTask task = tasks.findByBookingIdAndLevel(request.bookingId(), level).orElseGet(ApprovalTask::new);
         if (task.id != null) {
             if (!"PENDING".equals(task.status)) {
@@ -79,7 +74,6 @@ public class ApprovalInternalServiceImpl implements ApprovalInternalService {
             }
             return task;
         }
-        ApprovalNode node = nodeFor(request.resourceTypeId(), level);
         task.bookingId = request.bookingId();
         task.applicantUserId = request.applicantUserId();
         task.applicantName = request.applicantName();
@@ -92,9 +86,6 @@ public class ApprovalInternalServiceImpl implements ApprovalInternalService {
         task.totalLevels = totalLevels;
         Long assigned = request.assignedUserId();
         String role = request.approverRole() == null ? "" : request.approverRole().trim();
-        if (node != null && node.approverRole != null && !node.approverRole.isBlank()) {
-            role = node.approverRole.trim();
-        }
         if (role.isBlank()) {
             if (totalLevels >= 2 && level == 1) role = Roles.TEACHER;
             else role = assigned == null ? Roles.LAB_ADMIN : Roles.TEACHER;
@@ -107,28 +98,12 @@ public class ApprovalInternalServiceImpl implements ApprovalInternalService {
         }
         task.assignedUserId = assigned;
         task.approverRole = role;
-        task.deadline = deadline(request.startTime(), node);
+        task.deadline = deadline(request.startTime());
         return tasks.save(task);
     }
 
-    private int flowLevelCount(Long resourceTypeId) {
-        return flows.findEnabledByResourceTypeId(resourceTypeId)
-                .map(flow -> nodes.findByFlowIdOrderByLevelAscSequenceNoAsc(flow.id).stream()
-                        .mapToInt(item -> item.level).max().orElse(0))
-                .orElse(0);
-    }
-
-    private ApprovalNode nodeFor(Long resourceTypeId, int level) {
-        return flows.findEnabledByResourceTypeId(resourceTypeId)
-                .map(flow -> nodes.findByFlowIdOrderByLevelAscSequenceNoAsc(flow.id).stream()
-                        .filter(item -> item.level == level)
-                        .findFirst().orElse(null))
-                .orElse(null);
-    }
-
-    private LocalDateTime deadline(LocalDateTime startTime, ApprovalNode node) {
-        int minutes = node != null && node.deadlineMinutes > 0 ? node.deadlineMinutes : timeoutHours * 60;
-        LocalDateTime byTimeout = LocalDateTime.now().plusMinutes(minutes);
+    private LocalDateTime deadline(LocalDateTime startTime) {
+        LocalDateTime byTimeout = LocalDateTime.now().plusHours(timeoutHours);
         if (startTime != null && startTime.isBefore(byTimeout)) return startTime;
         return byTimeout;
     }

@@ -32,6 +32,7 @@ public class AdminUserController {
     @PutMapping("/users/{id}/status") public ApiResponse<?> status(@PathVariable("id") Long id, @Valid @RequestBody StatusRequest body, HttpServletRequest request) { return ok(service.updateStatus(id, body.status(), request), request); }
     @PutMapping("/users/{id}/roles") public ApiResponse<?> roles(@PathVariable("id") Long id, @Valid @RequestBody RolesRequest body, HttpServletRequest request) { return ok(service.updateRoles(id, body.roles(), request), request); }
     @PostMapping("/users/{id}/reset-password") public ApiResponse<?> reset(@PathVariable("id") Long id, @Valid @RequestBody PasswordRequest body, HttpServletRequest request) { return ok(service.resetPassword(id, body.password(), request), request); }
+    @DeleteMapping("/users/{id}") public ApiResponse<?> delete(@PathVariable("id") Long id, HttpServletRequest request) { return ok(service.delete(id, request), request); }
 
     private <T> ApiResponse<T> ok(T data, HttpServletRequest request) {
         return ApiResponse.success(data, Objects.toString(request.getAttribute("X-Request-Id"), ""));

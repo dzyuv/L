@@ -11,4 +11,5 @@ public interface AdminUserService {
     Map<String, Object> updateStatus(Long userId, String status, HttpServletRequest request);
     Map<String, Object> updateRoles(Long userId, Set<String> roleCodes, HttpServletRequest request);
     Map<String, Object> resetPassword(Long userId, String password, HttpServletRequest request);
+    Map<String, Object> delete(Long userId, HttpServletRequest request);
 }

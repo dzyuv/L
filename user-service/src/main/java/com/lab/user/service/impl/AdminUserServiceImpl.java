@@ -142,6 +142,24 @@ public class AdminUserServiceImpl implements AdminUserService {
         return Map.of("id", user.id, "reset", true);
     }
 
+    @Override
+    @Transactional
+    public Map<String, Object> delete(Long userId, HttpServletRequest request) {
+        roleGuard.requireSystemAdmin(request);
+        if (Objects.equals(roleGuard.currentUserId(request), userId)) {
+            throw new BusinessException("SELF_DELETE_FORBIDDEN", "Current administrator cannot delete their own account", HttpStatus.CONFLICT);
+        }
+        User user = find(userId);
+        user.deleted = true;
+        user.status = "DISABLED";
+        user.tokenVersion++;
+        refreshTokens.deleteByUserId(user.id);
+        users.save(user);
+        operationLogger.success(request, "USER_DELETED", "USER", user.id,
+                Map.of("username", user.username, "realName", Objects.toString(user.realName, "")));
+        return Map.of("id", user.id, "deleted", true);
+    }
+
     private User find(Long id) {
         return users.findById(id).filter(user -> !user.deleted)
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User does not exist", HttpStatus.NOT_FOUND));

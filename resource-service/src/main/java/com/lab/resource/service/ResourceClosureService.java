@@ -6,6 +6,6 @@ import jakarta.servlet.http.HttpServletRequest;
 
 public interface ResourceClosureService {
     java.util.List<ResourceClosure> list(Long resourceId, HttpServletRequest servletRequest);
-    ResourceClosure create(Long resourceId, ResourceClosureRequest request, HttpServletRequest servletRequest);
+    java.util.Map<String, Object> create(Long resourceId, ResourceClosureRequest request, HttpServletRequest servletRequest);
     ResourceClosure cancel(Long id, HttpServletRequest servletRequest);
 }

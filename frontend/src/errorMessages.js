@@ -54,6 +54,7 @@ const ERROR_MESSAGES = {
   ROLE_NOT_FOUND: "所选角色不存在",
   INVALID_ROLE: "请选择有效的用户角色",
   SELF_DISABLE_FORBIDDEN: "不能停用当前登录账号",
+  SELF_DELETE_FORBIDDEN: "不能删除当前登录账号",
   SELF_ROLE_CHANGE_FORBIDDEN: "不能移除当前账号的系统管理员角色",
   CATEGORY_EXISTS: "分类名称已存在",
   ASSET_EXISTS: "资产编号或序列号已存在",

@@ -24,6 +24,7 @@ import java.util.*;
 public class BookingServiceImpl implements BookingService {
     private static final Logger log = LoggerFactory.getLogger(BookingServiceImpl.class);
     private static final Set<String> QUOTA_STATUSES = Set.of("PENDING_APPROVAL", "APPROVED", "CHECKED_IN");
+    private static final Set<String> DAILY_MINUTE_STATUSES = Set.of("PENDING_APPROVAL", "APPROVED", "CHECKED_IN", "COMPLETED", "NO_SHOW");
     private final BookingRepository bookings;
     private final BookingSlotRepository slots;
     private final BookingQuotaLockRepository quotaLocks;
@@ -302,7 +303,8 @@ public class BookingServiceImpl implements BookingService {
         int pendingLimit = teacher ? teacherMaxPending : maxPending;
         int resourceLimit = teacher ? teacherMaxPerResource : maxPerResource;
         int dailyMinutesLimit = teacher ? teacherMaxDailyMinutes : maxDailyMinutes;
-        List<Booking> active = bookings.findByUserIdOrderByStartTimeDesc(userId).stream()
+        List<Booking> userBookings = bookings.findByUserIdOrderByStartTimeDesc(userId);
+        List<Booking> active = userBookings.stream()
                 .filter(item -> QUOTA_STATUSES.contains(item.status) && item.endTime != null && item.endTime.isAfter(now))
                 .toList();
         if (active.size() >= activeLimit) {
@@ -324,8 +326,9 @@ public class BookingServiceImpl implements BookingService {
         if (overlaps) {
             throw new BusinessException("USER_TIME_CONFLICT", "你在该时间段已有其他预约", HttpStatus.CONFLICT);
         }
-        long existingMinutes = active.stream()
-                .filter(item -> item.startTime.toLocalDate().equals(request.startTime().toLocalDate()))
+        long existingMinutes = userBookings.stream()
+                .filter(item -> DAILY_MINUTE_STATUSES.contains(item.status))
+                .filter(item -> item.startTime != null && item.startTime.toLocalDate().equals(request.startTime().toLocalDate()))
                 .mapToLong(item -> java.time.Duration.between(item.startTime, item.endTime).toMinutes())
                 .sum();
         long requestedMinutes = java.time.Duration.between(request.startTime(), request.endTime()).toMinutes();
@@ -430,5 +433,29 @@ public class BookingServiceImpl implements BookingService {
         if ("DISMISSED".equals(status)) lifecycle.refreshRestriction(item.userId);
         return saved;
     }
+
+    @Override
+    @Transactional
+    public Map<String, Object> cancelOverlappingForClosure(Long resourceId, LocalDateTime start, LocalDateTime end, String reason, HttpServletRequest servletRequest) {
+        if (resourceId == null || start == null || end == null || !start.isBefore(end)) {
+            throw new BusinessException("INVALID_CLOSURE", "Closure interval is invalid", HttpStatus.BAD_REQUEST);
+        }
+        Long operatorId = servletRequest.getAttribute("userId") instanceof Long value ? value : null;
+        String history = reason == null || reason.isBlank() ? "Resource closed for maintenance" : reason.trim();
+        List<Long> pendingIds = new ArrayList<>();
+        List<Booking> overlapping = bookings.findOverlapping(resourceId, start, end);
+        for (Booking booking : overlapping) {
+            boolean pending = "PENDING_APPROVAL".equals(booking.status);
+            lifecycle.transition(booking, "CANCELED", operatorId, history, requestId(servletRequest));
+            booking.canceledAt = LocalDateTime.now();
+            booking.cancelReason = history;
+            lifecycle.releaseSlots(booking.id, "RESOURCE_CLOSED");
+            bookings.save(booking);
+            if (pending) pendingIds.add(booking.id);
+        }
+        closeApprovalTasksAfterCommit(pendingIds, "CANCELED");
+        return Map.of("cancelledCount", overlapping.size());
+    }
+
     private String requestId(HttpServletRequest request) { return Objects.toString(request.getAttribute("X-Request-Id"), ""); }
 }

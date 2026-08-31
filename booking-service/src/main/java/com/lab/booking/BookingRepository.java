@@ -12,4 +12,12 @@ public interface BookingRepository extends CrudMapper<Booking>{
     default List<Booking> findByStatus(String status) {
         return selectList(Wrappers.<Booking>query().eq("status", status));
     }
+
+    default List<Booking> findOverlapping(Long resourceId, java.time.LocalDateTime start, java.time.LocalDateTime end) {
+        return selectList(Wrappers.<Booking>query()
+                .eq("resource_id", resourceId)
+                .in("status", List.of("PENDING_APPROVAL", "APPROVED"))
+                .lt("start_time", end)
+                .gt("end_time", start));
+    }
 }

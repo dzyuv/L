@@ -1,0 +1,78 @@
+begin
+14:09:35 [INFO] Scanning for projects...
+14:09:36 [INFO] ------------------------------------------------------------------------
+14:09:36 [INFO] Reactor Build Order:
+14:09:36 [INFO] 
+14:09:36 [INFO] 实验室设备预约管理系统                                                        [pom]
+14:09:36 [INFO] common                                                             [jar]
+14:09:36 [INFO] approval-service                                                   [jar]
+14:09:36 [INFO] 
+14:09:36 [INFO] -------------------< com.lab:lab-equipment-booking >--------------------
+14:09:36 [INFO] Building 实验室设备预约管理系统 1.0.0                                         [1/3]
+14:09:36 [INFO]   from pom.xml
+14:09:36 [INFO] --------------------------------[ pom ]---------------------------------
+14:09:36 [INFO] 
+14:09:36 [INFO] ---------------------------< com.lab:common >---------------------------
+14:09:36 [INFO] Building common 1.0.0                                              [2/3]
+14:09:36 [INFO]   from common\pom.xml
+14:09:36 [INFO] --------------------------------[ jar ]---------------------------------
+14:09:36 [INFO] 
+14:09:36 [INFO] --- resources:3.4.0:resources (default-resources) @ common ---
+14:09:36 [INFO] skip non existing resourceDirectory C:\Users\22692\Desktop\zy\L\common\src\main\resources
+14:09:36 [INFO] 
+14:09:36 [INFO] --- compiler:3.13.0:compile (default-compile) @ common ---
+14:09:36 [INFO] Nothing to compile - all classes are up to date.
+14:09:36 [INFO] 
+14:09:36 [INFO] --- resources:3.4.0:testResources (default-testResources) @ common ---
+14:09:36 [INFO] skip non existing resourceDirectory C:\Users\22692\Desktop\zy\L\common\src\test\resources
+14:09:36 [INFO] 
+14:09:36 [INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ common ---
+14:09:36 [INFO] No sources to compile
+14:09:36 [INFO] 
+14:09:36 [INFO] --- surefire:3.5.4:test (default-test) @ common ---
+14:09:36 [INFO] Tests are skipped.
+14:09:36 [INFO] 
+14:09:37 [INFO] --- jar:3.5.0:jar (default-jar) @ common ---
+14:09:37 [INFO] 
+14:09:37 [INFO] ----------------------< com.lab:approval-service >----------------------
+14:09:37 [INFO] Building approval-service 1.0.0                                    [3/3]
+14:09:37 [INFO]   from approval-service\pom.xml
+14:09:37 [INFO] --------------------------------[ jar ]---------------------------------
+14:09:37 [INFO] 
+14:09:37 [INFO] --- resources:3.4.0:resources (default-resources) @ approval-service ---
+14:09:37 [INFO] Copying 1 resource from src\main\resources to target\classes
+14:09:37 [INFO] 
+14:09:37 [INFO] --- compiler:3.13.0:compile (default-compile) @ approval-service ---
+14:09:37 [INFO] Recompiling the module because of changed source code.
+14:09:38 [INFO] Compiling 23 source files with javac [debug release 17] to target\classes
+14:09:42 [INFO] 
+14:09:42 [INFO] --- resources:3.4.0:testResources (default-testResources) @ approval-service ---
+14:09:42 [INFO] skip non existing resourceDirectory C:\Users\22692\Desktop\zy\L\approval-service\src\test\resources
+14:09:42 [INFO] 
+14:09:42 [INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ approval-service ---
+14:09:43 [INFO] No sources to compile
+14:09:43 [INFO] 
+14:09:43 [INFO] --- surefire:3.5.4:test (default-test) @ approval-service ---
+14:09:43 [INFO] Tests are skipped.
+14:09:43 [INFO] 
+14:09:43 [INFO] --- jar:3.5.0:jar (default-jar) @ approval-service ---
+14:09:43 [INFO] Building jar: C:\Users\22692\Desktop\zy\L\approval-service\target\approval-service-1.0.0.jar
+14:09:43 [INFO] 
+14:09:43 [INFO] --- spring-boot:3.3.5:repackage (default) @ approval-service ---
+14:09:45 [INFO] Replacing main artifact C:\Users\22692\Desktop\zy\L\approval-service\target\approval-service-1.0.0.jar with repackaged archive, adding nested dependencies in BOOT-INF/.
+14:09:45 [INFO] The original artifact has been renamed to C:\Users\22692\Desktop\zy\L\approval-service\target\approval-service-1.0.0.jar.original
+14:09:45 [INFO] ------------------------------------------------------------------------
+14:09:45 [INFO] Reactor Summary for 实验室设备预约管理系统 1.0.0:
+14:09:45 [INFO] 
+14:09:45 [INFO] 实验室设备预约管理系统 ........................................ SUCCESS [  0.002 s]
+14:09:45 [INFO] common ............................................. SUCCESS [  1.229 s]
+14:09:45 [INFO] approval-service ................................... SUCCESS [  8.323 s]
+14:09:45 [INFO] ------------------------------------------------------------------------
+14:09:45 [INFO] BUILD SUCCESS
+14:09:45 [INFO] ------------------------------------------------------------------------
+14:09:45 [INFO] Total time:  9.931 s
+14:09:45 [INFO] Finished at: 2026-08-31T14:09:45+08:00
+14:09:45 [INFO] ------------------------------------------------------------------------
+14:09:45 mvn_exit=0
+14:09:54 pids=27792
+14:09:54 finished

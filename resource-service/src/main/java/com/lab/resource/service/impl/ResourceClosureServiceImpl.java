@@ -10,15 +10,21 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.List;
 
 @Service
 public class ResourceClosureServiceImpl implements ResourceClosureService {
     private final ResourceRepository resources; private final ClosureRepository closures; private final RoleGuard roleGuard;
-    public ResourceClosureServiceImpl(ResourceRepository resources, ClosureRepository closures, RoleGuard roleGuard) { this.resources=resources; this.closures=closures; this.roleGuard=roleGuard; }
+    private final BookingClosureClient bookingClosures;
+    public ResourceClosureServiceImpl(ResourceRepository resources, ClosureRepository closures, RoleGuard roleGuard,
+                                      BookingClosureClient bookingClosures) {
+        this.resources=resources; this.closures=closures; this.roleGuard=roleGuard; this.bookingClosures=bookingClosures;
+    }
     public List<ResourceClosure> list(Long resourceId, HttpServletRequest servletRequest) { roleGuard.requireLabAdmin(servletRequest); if(!resources.existsById(resourceId)) throw new BusinessException("NOT_FOUND","Resource does not exist",HttpStatus.NOT_FOUND); return closures.findByResourceIdAndStatusNot(resourceId, "CANCELED"); }
-    public ResourceClosure create(Long resourceId, ResourceClosureRequest request, HttpServletRequest servletRequest) {
+    public Map<String, Object> create(Long resourceId, ResourceClosureRequest request, HttpServletRequest servletRequest) {
         roleGuard.requireLabAdmin(servletRequest);
         if(!resources.existsById(resourceId)) throw new BusinessException("NOT_FOUND","Resource does not exist",HttpStatus.NOT_FOUND);
         ResourceClosure closure=new ResourceClosure();
@@ -28,7 +34,13 @@ public class ResourceClosureServiceImpl implements ResourceClosureService {
             throw new BusinessException("INVALID_CLOSURE", "Closure times must be valid ISO local date-times", HttpStatus.BAD_REQUEST);
         }
         if(!closure.startTime.isBefore(closure.endTime)) throw new BusinessException("INVALID_CLOSURE","Closure interval is invalid",HttpStatus.BAD_REQUEST);
-        closure.reason=Objects.toString(request.reason(),"Maintenance"); return closures.save(closure);
+        closure.reason=Objects.toString(request.reason(),"Maintenance");
+        ResourceClosure saved=closures.save(closure);
+        int cancelled=bookingClosures.cancelOverlapping(resourceId, saved.startTime, saved.endTime, saved.reason);
+        Map<String, Object> result=new LinkedHashMap<>();
+        result.put("closure", saved);
+        result.put("cancelledCount", cancelled);
+        return result;
     }
     public ResourceClosure cancel(Long id, HttpServletRequest servletRequest) { roleGuard.requireLabAdmin(servletRequest); ResourceClosure closure=closures.findById(id).orElseThrow(()->new BusinessException("NOT_FOUND","Closure does not exist",HttpStatus.NOT_FOUND)); closure.status="CANCELED"; return closures.save(closure); }
 }
