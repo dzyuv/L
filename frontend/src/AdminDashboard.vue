@@ -12,7 +12,7 @@ const props = defineProps({ user: { type: Object, required: true }, initialResou
 const isSystemAdmin = computed(() => (props.user?.roles || []).includes("SYSTEM_ADMIN"));
 const tabs = computed(() => isSystemAdmin.value
   ? [{ id: "overview", label: "总览", icon: BarChart3 }, { id: "users", label: "用户与角色", icon: Users }, { id: "configs", label: "系统配置", icon: Settings }, { id: "logs", label: "管理员日志", icon: ScrollText }]
-  : [{ id: "overview", label: "运营总览", icon: BarChart3 }, { id: "resources", label: "资源管理", icon: FlaskConical }, { id: "resource-types", label: "资源类别", icon: FlaskConical }, { id: "assets", label: "资产台账", icon: PackageSearch }, { id: "maintenance", label: "报修处理", icon: Wrench }, { id: "bookings", label: "预约查询", icon: CalendarClock }, { id: "approvals", label: "预约审批", icon: ClipboardCheck }, { id: "violations", label: "违约处理", icon: AlertTriangle }]);
+  : [{ id: "overview", label: "运营总览", icon: BarChart3 }, { id: "resources", label: "资源管理", icon: FlaskConical }, { id: "resource-types", label: "资源类别", icon: FlaskConical }, { id: "assets", label: "资产台账", icon: PackageSearch }, { id: "maintenance", label: "报修处理", icon: Wrench }, { id: "bookings", label: "预约", icon: ClipboardCheck }, { id: "violations", label: "违约处理", icon: AlertTriangle }]);
 const activeTab = ref("overview");
 const loading = ref(false);
 const notice = ref("");
@@ -114,6 +114,17 @@ const labReport = computed(() => {
   ];
   const upcoming = bookings.value.filter(item => item.startTime && new Date(item.startTime) >= new Date()).sort((a, b) => new Date(a.startTime) - new Date(b.startTime)).slice(0, 6);
   return { total: bookings.value.length, active: (counts.APPROVED || 0) + (counts.CHECKED_IN || 0), resourceRanking, maxResourceCount, statusItems, upcoming };
+});
+const compactBookings = computed(() => {
+  const now = Date.now();
+  return [...bookings.value].sort((left, right) => {
+    const leftEnd = new Date(left.endTime || left.startTime).getTime();
+    const rightEnd = new Date(right.endTime || right.startTime).getTime();
+    const leftCurrent = Number.isFinite(leftEnd) && leftEnd >= now;
+    const rightCurrent = Number.isFinite(rightEnd) && rightEnd >= now;
+    if (leftCurrent !== rightCurrent) return leftCurrent ? -1 : 1;
+    return new Date(left.startTime) - new Date(right.startTime);
+  }).slice(0, 8);
 });
 
 function emptyResource() {
@@ -540,11 +551,30 @@ onMounted(loadAll);
       </template>
 
       <template v-else-if="activeTab === 'bookings'">
-        <section class="admin-section data-table"><div class="data-row booking-grid table-head"><span>预约编号</span><span>申请人</span><span>资源</span><span>预约时间</span><span>人数</span><span>状态</span></div><div v-for="item in bookings" :key="item.id" class="data-row booking-grid"><span class="mono">{{ item.bookingNo }}</span><span>{{ item.applicantNameSnapshot }}</span><span>{{ item.resourceNameSnapshot }}</span><span>{{ formatTime(item.startTime) }}<small>至 {{ formatTime(item.endTime) }}</small></span><span>{{ item.participants }}</span><span><span class="status" :class="item.status.toLowerCase()">{{ statusText(item.status) }}</span><small v-if="item.status === 'REJECTED'">{{ item.rejectReason || '暂无说明' }}</small></span></div><div v-if="!bookings.length" class="admin-empty">暂无预约记录</div></section>
-      </template>
-
-      <template v-else-if="activeTab === 'approvals'">
-        <section class="admin-section"><div class="approval-admin-list"><article v-for="item in approvals" :key="item.id"><span class="approval-level">L{{ item.level }}</span><div class="approval-applicant"><b>{{ item.applicantName || `用户 ${item.applicantUserId}` }}</b><span>申请人</span><small>预约 #{{ item.bookingId }}</small></div><div class="approval-schedule"><b>{{ item.resourceName || `资源 #${item.resourceId}` }}</b><span>{{ formatTime(item.startTime) }} 至 {{ formatTime(item.endTime) }}</span><small>审批截止 {{ formatTime(item.deadline) }}</small></div><div class="approval-buttons"><button class="reject" @click="openRejection(item)"><X :size="15" />驳回</button><button class="accept" @click="approveTask(item)"><Check :size="15" />通过</button></div></article><div v-if="!approvals.length" class="admin-empty">暂无待审批任务</div></div></section>
+        <div class="booking-split">
+          <section class="admin-section">
+            <div class="section-title"><div><h2>预约审批</h2><p>一级教师审，二级实验室管理员终审</p></div><span>{{ approvals.length }} 项待处理</span></div>
+            <div class="approval-admin-list">
+              <article v-for="item in approvals" :key="item.id">
+                <span class="approval-level">L{{ item.level }}</span>
+                <div class="approval-applicant"><b>{{ item.applicantName || `用户 ${item.applicantUserId}` }}</b><span>申请人</span><small>预约 #{{ item.bookingId }}</small></div>
+                <div class="approval-schedule"><b>{{ item.resourceName || `资源 #${item.resourceId}` }}</b><span>{{ formatTime(item.startTime) }} 至 {{ formatTime(item.endTime) }}</span><small>审批截止 {{ formatTime(item.deadline) }}</small></div>
+                <div class="approval-buttons"><button class="reject" @click="openRejection(item)"><X :size="15" />驳回</button><button class="accept" @click="approveTask(item)"><Check :size="15" />通过</button></div>
+              </article>
+              <div v-if="!approvals.length" class="admin-empty">暂无待审批任务</div>
+            </div>
+          </section>
+          <section class="admin-section compact-booking-panel">
+            <div class="section-title"><div><h2>近期预约</h2><p>只看未结束和最近安排</p></div><span>{{ compactBookings.length }} 条</span></div>
+            <div class="compact-booking-list">
+              <article v-for="item in compactBookings" :key="item.id">
+                <div><b>{{ item.applicantNameSnapshot || `用户 ${item.userId}` }}</b><small>{{ item.resourceNameSnapshot }} · {{ formatTime(item.startTime) }}</small></div>
+                <span class="status" :class="item.status.toLowerCase()">{{ statusText(item.status) }}</span>
+              </article>
+              <div v-if="!compactBookings.length" class="admin-empty">暂无预约记录</div>
+            </div>
+          </section>
+        </div>
       </template>
 
       <template v-else-if="activeTab === 'violations'">
@@ -593,6 +623,20 @@ onMounted(loadAll);
 .log-grid{grid-template-columns:1fr 1.25fr 1.1fr 1.65fr .55fr 1.25fr;min-width:980px}.log-toolbar{gap:14px}.log-filters{display:flex;align-items:center;justify-content:flex-end;gap:8px}.log-filters select{height:36px;border:1px solid #d8e2dd;border-radius:4px;padding:0 28px 0 9px;background:#fff;color:#415b51;font-size:11px}.operation-log-table .data-row:not(.table-head){min-height:62px}.operation-log-table .mono{display:block;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
 @media(max-width:760px){.log-toolbar{height:auto;align-items:stretch;flex-direction:column}.log-toolbar .search{width:100%}.log-filters{justify-content:flex-start;flex-wrap:wrap}}
 .status.expired{background:#f3e9e7;color:#9a5a51}
+.booking-split{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(260px,.75fr);gap:14px;align-items:start}
+.booking-split>.admin-section{min-width:0}
+.booking-split .section-title span{color:#74847d;font-size:12px}
+.booking-split .approval-admin-list article{grid-template-columns:34px minmax(0,1fr);row-gap:8px}
+.booking-split .approval-schedule{grid-column:2;padding-left:0;border-left:0}
+.booking-split .approval-buttons{grid-column:2}
+.compact-booking-panel .compact-booking-list{max-height:calc(100vh - 240px);overflow:auto}
+.compact-booking-list{padding:4px 0}
+.compact-booking-list article{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:52px;padding:8px 16px;border-bottom:1px solid #edf1ef}
+.compact-booking-list article:last-child{border-bottom:0}
+.compact-booking-list b,.compact-booking-list small{display:block}
+.compact-booking-list b{font-size:12px}
+.compact-booking-list small{margin-top:3px;color:#82918a;font-size:10px}
+@media(max-width:950px){.booking-split{grid-template-columns:1fr}.compact-booking-panel .compact-booking-list{max-height:320px}}
 .approval-admin-list article{min-height:78px;display:grid;grid-template-columns:34px minmax(160px,.8fr) minmax(230px,1.2fr) auto;column-gap:16px;align-items:center;padding:10px 0}.approval-admin-list article>div:nth-child(2){flex:initial}.approval-applicant,.approval-schedule{min-width:0}.approval-schedule{padding-left:16px;border-left:1px solid #e5ece8}.approval-admin-list b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(max-width:650px){.approval-admin-list{padding:8px 14px}.approval-admin-list article{grid-template-columns:34px minmax(0,1fr);row-gap:9px}.approval-schedule{grid-column:2;padding-left:0;border-left:0}.approval-buttons{grid-column:2}.approval-buttons button{flex:1;justify-content:center}}
 </style>

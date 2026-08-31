@@ -1,10 +1,18 @@
-starting
+﻿starting
 started user-service
 started resource-service
 started booking-service
 started approval-service
-PORT 8081 LISTENING pid=29064
-PORT 8082 LISTENING pid=31360
-PORT 8083 LISTENING pid=35108
-PORT 8084 LISTENING pid=14464
+started notification-service
+started statistics-service
+started system-service
+started gateway
+PORT 8080 LISTENING pid=28868
+PORT 8081 LISTENING pid=34308
+PORT 8082 LISTENING pid=6568
+PORT 8083 LISTENING pid=10304
+PORT 8084 LISTENING pid=33296
+PORT 8085 LISTENING pid=1636
+PORT 8086 LISTENING pid=32920
+PORT 8087 LISTENING pid=7112
 finished

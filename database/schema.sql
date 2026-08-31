@@ -1,6 +1,7 @@
--- Laboratory equipment booking databases.
--- Requirement baseline: 需求分析.docx (version 2.0).
--- This script is safe for a fresh installation and is repeatable.
+-- Laboratory equipment booking database structure.
+-- Baseline: the live MySQL instance currently used by the services.
+-- Unused leftover tables lab_user.users and lab_resource.resources are omitted.
+-- Run on a fresh MySQL 8 instance, then load demonstration data with test-data.sql.
 SET NAMES utf8mb4;
 
 CREATE DATABASE IF NOT EXISTS lab_user DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -13,14 +14,14 @@ CREATE DATABASE IF NOT EXISTS lab_system DEFAULT CHARACTER SET utf8mb4 COLLATE u
 
 USE lab_user;
 CREATE TABLE IF NOT EXISTS `user` (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  employee_no VARCHAR(50) NOT NULL UNIQUE,
-  username VARCHAR(50) NOT NULL UNIQUE,
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  employee_no VARCHAR(255) NOT NULL,
+  username VARCHAR(255) NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  real_name VARCHAR(50) NOT NULL,
-  email VARCHAR(100) NULL,
-  phone VARCHAR(30) NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+  real_name VARCHAR(255) NOT NULL,
+  email VARCHAR(255) NULL,
+  phone VARCHAR(255) NULL,
+  status VARCHAR(255) NOT NULL,
   failed_login_count INT NOT NULL DEFAULT 0,
   locked_until DATETIME(3) NULL,
   token_version INT NOT NULL DEFAULT 0,
@@ -28,301 +29,312 @@ CREATE TABLE IF NOT EXISTS `user` (
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   version INT NOT NULL DEFAULT 0,
-  deleted BOOLEAN NOT NULL DEFAULT FALSE
+  deleted TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (id),
+  UNIQUE KEY username (username),
+  UNIQUE KEY employee_no (employee_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS role (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  code VARCHAR(30) NOT NULL UNIQUE,
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  code VARCHAR(30) NOT NULL,
   name VARCHAR(50) NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
+  status VARCHAR(20) NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_role_code (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS permission (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  code VARCHAR(100) NOT NULL UNIQUE,
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  code VARCHAR(100) NOT NULL,
   name VARCHAR(100) NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
+  status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_permission_code (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS user_role (
   user_id BIGINT NOT NULL,
   role_id BIGINT NOT NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (user_id, role_id)
+  PRIMARY KEY (user_id, role_id),
+  KEY idx_user_role_role (role_id),
+  CONSTRAINT fk_user_role_user FOREIGN KEY (user_id) REFERENCES `user` (id),
+  CONSTRAINT fk_user_role_role FOREIGN KEY (role_id) REFERENCES role (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS role_permission (
   role_id BIGINT NOT NULL,
   permission_id BIGINT NOT NULL,
-  PRIMARY KEY (role_id, permission_id)
+  PRIMARY KEY (role_id, permission_id),
+  KEY idx_role_permission_permission (permission_id),
+  CONSTRAINT fk_role_permission_role FOREIGN KEY (role_id) REFERENCES role (id),
+  CONSTRAINT fk_role_permission_permission FOREIGN KEY (permission_id) REFERENCES permission (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS refresh_token (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  token_hash VARCHAR(128) NOT NULL UNIQUE,
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  token_hash VARCHAR(128) NOT NULL,
   user_id BIGINT NOT NULL,
   token_version INT NOT NULL,
   expires_at DATETIME(3) NOT NULL,
   revoked_at DATETIME(3) NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  KEY idx_refresh_user(user_id, revoked_at, expires_at)
+  PRIMARY KEY (id),
+  UNIQUE KEY token_hash (token_hash),
+  KEY idx_refresh_user (user_id, revoked_at, expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 USE lab_resource;
 CREATE TABLE IF NOT EXISTS resource_type (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  name VARCHAR(50) NOT NULL UNIQUE,
-  default_approval_level TINYINT NOT NULL DEFAULT 1,
-  default_need_checkin BOOLEAN NOT NULL DEFAULT TRUE,
-  enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  default_approval_level INT NOT NULL,
+  enabled BIT(1) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  default_need_checkin TINYINT(1) NOT NULL DEFAULT 1,
   version INT NOT NULL DEFAULT 0,
-  deleted BOOLEAN NOT NULL DEFAULT FALSE
+  deleted TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_type_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS resource (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  id BIGINT NOT NULL AUTO_INCREMENT,
   type_id BIGINT NOT NULL,
-  name VARCHAR(100) NOT NULL,
-  location VARCHAR(200) NULL,
+  name VARCHAR(255) NOT NULL,
+  location VARCHAR(255) NULL,
   capacity INT NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-  description VARCHAR(1000) NULL,
+  status VARCHAR(255) NULL,
+  description VARCHAR(255) NULL,
   owner_user_id BIGINT NULL,
-  image_url VARCHAR(500) NULL,
-  approval_required_override BOOLEAN NULL,
-  approval_level_override TINYINT NULL,
-  need_checkin BOOLEAN NOT NULL DEFAULT TRUE,
+  image_url VARCHAR(255) NULL,
+  need_checkin TINYINT(1) NOT NULL DEFAULT 1,
   max_duration_minutes INT NOT NULL DEFAULT 120,
-  slot_minutes INT NOT NULL DEFAULT 30,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   version INT NOT NULL DEFAULT 0,
-  deleted BOOLEAN NOT NULL DEFAULT FALSE,
-  UNIQUE KEY uk_resource_type_name(type_id, name),
-  KEY idx_resource_status_type(status, type_id)
+  deleted TINYINT(1) NOT NULL DEFAULT 0,
+  approval_required_override TINYINT(1) NULL,
+  approval_level_override INT NULL,
+  slot_minutes INT NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_resource_type_name (type_id, name),
+  KEY idx_resource_status_type (status, type_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS resource_schedule (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  resource_id BIGINT NOT NULL,
-  weekday TINYINT NOT NULL,
-  open_time TIME NOT NULL,
-  close_time TIME NOT NULL,
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  close_time TIME(6) NULL,
+  enabled BIT(1) NOT NULL,
   max_duration_minutes INT NOT NULL,
-  slot_minutes INT NOT NULL DEFAULT 30,
+  open_time TIME(6) NULL,
+  resource_id BIGINT NULL,
+  slot_minutes INT NOT NULL,
+  weekday INT NOT NULL,
   effective_from DATE NULL,
   effective_to DATE NULL,
-  enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   version INT NOT NULL DEFAULT 0,
-  KEY idx_schedule_resource_day(resource_id, weekday, enabled)
+  PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS resource_closure (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  resource_id BIGINT NOT NULL,
-  start_time DATETIME(3) NOT NULL,
-  end_time DATETIME(3) NOT NULL,
-  reason VARCHAR(500) NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'PLANNED',
-  handled_booking_policy VARCHAR(30) NULL,
-  created_by BIGINT NOT NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  created_at DATETIME(6) NULL,
+  created_by BIGINT NULL,
+  end_time DATETIME(6) NULL,
+  reason VARCHAR(255) NULL,
+  resource_id BIGINT NULL,
+  start_time DATETIME(6) NULL,
+  status VARCHAR(255) NULL,
+  handled_booking_policy VARCHAR(255) NULL,
+  updated_at DATETIME(3) NULL,
   version INT NOT NULL DEFAULT 0,
-  KEY idx_closure_resource_time(resource_id, status, start_time, end_time)
+  PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS resource_manager (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  id BIGINT NOT NULL AUTO_INCREMENT,
   resource_id BIGINT NOT NULL,
   user_id BIGINT NOT NULL,
-  manager_type VARCHAR(30) NOT NULL,
-  scope_type VARCHAR(30) NOT NULL DEFAULT 'RESOURCE',
-  scope_value VARCHAR(100) NOT NULL DEFAULT '',
+  manager_type VARCHAR(255) NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  UNIQUE KEY uk_resource_manager(resource_id, user_id, manager_type)
+  scope_type VARCHAR(255) NULL,
+  scope_value VARCHAR(255) NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_resource_manager (resource_id, user_id, manager_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 CREATE TABLE IF NOT EXISTS asset_category (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  name VARCHAR(100) NOT NULL UNIQUE,
-  serialized BOOLEAN NOT NULL DEFAULT TRUE,
-  high_value BOOLEAN NOT NULL DEFAULT FALSE,
-  enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  description VARCHAR(500) NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  version INT NOT NULL DEFAULT 0
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  created_at DATETIME(6) NULL,
+  description VARCHAR(255) NULL,
+  enabled BIT(1) NOT NULL,
+  high_value BIT(1) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  serialized BIT(1) NOT NULL,
+  updated_at DATETIME(6) NULL,
+  version INT NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_asset_category_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 CREATE TABLE IF NOT EXISTS asset (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  asset_no VARCHAR(50) NOT NULL UNIQUE,
-  name VARCHAR(100) NOT NULL,
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  asset_no VARCHAR(255) NOT NULL,
+  brand VARCHAR(255) NULL,
   category_id BIGINT NOT NULL,
-  resource_id BIGINT NULL,
-  serial_no VARCHAR(100) NULL UNIQUE,
-  brand VARCHAR(100) NULL,
-  model VARCHAR(100) NULL,
-  specification VARCHAR(500) NULL,
-  status VARCHAR(30) NOT NULL DEFAULT 'IN_STOCK',
-  location VARCHAR(200) NULL,
+  created_at DATETIME(6) NULL,
   custodian_user_id BIGINT NULL,
+  deleted BIT(1) NOT NULL,
+  location VARCHAR(255) NULL,
+  model VARCHAR(255) NULL,
+  name VARCHAR(255) NOT NULL,
+  original_cost DECIMAL(38,2) NULL,
   purchase_date DATE NULL,
+  remark VARCHAR(255) NULL,
+  resource_id BIGINT NULL,
+  serial_no VARCHAR(255) NULL,
+  specification VARCHAR(255) NULL,
+  status VARCHAR(255) NULL,
+  updated_at DATETIME(6) NULL,
+  version INT NOT NULL,
   warranty_until DATE NULL,
-  original_cost DECIMAL(14,2) NULL,
-  remark VARCHAR(1000) NULL,
-  deleted BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  version INT NOT NULL DEFAULT 0,
-  KEY idx_asset_status_category(status, category_id),
-  KEY idx_asset_resource(resource_id)
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_asset_no (asset_no),
+  UNIQUE KEY uk_asset_serial_no (serial_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 CREATE TABLE IF NOT EXISTS asset_status_history (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  asset_id BIGINT NULL,
-  resource_id BIGINT NULL,
-  location_snapshot VARCHAR(200) NULL,
-  asset_clue VARCHAR(500) NULL,
-  from_status VARCHAR(30) NULL,
-  to_status VARCHAR(30) NOT NULL,
-  reason VARCHAR(500) NULL,
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  asset_id BIGINT NOT NULL,
+  created_at DATETIME(6) NULL,
+  from_status VARCHAR(255) NULL,
   operator_id BIGINT NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  KEY idx_asset_history(asset_id, created_at)
+  reason VARCHAR(255) NULL,
+  to_status VARCHAR(255) NOT NULL,
+  PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 CREATE TABLE IF NOT EXISTS maintenance_ticket (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  ticket_no VARCHAR(32) NOT NULL UNIQUE,
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  actual_cost DECIMAL(38,2) NULL,
   asset_id BIGINT NULL,
   resource_id BIGINT NULL,
-  location_snapshot VARCHAR(200) NULL,
-  asset_clue VARCHAR(500) NULL,
-  reported_by BIGINT NULL,
-  previous_asset_status VARCHAR(30) NULL,
-  report_type VARCHAR(30) NOT NULL DEFAULT 'MALFUNCTION',
-  severity VARCHAR(20) NOT NULL DEFAULT 'MEDIUM',
-  description VARCHAR(2000) NOT NULL,
-  status VARCHAR(30) NOT NULL DEFAULT 'REPORTED',
+  location_snapshot VARCHAR(255) NULL,
+  asset_clue VARCHAR(255) NULL,
   assigned_to VARCHAR(30) NULL,
-  estimated_cost DECIMAL(14,2) NULL,
-  actual_cost DECIMAL(14,2) NULL,
-  resolution VARCHAR(2000) NULL,
+  closed_at DATETIME(6) NULL,
+  created_at DATETIME(6) NULL,
+  description VARCHAR(2000) NOT NULL,
+  estimated_cost DECIMAL(38,2) NULL,
+  previous_asset_status VARCHAR(255) NULL,
+  processed_at DATETIME(6) NULL,
   processed_by BIGINT NULL,
-  reported_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  processed_at DATETIME(3) NULL,
-  closed_at DATETIME(3) NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  version INT NOT NULL DEFAULT 0,
-  KEY idx_maintenance_status(status, created_at),
-  KEY idx_maintenance_asset(asset_id, status),
-  KEY idx_maintenance_resource(resource_id, status)
+  report_type VARCHAR(255) NULL,
+  reported_at DATETIME(6) NULL,
+  reported_by BIGINT NULL,
+  resolution VARCHAR(255) NULL,
+  severity VARCHAR(255) NULL,
+  status VARCHAR(255) NULL,
+  ticket_no VARCHAR(255) NOT NULL,
+  updated_at DATETIME(6) NULL,
+  version INT NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_ticket_no (ticket_no),
+  KEY idx_maintenance_resource (resource_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 USE lab_booking;
 CREATE TABLE IF NOT EXISTS booking (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  booking_no VARCHAR(32) NOT NULL UNIQUE,
-  user_id BIGINT NOT NULL,
-  resource_id BIGINT NOT NULL,
-  applicant_name_snapshot VARCHAR(50) NOT NULL,
-  resource_name_snapshot VARCHAR(100) NOT NULL,
-  start_time DATETIME(3) NOT NULL,
-  end_time DATETIME(3) NOT NULL,
-  slot_minutes_snapshot INT NOT NULL DEFAULT 30,
-  purpose VARCHAR(500) NOT NULL,
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  applicant_name_snapshot VARCHAR(255) NULL,
+  approval_level_snapshot INT NOT NULL,
+  booking_no VARCHAR(255) NOT NULL,
+  cancel_reason VARCHAR(255) NULL,
+  canceled_at DATETIME(6) NULL,
+  checkin_at DATETIME(6) NULL,
+  client_request_id VARCHAR(255) NOT NULL,
+  completed_at DATETIME(6) NULL,
+  created_at DATETIME(6) NULL,
+  end_time DATETIME(6) NULL,
+  need_checkin_snapshot BIT(1) NOT NULL,
   participants INT NOT NULL,
-  status VARCHAR(30) NOT NULL,
-  approval_level_snapshot TINYINT NOT NULL,
+  purpose VARCHAR(255) NULL,
+  resource_id BIGINT NULL,
+  resource_name_snapshot VARCHAR(255) NULL,
+  slot_minutes_snapshot INT NOT NULL,
+  start_time DATETIME(6) NULL,
+  status VARCHAR(255) NULL,
+  updated_at DATETIME(6) NULL,
+  user_id BIGINT NULL,
+  version INT NOT NULL,
   approval_flow_version INT NULL,
   approval_deadline DATETIME(3) NULL,
-  need_checkin_snapshot BOOLEAN NOT NULL DEFAULT TRUE,
-  checkin_at DATETIME(3) NULL,
-  completed_at DATETIME(3) NULL,
-  canceled_at DATETIME(3) NULL,
-  cancel_reason VARCHAR(500) NULL,
-  reject_reason VARCHAR(500) NULL,
-  forced BOOLEAN NOT NULL DEFAULT FALSE,
+  forced TINYINT(1) NOT NULL DEFAULT 0,
   force_reason VARCHAR(500) NULL,
   forced_by BIGINT NULL,
-  client_request_id VARCHAR(64) NOT NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  version INT NOT NULL DEFAULT 0,
-  deleted BOOLEAN NOT NULL DEFAULT FALSE,
-  KEY idx_booking_user_status_time(user_id, status, start_time),
-  KEY idx_booking_resource_status_time(resource_id, status, start_time, end_time),
-  KEY idx_booking_approval_deadline(status, approval_deadline)
-  ,UNIQUE KEY uk_booking_user_request(user_id, client_request_id)
+  deleted TINYINT(1) NOT NULL DEFAULT 0,
+  reject_reason VARCHAR(500) NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_booking_no (booking_no),
+  UNIQUE KEY uk_client_request_id (client_request_id),
+  UNIQUE KEY uk_booking_user_request (user_id, client_request_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS booking_quota_lock (
-  user_id BIGINT PRIMARY KEY
+  user_id BIGINT NOT NULL,
+  PRIMARY KEY (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS booking_slot (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  resource_id BIGINT NOT NULL,
-  booking_id BIGINT NOT NULL,
-  slot_start DATETIME(3) NOT NULL,
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  booking_id BIGINT NULL,
+  created_at DATETIME(6) NULL,
+  resource_id BIGINT NULL,
+  slot_start DATETIME(6) NULL,
   released_at DATETIME(3) NULL,
-  release_reason VARCHAR(100) NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  release_reason VARCHAR(255) NULL,
   active_slot_key VARCHAR(128) GENERATED ALWAYS AS (
     CASE WHEN released_at IS NULL
       THEN CONCAT(resource_id, ':', DATE_FORMAT(slot_start, '%Y-%m-%d %H:%i:%s.%f'))
       ELSE NULL END
   ) STORED,
-  UNIQUE KEY uk_resource_slot_active(active_slot_key),
-  KEY idx_slot_booking(booking_id),
-  KEY idx_slot_active(resource_id, slot_start, released_at)
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_resource_slot_active (active_slot_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS booking_participant (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  id BIGINT NOT NULL AUTO_INCREMENT,
   booking_id BIGINT NOT NULL,
   user_id BIGINT NULL,
   name_snapshot VARCHAR(50) NOT NULL,
   phone_snapshot VARCHAR(30) NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  KEY idx_participant_booking(booking_id),
-  KEY idx_participant_user(user_id)
+  PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS booking_status_history (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  id BIGINT NOT NULL AUTO_INCREMENT,
   booking_id BIGINT NOT NULL,
-  from_status VARCHAR(30) NULL,
-  to_status VARCHAR(30) NOT NULL,
+  from_status VARCHAR(255) NULL,
+  to_status VARCHAR(255) NULL,
   operator_id BIGINT NULL,
-  reason VARCHAR(500) NULL,
-  request_id VARCHAR(64) NULL,
+  reason VARCHAR(255) NULL,
+  request_id VARCHAR(255) NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  KEY idx_booking_history(booking_id, created_at)
+  PRIMARY KEY (id),
+  KEY idx_booking_history (booking_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS violation_record (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  id BIGINT NOT NULL AUTO_INCREMENT,
   booking_id BIGINT NOT NULL,
   user_id BIGINT NOT NULL,
-  violation_type VARCHAR(30) NOT NULL,
-  status VARCHAR(20) NOT NULL,
-  comment VARCHAR(500) NULL,
+  violation_type VARCHAR(255) NULL,
+  status VARCHAR(255) NULL,
+  comment VARCHAR(255) NULL,
   processed_by BIGINT NULL,
   processed_at DATETIME(3) NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  UNIQUE KEY uk_violation_booking_type(booking_id, violation_type),
-  KEY idx_violation_user_time(user_id, created_at)
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_violation_booking_type (booking_id, violation_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS user_restriction (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  id BIGINT NOT NULL AUTO_INCREMENT,
   user_id BIGINT NOT NULL,
   restricted_until DATETIME(3) NOT NULL,
-  reason VARCHAR(500) NOT NULL,
+  reason VARCHAR(255) NULL,
   source_violation_count INT NOT NULL,
-  status VARCHAR(20) NOT NULL,
+  status VARCHAR(255) NULL,
   created_by BIGINT NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  KEY idx_restriction_user_status(user_id, status, restricted_until)
+  PRIMARY KEY (id),
+  KEY idx_restriction_user_status (user_id, status, restricted_until)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS idempotency_record (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  id BIGINT NOT NULL AUTO_INCREMENT,
   idempotency_key VARCHAR(64) NOT NULL,
   operator_id BIGINT NOT NULL,
   request_uri VARCHAR(200) NOT NULL,
@@ -333,122 +345,125 @@ CREATE TABLE IF NOT EXISTS idempotency_record (
   expires_at DATETIME(3) NOT NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  UNIQUE KEY uk_idempotency(operator_id, idempotency_key, request_uri)
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_idempotency (operator_id, idempotency_key, request_uri)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS outbox_event (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  event_id VARCHAR(64) NOT NULL UNIQUE,
-  event_type VARCHAR(100) NOT NULL,
-  aggregate_type VARCHAR(50) NOT NULL,
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  event_id VARCHAR(255) NOT NULL,
+  event_type VARCHAR(255) NULL,
+  aggregate_type VARCHAR(255) NULL,
   aggregate_id BIGINT NOT NULL,
-  payload JSON NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+  payload JSON NULL,
+  status VARCHAR(255) NULL,
   retry_count INT NOT NULL DEFAULT 0,
-  last_error VARCHAR(1000) NULL,
   next_retry_at DATETIME(3) NULL,
-  sent_at DATETIME(3) NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  KEY idx_outbox_dispatch(status, next_retry_at)
+  last_error VARCHAR(255) NULL,
+  sent_at DATETIME(3) NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY event_id (event_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 USE lab_approval;
 CREATE TABLE IF NOT EXISTS approval_flow (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  id BIGINT NOT NULL AUTO_INCREMENT,
   resource_type_id BIGINT NOT NULL,
   version INT NOT NULL,
-  enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  created_by BIGINT NOT NULL DEFAULT 0,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  UNIQUE KEY uk_approval_flow(resource_type_id, version)
+  created_by BIGINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_approval_flow (resource_type_id, version)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS approval_node (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  id BIGINT NOT NULL AUTO_INCREMENT,
   flow_id BIGINT NOT NULL,
-  level TINYINT NOT NULL,
+  level INT NOT NULL,
+  approver_role VARCHAR(255) NULL,
+  approver_scope VARCHAR(100) NULL,
   sequence_no INT NOT NULL DEFAULT 1,
-  approver_role VARCHAR(30) NOT NULL,
-  scope_type VARCHAR(30) NOT NULL DEFAULT 'RESOURCE',
-  scope_value VARCHAR(100) NOT NULL DEFAULT '',
-  approval_rule VARCHAR(20) NOT NULL DEFAULT 'ANY_ONE',
+  scope_type VARCHAR(255) NULL,
+  scope_value VARCHAR(255) NULL,
+  approval_rule VARCHAR(255) NULL,
   quorum_count INT NULL,
   deadline_minutes INT NOT NULL DEFAULT 1440,
-  UNIQUE KEY uk_approval_node(flow_id, level, sequence_no)
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_approval_node (flow_id, level, sequence_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS approval_task (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  booking_id BIGINT NOT NULL,
-  applicant_user_id BIGINT NULL,
-  applicant_name VARCHAR(50) NULL,
-  resource_id BIGINT NULL,
-  resource_type_id BIGINT NULL,
-  resource_name VARCHAR(100) NULL,
-  start_time DATETIME(3) NULL,
-  end_time DATETIME(3) NULL,
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  approver_role VARCHAR(255) NULL,
+  assigned_user_id BIGINT NULL,
+  booking_id BIGINT NULL,
+  comment VARCHAR(255) NULL,
+  completed_at DATETIME(6) NULL,
+  created_at DATETIME(6) NULL,
+  deadline DATETIME(6) NULL,
+  level INT NOT NULL,
+  status VARCHAR(255) NULL,
   flow_version INT NOT NULL DEFAULT 1,
-  level TINYINT NOT NULL,
-  total_levels INT NOT NULL DEFAULT 1,
   sequence_no INT NOT NULL DEFAULT 1,
-  approver_role VARCHAR(30) NOT NULL,
   scope_type VARCHAR(30) NOT NULL DEFAULT 'RESOURCE',
   scope_value VARCHAR(100) NOT NULL DEFAULT '',
   approval_rule VARCHAR(20) NOT NULL DEFAULT 'ANY_ONE',
-  assigned_user_id BIGINT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-  deadline DATETIME(3) NOT NULL,
-  completed_at DATETIME(3) NULL,
-  comment VARCHAR(500) NULL,
-  version INT NOT NULL DEFAULT 0,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  UNIQUE KEY uk_approval_task(booking_id, level, sequence_no),
-  KEY idx_task_approver_status(assigned_user_id, status),
-  KEY idx_task_role_scope_status(approver_role, scope_type, scope_value, status)
+  version INT NOT NULL,
+  applicant_user_id BIGINT NULL,
+  applicant_name VARCHAR(255) NULL,
+  end_time DATETIME(6) NULL,
+  resource_id BIGINT NULL,
+  resource_name VARCHAR(255) NULL,
+  start_time DATETIME(6) NULL,
+  resource_type_id BIGINT NULL,
+  total_levels INT NOT NULL DEFAULT 1,
+  PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS approval_task_assignee (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  id BIGINT NOT NULL AUTO_INCREMENT,
   task_id BIGINT NOT NULL,
   user_id BIGINT NOT NULL,
   status VARCHAR(20) NOT NULL DEFAULT 'CANDIDATE',
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  UNIQUE KEY uk_task_assignee(task_id, user_id)
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_task_assignee (task_id, user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS approval_record (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  id BIGINT NOT NULL AUTO_INCREMENT,
   task_id BIGINT NOT NULL,
   booking_id BIGINT NOT NULL,
   approver_id BIGINT NOT NULL,
-  result VARCHAR(20) NOT NULL,
-  comment VARCHAR(500) NULL,
-  request_id VARCHAR(64) NULL,
+  result VARCHAR(255) NULL,
+  comment VARCHAR(255) NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  UNIQUE KEY uk_approval_record_request(request_id),
-  KEY idx_approval_record_task(task_id, created_at)
+  request_id VARCHAR(255) NULL,
+  PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 USE lab_notification;
-CREATE TABLE IF NOT EXISTS notification_template (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  template_code VARCHAR(50) NOT NULL UNIQUE,
-  channel VARCHAR(20) NOT NULL,
-  title_template VARCHAR(200) NOT NULL,
-  content_template TEXT NOT NULL,
-  enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  version INT NOT NULL DEFAULT 0,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-CREATE TABLE IF NOT EXISTS notification (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  user_id BIGINT NOT NULL,
-  type VARCHAR(30) NOT NULL,
+CREATE TABLE IF NOT EXISTS announcement (
+  id BIGINT NOT NULL AUTO_INCREMENT,
   title VARCHAR(200) NOT NULL,
   content TEXT NOT NULL,
-  is_read BOOLEAN NOT NULL DEFAULT FALSE,
+  publisher_id BIGINT NOT NULL,
+  status VARCHAR(20) NOT NULL,
+  published_at DATETIME(3) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS notification (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  user_id BIGINT NOT NULL,
+  type VARCHAR(255) NULL,
+  title VARCHAR(255) NULL,
+  content VARCHAR(255) NULL,
+  is_read TINYINT(1) NOT NULL DEFAULT 0,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   read_at DATETIME(3) NULL,
-  KEY idx_notification_user_read_time(user_id, is_read, created_at)
+  PRIMARY KEY (id),
+  KEY idx_notification_user_read_time (user_id, is_read, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS notification_delivery (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  id BIGINT NOT NULL AUTO_INCREMENT,
   notification_id BIGINT NOT NULL,
   channel VARCHAR(20) NOT NULL,
   status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
@@ -457,76 +472,87 @@ CREATE TABLE IF NOT EXISTS notification_delivery (
   sent_at DATETIME(3) NULL,
   next_retry_at DATETIME(3) NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  KEY idx_delivery_dispatch(status, next_retry_at)
+  PRIMARY KEY (id),
+  KEY idx_delivery_dispatch (status, next_retry_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-CREATE TABLE IF NOT EXISTS announcement (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  title VARCHAR(200) NOT NULL,
-  content TEXT NOT NULL,
-  publisher_id BIGINT NOT NULL,
-  status VARCHAR(20) NOT NULL,
-  published_at DATETIME(3) NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+CREATE TABLE IF NOT EXISTS notification_template (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  template_code VARCHAR(50) NOT NULL,
+  channel VARCHAR(20) NOT NULL,
+  title_template VARCHAR(200) NOT NULL,
+  content_template TEXT NOT NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  version INT NOT NULL DEFAULT 0,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  UNIQUE KEY template_code (template_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 USE lab_statistics;
+CREATE TABLE IF NOT EXISTS statistics_event_offset (
+  consumer_name VARCHAR(100) NOT NULL,
+  last_event_id VARCHAR(64) NULL,
+  last_created_at DATETIME(3) NULL,
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (consumer_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS statistics_snapshot (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  metric_type VARCHAR(40) NOT NULL,
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  metric_type VARCHAR(255) NULL,
   resource_id BIGINT NULL,
   user_id BIGINT NULL,
   period_start DATETIME(3) NOT NULL,
   period_end DATETIME(3) NOT NULL,
-  numerator DECIMAL(18,2) NOT NULL,
-  denominator DECIMAL(18,2) NULL,
-  metric_value DECIMAL(18,6) NULL,
+  numerator DECIMAL(38,2) NULL,
+  denominator DECIMAL(38,2) NULL,
+  metric_value DECIMAL(38,2) NULL,
   calculated_until DATETIME(3) NOT NULL,
   data_version BIGINT NOT NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  UNIQUE KEY uk_statistics_metric(metric_type, resource_id, user_id, period_start, period_end)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-CREATE TABLE IF NOT EXISTS statistics_event_offset (
-  consumer_name VARCHAR(100) PRIMARY KEY,
-  last_event_id VARCHAR(64) NULL,
-  last_created_at DATETIME(3) NULL,
-  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_statistics_metric (metric_type, resource_id, user_id, period_start, period_end)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 USE lab_system;
-CREATE TABLE IF NOT EXISTS system_config (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  config_key VARCHAR(100) NOT NULL UNIQUE,
-  config_value VARCHAR(500) NOT NULL,
-  value_type VARCHAR(20) NOT NULL DEFAULT 'STRING',
-  description VARCHAR(500) NULL,
-  updated_by BIGINT NOT NULL DEFAULT 0,
-  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  version INT NOT NULL DEFAULT 0
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS data_dictionary (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  id BIGINT NOT NULL AUTO_INCREMENT,
   dict_type VARCHAR(50) NOT NULL,
   dict_code VARCHAR(50) NOT NULL,
   dict_label VARCHAR(100) NOT NULL,
   sort_no INT NOT NULL DEFAULT 0,
-  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
   version INT NOT NULL DEFAULT 0,
-  UNIQUE KEY uk_dictionary(dict_type, dict_code)
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_dictionary (dict_type, dict_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS operation_log (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  id BIGINT NOT NULL AUTO_INCREMENT,
   operator_id BIGINT NOT NULL,
-  operation_type VARCHAR(50) NOT NULL,
-  target_type VARCHAR(50) NULL,
+  operation_type VARCHAR(255) NULL,
+  target_type VARCHAR(255) NULL,
   target_id BIGINT NULL,
-  result VARCHAR(20) NOT NULL DEFAULT 'SUCCESS',
-  reason VARCHAR(500) NULL,
-  request_id VARCHAR(64) NOT NULL,
-  ip VARCHAR(50) NULL,
+  request_id VARCHAR(255) NULL,
+  ip VARCHAR(255) NULL,
   detail JSON NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  KEY idx_log_operator_time(operator_id, created_at),
-  KEY idx_log_target_time(target_type, target_id, created_at)
+  result VARCHAR(255) NULL,
+  reason VARCHAR(255) NULL,
+  PRIMARY KEY (id),
+  KEY idx_log_operator_time (operator_id, created_at),
+  KEY idx_log_target_time (target_type, target_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS system_config (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  config_key VARCHAR(255) NULL,
+  config_value VARCHAR(255) NULL,
+  description VARCHAR(255) NULL,
+  updated_by BIGINT NULL,
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  version INT NOT NULL DEFAULT 0,
+  value_type VARCHAR(255) NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY config_key (config_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 USE lab_user;

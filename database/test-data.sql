@@ -1,6 +1,5 @@
 -- Laboratory booking platform demonstration data.
--- Prerequisite: run database/schema.sql first. For an existing installation,
--- also run database/upgrade-to-requirements.sql before this file.
+-- Prerequisite: run schema.sql first.
 -- All demonstration account passwords are: 12345678
 -- This file is repeatable: stable business keys are used to avoid duplicates.
 
