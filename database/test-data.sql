@@ -273,7 +273,15 @@ VALUES
   ('TEST-BK-0005', @student_id, @meeting_resource_id, '张三', '科研讨论室',
    TIMESTAMP(DATE_SUB(CURDATE(), INTERVAL 3 DAY), '15:00:00'), TIMESTAMP(DATE_SUB(CURDATE(), INTERVAL 3 DAY), '16:00:00'), 30, '项目讨论', 5, 'CANCELED',
    0, NULL, NULL, FALSE, NULL, TIMESTAMP(DATE_SUB(CURDATE(), INTERVAL 4 DAY), '10:00:00'), '计划调整', FALSE,
-   'seed-booking-history-canceled', DATE_SUB(@seed_now, INTERVAL 5 DAY), DATE_SUB(@seed_now, INTERVAL 4 DAY), 1, FALSE)
+   'seed-booking-history-canceled', DATE_SUB(@seed_now, INTERVAL 5 DAY), DATE_SUB(@seed_now, INTERVAL 4 DAY), 1, FALSE),
+  ('TEST-BK-0006', @student_id, @computer_resource_id, '张三', '计算机实验室',
+   TIMESTAMP(DATE_SUB(CURDATE(), INTERVAL 10 DAY), '09:00:00'), TIMESTAMP(DATE_SUB(CURDATE(), INTERVAL 10 DAY), '10:00:00'), 30, '上机练习', 2, 'NO_SHOW',
+   1, 1, NULL, TRUE, NULL, NULL, NULL, FALSE,
+   'seed-booking-history-noshow-zhang', DATE_SUB(@seed_now, INTERVAL 11 DAY), DATE_SUB(@seed_now, INTERVAL 10 DAY), 1, FALSE),
+  ('TEST-BK-0007', @student2_id, @electronics_resource_id, '李明', '电子测量实验室',
+   TIMESTAMP(DATE_SUB(CURDATE(), INTERVAL 5 DAY), '14:00:00'), TIMESTAMP(DATE_SUB(CURDATE(), INTERVAL 5 DAY), '15:00:00'), 30, '仪器操作训练', 3, 'NO_SHOW',
+   1, 1, NULL, TRUE, NULL, NULL, NULL, FALSE,
+   'seed-booking-history-noshow-li', DATE_SUB(@seed_now, INTERVAL 6 DAY), DATE_SUB(@seed_now, INTERVAL 5 DAY), 1, FALSE)
 ON DUPLICATE KEY UPDATE
   user_id = VALUES(user_id), resource_id = VALUES(resource_id),
   applicant_name_snapshot = VALUES(applicant_name_snapshot), resource_name_snapshot = VALUES(resource_name_snapshot),
@@ -315,6 +323,15 @@ WHERE booking_no LIKE 'TEST-BK-%'
     WHERE history.booking_id = seeded.id
       AND BINARY history.request_id = BINARY CONCAT('seed-history-', seeded.booking_no)
   );
+
+INSERT INTO violation_record (booking_id, user_id, violation_type, status, comment, created_at)
+SELECT id, user_id, 'NO_SHOW', 'OPEN', '预约时段未签到', DATE_SUB(@seed_now, INTERVAL 10 DAY)
+FROM booking WHERE booking_no = 'TEST-BK-0006'
+  AND NOT EXISTS (SELECT 1 FROM violation_record existing WHERE existing.booking_id = booking.id AND existing.violation_type = 'NO_SHOW');
+INSERT INTO violation_record (booking_id, user_id, violation_type, status, comment, processed_at, created_at)
+SELECT id, user_id, 'NO_SHOW', 'CONFIRMED', '预约时段未签到，已确认违约', DATE_SUB(@seed_now, INTERVAL 4 DAY), DATE_SUB(@seed_now, INTERVAL 5 DAY)
+FROM booking WHERE booking_no = 'TEST-BK-0007'
+  AND NOT EXISTS (SELECT 1 FROM violation_record existing WHERE existing.booking_id = booking.id AND existing.violation_type = 'NO_SHOW');
 
 -- ---------------------------------------------------------------------------
 -- Approval tasks. The teacher sees the student's task; the laboratory
