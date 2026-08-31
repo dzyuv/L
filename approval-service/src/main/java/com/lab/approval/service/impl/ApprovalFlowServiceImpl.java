@@ -24,13 +24,13 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
         this.flows=flows; this.nodes=nodes; this.roleGuard=roleGuard; this.operationLogger=operationLogger;
     }
     public Map<String, Object> list(HttpServletRequest request) {
-        roleGuard.requireSystemAdmin(request);
+        roleGuard.requireLabAdmin(request);
         List<Map<String, Object>> items=flows.findAllByOrderByResourceTypeIdAscVersionDesc().stream().map(this::view).toList();
         return Map.of("items",items,"total",items.size());
     }
     @Transactional
     public Map<String, Object> create(AdminApprovalFlowController.FlowRequest body,HttpServletRequest request) {
-        roleGuard.requireSystemAdmin(request);
+        roleGuard.requireLabAdmin(request);
         List<ApprovalFlow> history=flows.findByResourceTypeIdOrderByVersionDesc(body.resourceTypeId());
         history.stream().filter(item->item.enabled).forEach(item->{item.enabled=false;flows.save(item);});
         ApprovalFlow flow=new ApprovalFlow(); flow.resourceTypeId=body.resourceTypeId(); flow.version=history.isEmpty()?1:history.get(0).version+1; flow.createdBy=roleGuard.currentUserId(request); flow=flows.save(flow);

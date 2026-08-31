@@ -97,11 +97,12 @@ CREATE TABLE IF NOT EXISTS lab_resource.asset_status_history (
 CREATE TABLE IF NOT EXISTS lab_resource.maintenance_ticket (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, ticket_no VARCHAR(32) NOT NULL UNIQUE, asset_id BIGINT NOT NULL, reported_by BIGINT NULL,
   previous_asset_status VARCHAR(30) NULL, report_type VARCHAR(30) NOT NULL DEFAULT 'MALFUNCTION', severity VARCHAR(20) NOT NULL DEFAULT 'MEDIUM', description VARCHAR(2000) NOT NULL,
-  status VARCHAR(30) NOT NULL DEFAULT 'REPORTED', assigned_to BIGINT NULL, estimated_cost DECIMAL(14,2) NULL, actual_cost DECIMAL(14,2) NULL, resolution VARCHAR(2000) NULL,
+  status VARCHAR(30) NOT NULL DEFAULT 'REPORTED', assigned_to VARCHAR(30) NULL, estimated_cost DECIMAL(14,2) NULL, actual_cost DECIMAL(14,2) NULL, resolution VARCHAR(2000) NULL,
   processed_by BIGINT NULL, reported_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), processed_at DATETIME(3) NULL, closed_at DATETIME(3) NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3), version INT NOT NULL DEFAULT 0,
   KEY idx_maintenance_status(status, created_at), KEY idx_maintenance_asset(asset_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+ALTER TABLE lab_resource.maintenance_ticket MODIFY assigned_to VARCHAR(30) NULL;
 
 USE lab_booking;
 CALL lab_system.add_column_if_missing('lab_booking', 'booking', 'slot_minutes_snapshot', 'INT NOT NULL DEFAULT 30');
@@ -255,12 +256,26 @@ CALL lab_system.add_column_if_missing('lab_approval', 'approval_task', 'approval
 CALL lab_system.add_column_if_missing('lab_approval', 'approval_task', 'applicant_user_id', 'BIGINT NULL');
 CALL lab_system.add_column_if_missing('lab_approval', 'approval_task', 'applicant_name', 'VARCHAR(50) NULL');
 CALL lab_system.add_column_if_missing('lab_approval', 'approval_task', 'resource_id', 'BIGINT NULL');
+CALL lab_system.add_column_if_missing('lab_approval', 'approval_task', 'resource_type_id', 'BIGINT NULL');
 CALL lab_system.add_column_if_missing('lab_approval', 'approval_task', 'resource_name', 'VARCHAR(100) NULL');
+CALL lab_system.add_column_if_missing('lab_approval', 'approval_task', 'total_levels', 'INT NOT NULL DEFAULT 1');
 CALL lab_system.add_column_if_missing('lab_approval', 'approval_task', 'start_time', 'DATETIME(3) NULL');
 CALL lab_system.add_column_if_missing('lab_approval', 'approval_task', 'end_time', 'DATETIME(3) NULL');
 CALL lab_system.add_column_if_missing('lab_approval', 'approval_task', 'comment', 'VARCHAR(500) NULL');
 CALL lab_system.add_column_if_missing('lab_approval', 'approval_task', 'version', 'INT NOT NULL DEFAULT 0');
 CALL lab_system.add_column_if_missing('lab_approval', 'approval_record', 'request_id', 'VARCHAR(64) NULL');
+UPDATE lab_approval.approval_task t
+JOIN lab_booking.booking b ON b.id = t.booking_id
+SET t.status = CASE WHEN b.status = 'EXPIRED' THEN 'EXPIRED' ELSE 'CANCELED' END,
+    t.completed_at = IFNULL(t.completed_at, NOW(3)),
+    t.comment = CASE
+      WHEN t.comment IS NULL OR t.comment = '' THEN
+        CASE WHEN b.status = 'EXPIRED' THEN 'Approval hold expired' ELSE 'Canceled by applicant' END
+      ELSE t.comment
+    END,
+    t.version = t.version + 1
+WHERE t.status = 'PENDING'
+  AND b.status IN ('CANCELED', 'EXPIRED');
 CREATE TABLE IF NOT EXISTS approval_task_assignee (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   task_id BIGINT NOT NULL,

@@ -50,6 +50,10 @@ public class BookingLifecycleService {
         record(booking,null,booking.status,operatorId,null,requestId);
     }
 
+    public void recordProgress(Booking booking,Long operatorId,String reason,String requestId){
+        record(booking,booking.status,booking.status,operatorId,reason,requestId);
+    }
+
     public void transition(Booking booking,String nextStatus,Long operatorId,String reason,String requestId){
         String previous=booking.status;
         booking.status=nextStatus;
@@ -74,7 +78,7 @@ public class BookingLifecycleService {
         violations.save(violation);
 
         LocalDateTime now=LocalDateTime.now();
-        long count=violations.countByUserIdAndViolationTypeAndCreatedAtAfter(booking.userId,"NO_SHOW",now.minusDays(noShowWindowDays));
+        long count=violations.countActiveNoShows(booking.userId,now.minusDays(noShowWindowDays));
         boolean alreadyRestricted=restrictions.findFirstByUserIdAndStatusAndRestrictedUntilAfterOrderByRestrictedUntilDesc(booking.userId,"ACTIVE",now).isPresent();
         if(count>=noShowThreshold && !alreadyRestricted){
             UserRestriction restriction=new UserRestriction();
@@ -83,6 +87,18 @@ public class BookingLifecycleService {
             restriction.reason="Repeated no-show bookings";
             restriction.sourceViolationCount=(int)count;
             restrictions.save(restriction);
+        }
+    }
+
+    public void refreshRestriction(Long userId){
+        LocalDateTime now=LocalDateTime.now();
+        long count=violations.countActiveNoShows(userId,now.minusDays(noShowWindowDays));
+        if(count>=noShowThreshold) return;
+        for(UserRestriction restriction:restrictions.findByUserIdAndStatus(userId,"ACTIVE")){
+            if(restriction.restrictedUntil!=null && restriction.restrictedUntil.isAfter(now)){
+                restriction.status="LIFTED";
+                restrictions.save(restriction);
+            }
         }
     }
 

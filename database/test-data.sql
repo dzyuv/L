@@ -104,7 +104,7 @@ VALUES
   (@laboratory_type_id, '电子测量实验室', 'C108', 20, 'ACTIVE', '电子电路、示波器和射频仪器测量', @lab_admin_id,
    'https://images.unsplash.com/photo-1581093458791-9d42e3c3d512?auto=format&fit=crop&w=1200&q=80', 1, TRUE, 120, 30, 0, FALSE),
   (@meeting_room_type_id, '科研讨论室', 'D206', 16, 'ACTIVE', '课题组讨论、项目评审与学术交流', @lab_admin_id,
-   'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=80', 0, FALSE, 180, 30, 0, FALSE),
+   'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=80', NULL, FALSE, 180, 30, 0, FALSE),
   (@instrument_type_id, '频谱分析仪预约', 'C108-实验台02', 4, 'ACTIVE', '高价值频谱分析仪独立预约资源', @lab_admin_id,
    'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80', 1, TRUE, 60, 30, 0, FALSE)
 ON DUPLICATE KEY UPDATE
@@ -222,10 +222,10 @@ VALUES
    'IN_USE', 'MALFUNCTION', 'MEDIUM', '开机后显示器无信号，重新插拔视频线后问题仍然存在。', 'REPORTED', NULL,
    NULL, NULL, NULL, NULL, DATE_SUB(@seed_now, INTERVAL 2 HOUR), NULL, NULL, DATE_SUB(@seed_now, INTERVAL 2 HOUR), @seed_now, 0),
   ('TEST-MT-0002', @scope_asset_id, @electronics_resource_id, 'C108-实验台01', '数字示波器一号通道', @teacher_id,
-   'IN_USE', 'DAMAGE', 'HIGH', '示波器一号通道接口松动，探头接入后波形间歇性中断。', 'TRIAGED', @teacher_id,
+   'IN_USE', 'DAMAGE', 'HIGH', '示波器一号通道接口松动，探头接入后波形间歇性中断。', 'TRIAGED', '13800001111',
    1200.00, NULL, '工单已受理，等待进一步检查。', @lab_admin_id, DATE_SUB(@seed_now, INTERVAL 1 DAY), DATE_SUB(@seed_now, INTERVAL 20 HOUR), NULL, DATE_SUB(@seed_now, INTERVAL 1 DAY), @seed_now, 0),
   ('TEST-MT-0003', @microscope_asset_id, @material_resource_id, 'A201-暗室', '荧光显微镜载物台', @teacher_id,
-   'IN_USE', 'MALFUNCTION', 'HIGH', '载物台移动阻力明显增大，需要停机检查传动组件。', 'REPAIRING', @teacher_id,
+   'IN_USE', 'MALFUNCTION', 'HIGH', '载物台移动阻力明显增大，需要停机检查传动组件。', 'REPAIRING', '13900002222',
    3500.00, NULL, '已停机并等待备件。', @lab_admin_id, DATE_SUB(@seed_now, INTERVAL 2 DAY), DATE_SUB(@seed_now, INTERVAL 1 DAY), NULL, DATE_SUB(@seed_now, INTERVAL 2 DAY), @seed_now, 0)
 ON DUPLICATE KEY UPDATE
   asset_id = VALUES(asset_id), resource_id = VALUES(resource_id),

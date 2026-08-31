@@ -104,7 +104,7 @@ const teacherUpcomingBookings = computed(() => bookings.value
 const teacherPageTitle = computed(() => teacherTabs.find((item) => item.id === teacherActiveTab.value)?.label || "教师工作台");
 watch(notice, (message) => {
   if (!message) return;
-  const success = /成功|已通过|已驳回|已完成|已取消|已退出/.test(message);
+  const success = /成功|已通过|已驳回|已完成|已取消|已退出|签到/.test(message);
   const failed = /失败|错误|失效|不可|不能|无法|驳回|请选择|请填写|必须|暂不|没有开放/.test(message);
   toast.value = { visible: true, message, type: success ? "success" : failed ? "error" : "info" };
   clearTimeout(toastTimer);
@@ -166,6 +166,50 @@ function bookingStatusText(status) {
 }
 function bookingRejectReason(item) {
   return String(item?.rejectReason || "").trim();
+}
+const CHECKIN_BEFORE_MINUTES = 15;
+const CHECKIN_AFTER_MINUTES = 30;
+function bookingStartMs(item) {
+  const start = new Date(item?.startTime).getTime();
+  return Number.isFinite(start) ? start : NaN;
+}
+function bookingNeedsCheckin(item) {
+  if (item?.needCheckinSnapshot) return true;
+  return Boolean(bookingResource(item)?.needCheckin);
+}
+function checkinState(item) {
+  if (item?.status !== "APPROVED" || !bookingNeedsCheckin(item)) return "hidden";
+  const start = bookingStartMs(item);
+  if (!Number.isFinite(start)) return "hidden";
+  const now = currentTime.value.getTime();
+  if (now >= start - CHECKIN_BEFORE_MINUTES * 60000 && now <= start + CHECKIN_AFTER_MINUTES * 60000) return "ready";
+  if (now < start - CHECKIN_BEFORE_MINUTES * 60000) return "waiting";
+  return "missed";
+}
+function canCheckin(item) {
+  return checkinState(item) === "ready";
+}
+function showCheckin(item) {
+  return item?.status === "APPROVED" && bookingNeedsCheckin(item);
+}
+function checkinTitle(item) {
+  const state = checkinState(item);
+  if (state === "ready") return "点击完成签到";
+  if (state === "waiting") return "开始前 15 分钟至开始后 30 分钟可签到";
+  if (state === "missed") return "已过签到时间";
+  return "";
+}
+function checkinHintText(item) {
+  const state = checkinState(item);
+  if (state === "ready") return "请立即签到，超时将记为未到";
+  if (state === "waiting") return "开始前 15 分钟至开始后 30 分钟可签到";
+  if (state === "missed") return "已过签到时间，超时未签到将记为未到";
+  return "";
+}
+function canCancel(item) {
+  if (!["APPROVED", "PENDING_APPROVAL"].includes(item?.status)) return false;
+  const start = bookingStartMs(item);
+  return Number.isFinite(start) && start > currentTime.value.getTime();
 }
 function bookingDay(value) {
   return value ? String(value).slice(8, 10) : "--";
@@ -369,6 +413,7 @@ async function approveTask(task) {
     await load();
   } catch (e) {
     notice.value = e.response?.data?.message || "审批操作失败";
+    await load();
   }
 }
 function openRejection(task) {
@@ -395,6 +440,9 @@ async function submitRejection() {
     await load();
   } catch (e) {
     notice.value = e.response?.data?.message || "驳回操作失败";
+    rejectionTarget.value = null;
+    rejectionReason.value = "";
+    await load();
   } finally {
     rejectionSaving.value = false;
   }
@@ -573,6 +621,21 @@ async function cancel(id) {
     notice.value = e.response?.data?.message || "取消失败";
   }
 }
+async function checkin(id) {
+  const item = bookings.value.find((booking) => booking.id === id);
+  if (item && !canCheckin(item)) {
+    notice.value = checkinTitle(item) || "当前不在允许签到的时间范围内";
+    return;
+  }
+  try {
+    await axios.post(`/api/v1/bookings/${id}/checkin`, {});
+    notice.value = "签到成功，已开始使用";
+    await load();
+  } catch (e) {
+    notice.value = e.response?.data?.message || "签到失败";
+    await load();
+  }
+}
 onMounted(() => {
   currentTimeTimer = window.setInterval(() => { currentTime.value = new Date(); }, 60000);
   if (token.value) load();
@@ -685,7 +748,10 @@ onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
                 <article v-for="item in teacherUpcomingBookings.slice(0, 5)" :key="item.id">
                   <div class="teacher-schedule-date"><strong>{{ bookingDay(item.startTime) }}</strong><span>{{ bookingMonth(item.startTime) }}</span></div>
                   <div><b>{{ item.resourceNameSnapshot }}</b><span><Clock3 :size="13" />{{ item.startTime?.slice(11, 16) }} - {{ item.endTime?.slice(11, 16) }}</span><small>{{ item.purpose }}</small></div>
-                  <span class="teacher-status" :class="item.status.toLowerCase()">{{ bookingStatusText(item.status) }}</span>
+                  <div class="teacher-schedule-actions">
+                    <span class="teacher-status" :class="item.status.toLowerCase()">{{ bookingStatusText(item.status) }}</span>
+                    <button v-if="showCheckin(item)" class="teacher-checkin" type="button" :disabled="!canCheckin(item)" :title="checkinTitle(item)" @click="checkin(item.id)">签到</button>
+                  </div>
                 </article>
                 <div v-if="!teacherUpcomingBookings.length" class="teacher-empty">近期没有已通过的使用安排</div>
               </div>
@@ -694,7 +760,7 @@ onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
         </template>
 
         <section v-else-if="teacherActiveTab === 'approvals'" class="teacher-section">
-          <div class="teacher-section-title"><div><h2>预约审批</h2><p>处理你负责的资源预约。本人申请自己负责的资源时，由实验室管理员审批</p></div><span>{{ approvals.length }} 项待处理</span></div>
+          <div class="teacher-section-title"><div><h2>预约审批</h2><p>一级由教师审批，二级由实验室管理员终审。未指定到人的一级任务，所有教师都可以处理</p></div><span>{{ approvals.length }} 项待处理</span></div>
           <div class="teacher-approval-list">
             <article v-for="task in approvals" :key="task.id">
               <span class="teacher-level">L{{ task.level }}</span>
@@ -727,7 +793,7 @@ onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
           <div class="teacher-section-title"><div><h2>我的预约</h2><p>教师本人提交的预约申请及处理状态</p></div><button type="button" @click="teacherActiveTab = 'resources'"><Plus :size="14" />新建预约</button></div>
           <div class="teacher-booking-table">
             <div class="teacher-booking-row head"><span>预约编号</span><span>资源</span><span>使用时间</span><span>用途</span><span>状态</span><span>操作</span></div>
-            <div v-for="item in orderedBookings" :key="item.id" class="teacher-booking-row"><span class="mono">{{ item.bookingNo }}</span><span><b>{{ item.resourceNameSnapshot }}</b><small>{{ bookingResource(item)?.location }}</small></span><span>{{ item.startTime?.replace('T', ' ').slice(0, 16) }}<small>至 {{ item.endTime?.replace('T', ' ').slice(0, 16) }}</small></span><span>{{ item.purpose }}</span><span><span class="teacher-status" :class="item.status.toLowerCase()">{{ bookingStatusText(item.status) }}</span><small v-if="item.status === 'REJECTED'" class="teacher-reject-reason">{{ bookingRejectReason(item) || '暂无说明' }}</small></span><span><button v-if="['APPROVED', 'PENDING_APPROVAL'].includes(item.status)" class="teacher-cancel" type="button" @click="cancel(item.id)">取消</button><em v-else>-</em></span></div>
+            <div v-for="item in orderedBookings" :key="item.id" class="teacher-booking-row"><span class="mono">{{ item.bookingNo }}</span><span><b>{{ item.resourceNameSnapshot }}</b><small>{{ bookingResource(item)?.location }}</small></span><span>{{ item.startTime?.replace('T', ' ').slice(0, 16) }}<small>至 {{ item.endTime?.replace('T', ' ').slice(0, 16) }}</small></span><span>{{ item.purpose }}</span><span><span class="teacher-status" :class="item.status.toLowerCase()">{{ bookingStatusText(item.status) }}</span><small v-if="item.status === 'REJECTED'" class="teacher-reject-reason">{{ bookingRejectReason(item) || '暂无说明' }}</small><small v-else-if="showCheckin(item)">{{ checkinHintText(item) }}</small></span><span class="teacher-booking-actions"><button v-if="showCheckin(item)" class="teacher-checkin" type="button" :disabled="!canCheckin(item)" :title="checkinTitle(item)" @click="checkin(item.id)">签到</button><button v-if="canCancel(item)" class="teacher-cancel" type="button" @click="cancel(item.id)">取消</button><em v-if="!showCheckin(item) && !canCancel(item)">-</em></span></div>
             <div v-if="!bookings.length" class="teacher-empty">暂无预约记录</div>
           </div>
         </section>
@@ -794,9 +860,13 @@ onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
               <h3>{{ resourceDisplayName(bookingResource(b)) }}</h3>
               <p><Clock3 :size="13" />{{ b.startTime?.replace('T', ' ').slice(0, 16) }} - {{ b.endTime?.slice(11, 16) }}<span>{{ b.purpose }}</span></p>
               <p v-if="b.status === 'REJECTED'" class="booking-reject-reason">驳回原因：{{ bookingRejectReason(b) || '暂无说明' }}</p>
+              <p v-else-if="showCheckin(b)" class="booking-checkin-hint">{{ checkinHintText(b) }}</p>
             </div>
             <span class="booking-card-status" :class="b.status.toLowerCase()">{{ bookingStatusText(b.status) }}</span>
-            <button v-if="['APPROVED', 'PENDING_APPROVAL'].includes(b.status)" class="booking-cancel" @click="cancel(b.id)">取消</button>
+            <div class="booking-card-actions">
+              <button v-if="showCheckin(b)" class="booking-checkin" type="button" :disabled="!canCheckin(b)" :title="checkinTitle(b)" @click="checkin(b.id)">签到</button>
+              <button v-if="canCancel(b)" class="booking-cancel" type="button" @click="cancel(b.id)">取消</button>
+            </div>
           </article>
           <div v-if="!bookings.length" class="empty">还没有预约记录</div>
         </div>

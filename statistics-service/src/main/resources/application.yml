@@ -25,3 +25,9 @@ mybatis-plus:
 security:
   jwt-secret: ${JWT_SECRET}
   internal-token: ${INTERNAL_SERVICE_TOKEN}
+services:
+  resource.base-url: ${RESOURCE_BASE_URL:http://localhost:8082}
+  booking.base-url: ${BOOKING_BASE_URL:http://localhost:8083}
+statistics:
+  window-days: ${STATISTICS_WINDOW_DAYS:7}
+  refresh-ms: ${STATISTICS_REFRESH_MS:600000}

@@ -99,7 +99,9 @@ public class AssetServiceImpl implements AssetService {
         if (!SEVERITIES.contains(severity)) throw new BusinessException("INVALID_SEVERITY", "Maintenance severity is invalid", HttpStatus.BAD_REQUEST);
         if (asset != null && tickets.existsByAssetIdAndStatusIn(asset.id, Set.of("REPORTED", "TRIAGED", "REPAIRING", "WAITING_ACCEPTANCE"))) throw new BusinessException("OPEN_TICKET_EXISTS", "This asset already has an open maintenance ticket", HttpStatus.CONFLICT);
         MaintenanceTicket ticket = new MaintenanceTicket(); ticket.ticketNo = "MT" + UUID.randomUUID().toString().replace("-", "").substring(0, 24); ticket.assetId = asset == null ? null : asset.id; ticket.resourceId = body.resourceId() != null ? body.resourceId() : asset == null ? null : asset.resourceId; ticket.locationSnapshot = firstNonBlank(body.location(), asset == null ? null : asset.location); ticket.assetClue = body.assetClue(); ticket.reportedBy = userId; ticket.previousAssetStatus = asset == null ? null : asset.status; ticket.reportType = body.reportType(); ticket.severity = severity; ticket.description = body.description();
-        ticket = tickets.save(ticket); if (asset != null && !"REPORTED".equals(asset.status)) { String previous = asset.status; asset.status = "REPORTED"; assets.save(asset); record(asset, previous, asset.status, "Maintenance ticket " + ticket.ticketNo, userId); } return ticket;
+        ticket = tickets.save(ticket);
+        syncAssetWithTicket(asset, ticket, ticket.status, userId);
+        return ticket;
     }
     public List<MaintenanceTicket> myTickets(HttpServletRequest request) { return tickets.findByReportedByOrderByCreatedAtDesc(roles.currentUserId(request)); }
     public Map<String, Object> listTickets(String status, Long assetId, HttpServletRequest request) {
@@ -110,14 +112,31 @@ public class AssetServiceImpl implements AssetService {
         roles.requireLabAdmin(request); if (!TICKET_STATUSES.contains(body.status())) throw new BusinessException("INVALID_STATUS", "Maintenance ticket status is invalid", HttpStatus.BAD_REQUEST);
         MaintenanceTicket ticket = tickets.findById(id).orElseThrow(() -> notFound("Maintenance ticket does not exist"));
         validateTransition(ticket.status, body.status());
-        if (ticket.assetId == null && body.assetId() != null) { Asset selected = findAsset(body.assetId()); if (tickets.existsByAssetIdAndStatusIn(selected.id, Set.of("REPORTED", "TRIAGED", "REPAIRING", "WAITING_ACCEPTANCE"))) throw new BusinessException("OPEN_TICKET_EXISTS", "This asset already has an open maintenance ticket", HttpStatus.CONFLICT); ticket.assetId = selected.id; ticket.previousAssetStatus = selected.status; if (ticket.resourceId == null) ticket.resourceId = selected.resourceId; if (ticket.locationSnapshot == null || ticket.locationSnapshot.isBlank()) ticket.locationSnapshot = selected.location; }
+        if (ticket.assetId == null && body.assetId() != null) {
+            Asset selected = findAsset(body.assetId());
+            if (tickets.existsByAssetIdAndStatusIn(selected.id, Set.of("REPORTED", "TRIAGED", "REPAIRING", "WAITING_ACCEPTANCE"))) {
+                throw new BusinessException("OPEN_TICKET_EXISTS", "This asset already has an open maintenance ticket", HttpStatus.CONFLICT);
+            }
+            ticket.assetId = selected.id;
+            ticket.previousAssetStatus = selected.status;
+            if (ticket.resourceId == null) ticket.resourceId = selected.resourceId;
+            if (ticket.locationSnapshot == null || ticket.locationSnapshot.isBlank()) ticket.locationSnapshot = selected.location;
+        }
         Asset asset = ticket.assetId == null ? null : findAsset(ticket.assetId);
-        if (asset == null && Set.of("REPAIRING", "WAITING_ACCEPTANCE", "CLOSED").contains(body.status())) throw new BusinessException("ASSET_REQUIRED", "Bind the concrete asset before starting repair", HttpStatus.UNPROCESSABLE_ENTITY);
-        ticket.status = body.status(); ticket.assignedTo = body.assignedTo(); ticket.resolution = body.resolution(); ticket.estimatedCost = body.estimatedCost(); ticket.actualCost = body.actualCost(); ticket.processedBy = roles.currentUserId(request); ticket.processedAt = LocalDateTime.now(); if ("CLOSED".equals(body.status()) || "REJECTED".equals(body.status())) ticket.closedAt = LocalDateTime.now();
-        if (asset != null && "REPAIRING".equals(body.status())) setAssetStatus(asset, "MAINTENANCE", "Ticket " + ticket.ticketNo + " is repairing", ticket.processedBy);
-        if (asset != null && "CLOSED".equals(body.status())) setAssetStatus(asset, Set.of("IN_USE", "MAINTENANCE", "REPORTED").contains(ticket.previousAssetStatus) ? ("IN_USE".equals(ticket.previousAssetStatus) ? "IN_USE" : "IN_STOCK") : Objects.toString(ticket.previousAssetStatus, "IN_STOCK"), "Ticket " + ticket.ticketNo + " closed", ticket.processedBy);
-        if (asset != null && "REJECTED".equals(body.status())) setAssetStatus(asset, Objects.toString(ticket.previousAssetStatus, "IN_STOCK"), "Ticket " + ticket.ticketNo + " rejected", ticket.processedBy);
-        return tickets.save(ticket);
+        if (asset == null && Set.of("REPAIRING", "WAITING_ACCEPTANCE", "CLOSED").contains(body.status())) {
+            throw new BusinessException("ASSET_REQUIRED", "Bind the concrete asset before starting repair", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        ticket.status = body.status();
+        ticket.assignedTo = normalizeAssigneePhone(body.assignedTo());
+        ticket.resolution = body.resolution();
+        ticket.estimatedCost = body.estimatedCost();
+        ticket.actualCost = body.actualCost();
+        ticket.processedBy = roles.currentUserId(request);
+        ticket.processedAt = LocalDateTime.now();
+        if ("CLOSED".equals(body.status()) || "REJECTED".equals(body.status())) ticket.closedAt = LocalDateTime.now();
+        MaintenanceTicket saved = tickets.save(ticket);
+        syncAssetWithTicket(asset, saved, saved.status, saved.processedBy);
+        return saved;
     }
 
     private void apply(AssetCategory item, AssetController.CategoryRequest body) { item.name = body.name(); item.serialized = body.serialized(); item.highValue = body.highValue(); item.enabled = body.enabled(); item.description = body.description(); item.updatedAt = LocalDateTime.now(); }
@@ -129,7 +148,53 @@ public class AssetServiceImpl implements AssetService {
     private Asset findAsset(Long id) { return assets.findById(id).filter(x -> !x.deleted).orElseThrow(() -> notFound("Asset does not exist")); }
     private BusinessException notFound(String message) { return new BusinessException("NOT_FOUND", message, HttpStatus.NOT_FOUND); }
     private void record(Asset item, String from, String to, String reason, Long operator) { AssetStatusHistory row = new AssetStatusHistory(); row.assetId = item.id; row.fromStatus = from; row.toStatus = to; row.reason = reason; row.operatorId = operator; history.save(row); }
-    private void setAssetStatus(Asset item, String status, String reason, Long operator) { if (!Objects.equals(item.status, status)) { String previous = item.status; item.status = status; assets.save(item); record(item, previous, status, reason, operator); } }
+    private void syncAssetWithTicket(Asset asset, MaintenanceTicket ticket, String ticketStatus, Long operator) {
+        if (asset == null) return;
+        String nextStatus = assetStatusForTicket(ticket.reportType, ticketStatus, ticket.previousAssetStatus);
+        if (nextStatus == null) return;
+        Asset latest = findAsset(asset.id);
+        setAssetStatus(latest, nextStatus, "工单 " + ticket.ticketNo + " " + ticketStatus, operator);
+    }
+
+    private String assetStatusForTicket(String reportType, String ticketStatus, String previousAssetStatus) {
+        if ("LOSS".equals(reportType) && Set.of("REPORTED", "TRIAGED", "REPAIRING", "WAITING_ACCEPTANCE", "CLOSED").contains(ticketStatus)) {
+            return "LOST";
+        }
+        return switch (ticketStatus) {
+            case "REPORTED", "TRIAGED" -> "REPORTED";
+            case "REPAIRING", "WAITING_ACCEPTANCE" -> "MAINTENANCE";
+            case "CLOSED", "REJECTED" -> restoreAssetStatus(previousAssetStatus);
+            default -> null;
+        };
+    }
+
+    private String restoreAssetStatus(String previous) {
+        if (previous == null || previous.isBlank() || Set.of("REPORTED", "MAINTENANCE", "LOST", "SCRAPPED").contains(previous)) {
+            return "IN_STOCK";
+        }
+        return previous;
+    }
+
+    private void setAssetStatus(Asset item, String status, String reason, Long operator) {
+        if (Objects.equals(item.status, status)) return;
+        String previous = item.status;
+        item.status = status;
+        item.updatedAt = LocalDateTime.now();
+        assets.save(item);
+        record(item, previous, status, reason, operator);
+    }
     private void validateTransition(String from, String to) { if (Objects.equals(from, to)) return; Map<String, Set<String>> allowed = Map.of("REPORTED", Set.of("TRIAGED", "REPAIRING", "REJECTED"), "TRIAGED", Set.of("REPAIRING", "REJECTED"), "REPAIRING", Set.of("WAITING_ACCEPTANCE", "REJECTED"), "WAITING_ACCEPTANCE", Set.of("REPAIRING", "CLOSED")); if (!allowed.getOrDefault(from, Set.of()).contains(to)) throw new BusinessException("INVALID_TRANSITION", "Maintenance ticket status transition is not allowed", HttpStatus.UNPROCESSABLE_ENTITY); }
     private String firstNonBlank(String first, String second) { return first != null && !first.isBlank() ? first.trim() : second; }
+
+    private String normalizeAssigneePhone(String value) {
+        if (value == null) return null;
+        String phone = value.trim().replaceAll("[\\s-]", "");
+        if (phone.isBlank()) return null;
+        if (phone.startsWith("+86")) phone = phone.substring(3);
+        else if (phone.startsWith("86") && phone.length() == 13) phone = phone.substring(2);
+        if (!phone.matches("1\\d{10}") && !phone.matches("\\d{7,12}")) {
+            throw new BusinessException("INVALID_PHONE", "请填写有效的维修负责人电话", HttpStatus.BAD_REQUEST);
+        }
+        return phone;
+    }
 }

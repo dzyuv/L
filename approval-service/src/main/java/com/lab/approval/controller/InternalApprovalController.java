@@ -6,6 +6,7 @@ import com.lab.common.api.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.web.bind.annotation.*;
 import java.util.Objects;
@@ -18,12 +19,22 @@ public class InternalApprovalController {
     public InternalApprovalController(ApprovalInternalService service) { this.service = service; }
 
     public record CreateTask(@NotNull Long bookingId, @NotNull Long applicantUserId, String applicantName,
-                             @NotNull Long resourceId, String resourceName,
+                             @NotNull Long resourceId, Long resourceTypeId, String resourceName,
                              @NotNull java.time.LocalDateTime startTime, @NotNull java.time.LocalDateTime endTime,
-                             @Min(1) int level, Long assignedUserId, String approverRole) {}
+                             @Min(1) int level, @Min(1) int totalLevels, Long assignedUserId, String approverRole) {}
+
+    public record ClosePending(@NotBlank String reason) {}
 
     @PostMapping("/tasks")
     public ApiResponse<ApprovalTask> create(@Valid @RequestBody CreateTask request, HttpServletRequest servletRequest) {
         return ApiResponse.success(service.create(request, servletRequest), Objects.toString(servletRequest.getAttribute("X-Request-Id"), ""));
+    }
+
+    @PostMapping("/bookings/{bookingId}/close")
+    public ApiResponse<ApprovalTask> close(@PathVariable("bookingId") Long bookingId,
+                                           @Valid @RequestBody ClosePending request,
+                                           HttpServletRequest servletRequest) {
+        return ApiResponse.success(service.closePending(bookingId, request.reason(), servletRequest),
+                Objects.toString(servletRequest.getAttribute("X-Request-Id"), ""));
     }
 }

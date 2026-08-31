@@ -11,8 +11,8 @@ import {
 const props = defineProps({ user: { type: Object, required: true }, initialResources: { type: Array, default: () => [] } });
 const isSystemAdmin = computed(() => (props.user?.roles || []).includes("SYSTEM_ADMIN"));
 const tabs = computed(() => isSystemAdmin.value
-  ? [{ id: "overview", label: "总览", icon: BarChart3 }, { id: "users", label: "用户与角色", icon: Users }, { id: "flows", label: "审批流", icon: ClipboardCheck }, { id: "configs", label: "系统配置", icon: Settings }, { id: "logs", label: "管理员日志", icon: ScrollText }]
-  : [{ id: "overview", label: "运营总览", icon: BarChart3 }, { id: "resources", label: "资源管理", icon: FlaskConical }, { id: "resource-types", label: "资源类别", icon: FlaskConical }, { id: "assets", label: "资产台账", icon: PackageSearch }, { id: "maintenance", label: "报修处理", icon: Wrench }, { id: "bookings", label: "预约查询", icon: CalendarClock }, { id: "approvals", label: "二级审批", icon: ClipboardCheck }, { id: "violations", label: "违约处理", icon: AlertTriangle }]);
+  ? [{ id: "overview", label: "总览", icon: BarChart3 }, { id: "users", label: "用户与角色", icon: Users }, { id: "configs", label: "系统配置", icon: Settings }, { id: "logs", label: "管理员日志", icon: ScrollText }]
+  : [{ id: "overview", label: "运营总览", icon: BarChart3 }, { id: "resources", label: "资源管理", icon: FlaskConical }, { id: "resource-types", label: "资源类别", icon: FlaskConical }, { id: "flows", label: "审批流", icon: ClipboardCheck }, { id: "assets", label: "资产台账", icon: PackageSearch }, { id: "maintenance", label: "报修处理", icon: Wrench }, { id: "bookings", label: "预约查询", icon: CalendarClock }, { id: "approvals", label: "预约审批", icon: ClipboardCheck }, { id: "violations", label: "违约处理", icon: AlertTriangle }]);
 const activeTab = ref("overview");
 const loading = ref(false);
 const notice = ref("");
@@ -25,6 +25,9 @@ const rejectionTarget = ref(null);
 const rejectionReason = ref("");
 const rejectionSaving = ref(false);
 const violations = ref([]);
+const dismissTarget = ref(null);
+const dismissReason = ref("");
+const dismissSaving = ref(false);
 const users = ref([]);
 const teachers = ref([]);
 const roles = ref([]);
@@ -37,6 +40,7 @@ const approvalFlows = ref([]);
 const assets = ref([]);
 const assetCategories = ref([]);
 const maintenanceTickets = ref([]);
+const stats = ref(null);
 const query = ref("");
 const selectedUser = ref(null);
 const selectedRoles = ref([]);
@@ -93,7 +97,14 @@ const labReport = computed(() => {
     map[key] = (map[key] || 0) + 1;
     return map;
   }, {});
-  const resourceRanking = Object.entries(resourceCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 6);
+  const usageRanking = (stats.value?.ranking || []).map((item) => ({
+    name: item.resourceName,
+    count: Number(item.bookingCount || 0),
+    ratePercent: Number(item.ratePercent || 0),
+  })).slice(0, 6);
+  const resourceRanking = usageRanking.length
+    ? usageRanking
+    : Object.entries(resourceCounts).map(([name, count]) => ({ name, count, ratePercent: null })).sort((a, b) => b.count - a.count).slice(0, 6);
   const maxResourceCount = resourceRanking[0]?.count || 1;
   const statusItems = [
     { key: "APPROVED", label: "已通过", count: counts.APPROVED || 0 },
@@ -108,7 +119,7 @@ const labReport = computed(() => {
 });
 
 function emptyResource() {
-  return { typeId: "", name: "", location: "", capacity: 1, description: "", imageUrl: "", maxDurationMinutes: 120, needCheckin: true, approvalLevelOverride: null };
+  return { typeId: "", name: "", location: "", capacity: 1, description: "", imageUrl: "", maxDurationMinutes: 120, needCheckin: true, approvalLevelOverride: "" };
 }
 function show(message, failed = false) {
   notice.value = message;
@@ -118,7 +129,10 @@ function show(message, failed = false) {
 }
 function apiData(response, fallback = []) { return response.data?.data ?? fallback; }
 function statusText(value) {
-  return ({ ACTIVE: "正常", DISABLED: "已禁用", LOCKED: "已锁定", PENDING_APPROVAL: "待审批", APPROVED: "已通过", REJECTED: "已驳回", CANCELED: "已取消", CHECKED_IN: "已签到", COMPLETED: "已完成", NO_SHOW: "未签到", EXPIRED: "审批超时", OPEN: "待处理", RESOLVED: "已解决", CONFIRMED: "已确认", DISMISSED: "已撤销" })[value] || value;
+  return ({ ACTIVE: "正常", DISABLED: "已禁用", LOCKED: "已锁定", PENDING_APPROVAL: "待审批", APPROVED: "已通过", REJECTED: "已驳回", CANCELED: "已取消", CHECKED_IN: "已签到", COMPLETED: "已完成", NO_SHOW: "未签到", EXPIRED: "审批超时", OPEN: "待处理", RESOLVED: "已解决", CONFIRMED: "已确认", DISMISSED: "已撤销", LIFTED: "已解除" })[value] || value;
+}
+function violationTypeText(value) {
+  return ({ NO_SHOW: "未签到" })[value] || value;
 }
 function formatTime(value) { return value ? String(value).replace("T", " ").slice(0, 16) : "-"; }
 function teacherLabel(item) {
@@ -154,38 +168,56 @@ async function loadAll() {
   loading.value = true;
   try {
     if (isSystemAdmin.value) {
-      const [userResponse, roleResponse, configResponse, logResponse, flowResponse, typeResponse] = await Promise.all([
+      const [userResponse, roleResponse, configResponse, logResponse] = await Promise.all([
         axios.get("/api/v1/admin/users"), axios.get("/api/v1/admin/roles"),
         axios.get("/api/v1/admin/configs"), axios.get("/api/v1/admin/operation-logs"),
-        axios.get("/api/v1/admin/approval-flows"), axios.get("/api/v1/resource-types"),
       ]);
       users.value = apiData(userResponse, {}).items || [];
       roles.value = apiData(roleResponse, {}).items || [];
       configs.value = apiData(configResponse, []);
       operationLogs.value = apiData(logResponse, {}).items || [];
-      approvalFlows.value = apiData(flowResponse, {}).items || [];
-      resourceTypes.value = apiData(typeResponse, []);
+      await loadStatistics();
     } else {
-      const [resourceResponse, typeResponse, bookingResponse, approvalResponse, violationResponse, assetResponse, categoryResponse, ticketResponse, teacherResponse] = await Promise.all([
+      const [resourceResponse, typeResponse, bookingResponse, approvalResponse, assetResponse, categoryResponse, ticketResponse, teacherResponse, flowResponse, violationResponse] = await Promise.all([
         axios.get("/api/v1/resources"), axios.get("/api/v1/admin/resource-types"),
-        axios.get("/api/v1/admin/bookings"), axios.get("/api/v1/approvals/mine"), axios.get("/api/v1/admin/violations"),
+        axios.get("/api/v1/admin/bookings"), axios.get("/api/v1/approvals/mine"),
         axios.get("/api/v1/admin/assets"), axios.get("/api/v1/admin/assets/categories"),
         axios.get("/api/v1/admin/maintenance/tickets"), axios.get("/api/v1/admin/users/teachers"),
+        axios.get("/api/v1/admin/approval-flows"), axios.get("/api/v1/admin/violations"),
       ]);
       resources.value = apiData(resourceResponse, []);
       resourceTypes.value = apiData(typeResponse, []);
       bookings.value = apiData(bookingResponse, {}).items || [];
       approvals.value = apiData(approvalResponse, []);
-      violations.value = apiData(violationResponse, {}).items || [];
       assets.value = apiData(assetResponse, {}).items || [];
       assetCategories.value = apiData(categoryResponse, []);
       maintenanceTickets.value = apiData(ticketResponse, {}).items || [];
       teachers.value = apiData(teacherResponse, {}).items || [];
+      approvalFlows.value = apiData(flowResponse, {}).items || [];
+      violations.value = apiData(violationResponse, {}).items || [];
+      await loadStatistics();
     }
   } catch (e) { show(e.response?.data?.message || "管理数据加载失败", true); }
   finally { loading.value = false; }
 }
 
+async function loadStatistics() {
+  try {
+    const response = await axios.get("/api/v1/statistics/usage");
+    stats.value = apiData(response, null);
+  } catch {
+    stats.value = null;
+  }
+}
+function formatMinutes(value) {
+  const minutes = Number(value || 0);
+  if (minutes < 60) return `${minutes} 分钟`;
+  return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分钟`;
+}
+function formatPercent(value) {
+  const amount = Number(value || 0);
+  return `${amount.toFixed(1)}%`;
+}
 async function updateUserStatus(item) {
   const status = item.status === "ACTIVE" ? "DISABLED" : "ACTIVE";
   try { await axios.put(`/api/v1/admin/users/${item.id}/status`, { status }); show(status === "ACTIVE" ? "账号已启用" : "账号已禁用"); await loadAll(); }
@@ -208,7 +240,21 @@ async function saveConfig(item) {
 async function createApprovalFlow() {
   if (!flowForm.value.resourceTypeId) return show("请选择资源类型", true);
   const nodes = Array.from({ length: Number(flowForm.value.levels) }, (_, index) => ({ level: index + 1, approverRole: index === 0 ? "TEACHER" : "LAB_ADMIN", scopeType: "RESOURCE", scopeValue: "", approvalRule: "ANY_ONE", quorumCount: null, deadlineMinutes: Number(flowForm.value.deadlineMinutes) }));
-  try { await axios.post("/api/v1/admin/approval-flows", { resourceTypeId: Number(flowForm.value.resourceTypeId), nodes }); show("审批流新版本已发布"); await loadAll(); }
+  try {
+    const typeId = Number(flowForm.value.resourceTypeId);
+    const levels = Number(flowForm.value.levels);
+    await axios.post("/api/v1/admin/approval-flows", { resourceTypeId: typeId, nodes });
+    const type = resourceTypes.value.find((item) => Number(item.id) === typeId);
+    if (type) {
+      await axios.put(`/api/v1/admin/resource-types/${typeId}`, {
+        name: type.name,
+        defaultApprovalLevel: levels,
+        enabled: type.enabled !== false,
+      });
+    }
+    show("审批流新版本已发布，该类别后续预约将按 " + (levels === 2 ? "二级" : "一级") + " 审批");
+    await loadAll();
+  }
   catch (e) { show(e.response?.data?.message || "审批流发布失败", true); }
 }
 function editResourceType(item) {
@@ -260,11 +306,17 @@ async function deleteResourceType(item) {
 }
 
 function createResource() { resourceForm.value = emptyResource(); resourceDialog.value = true; }
-function editResource(item) { resourceForm.value = { typeId: item.typeId, name: item.name, location: item.location, capacity: item.capacity, description: item.description || "", imageUrl: item.imageUrl || "", maxDurationMinutes: item.maxDurationMinutes, needCheckin: item.needCheckin, approvalLevelOverride: item.approvalLevelOverride ?? null }; selectedResource.value = item; resourceDialog.value = true; }
+function editResource(item) { resourceForm.value = { typeId: item.typeId, name: item.name, location: item.location, capacity: item.capacity, description: item.description || "", imageUrl: item.imageUrl || "", maxDurationMinutes: item.maxDurationMinutes, needCheckin: item.needCheckin, approvalLevelOverride: item.approvalLevelOverride ?? "" }; selectedResource.value = item; resourceDialog.value = true; }
 async function saveResource() {
+  const payload = {
+    ...resourceForm.value,
+    approvalLevelOverride: resourceForm.value.approvalLevelOverride === "" || resourceForm.value.approvalLevelOverride === null
+      ? null
+      : Number(resourceForm.value.approvalLevelOverride),
+  };
   try {
-    if (selectedResource.value) await axios.put(`/api/v1/admin/resources/${selectedResource.value.id}`, resourceForm.value);
-    else await axios.post("/api/v1/admin/resources", resourceForm.value);
+    if (selectedResource.value) await axios.put(`/api/v1/admin/resources/${selectedResource.value.id}`, payload);
+    else await axios.post("/api/v1/admin/resources", payload);
     show(selectedResource.value ? "资源信息已更新" : "资源已创建"); resourceDialog.value = false; selectedResource.value = null; await loadAll();
   } catch (e) { show(e.response?.data?.message || "资源保存失败", true); }
 }
@@ -313,7 +365,7 @@ async function cancelClosure(item) {
 }
 async function approveTask(item) {
   try { await axios.post(`/api/v1/approvals/${item.id}/approve`, {}); show("审批已通过"); await loadAll(); }
-  catch (e) { show(e.response?.data?.message || "审批处理失败", true); }
+  catch (e) { show(e.response?.data?.message || "审批处理失败", true); await loadAll(); }
 }
 function openRejection(item) {
   rejectionTarget.value = item;
@@ -339,15 +391,52 @@ async function submitRejection() {
     await loadAll();
   } catch (e) {
     show(e.response?.data?.message || "驳回操作失败", true);
+    rejectionTarget.value = null;
+    rejectionReason.value = "";
+    await loadAll();
   } finally {
     rejectionSaving.value = false;
   }
 }
-async function processViolation(item, status) {
-  try { await axios.put(`/api/v1/admin/violations/${item.id}`, { status, comment: status === "CONFIRMED" ? "管理员确认违约" : "管理员撤销违约" }); show("违约记录已处理"); await loadAll(); }
-  catch (e) { show(e.response?.data?.message || "违约处理失败", true); }
+async function confirmViolation(item) {
+  try {
+    await axios.put(`/api/v1/admin/violations/${item.id}`, { status: "CONFIRMED" });
+    show("已确认该次违约");
+    await loadAll();
+  } catch (e) {
+    show(e.response?.data?.message || "确认违约失败", true);
+    await loadAll();
+  }
 }
-
+function openDismiss(item) {
+  dismissTarget.value = item;
+  dismissReason.value = "";
+}
+function closeDismiss() {
+  if (dismissSaving.value) return;
+  dismissTarget.value = null;
+  dismissReason.value = "";
+}
+async function submitDismiss() {
+  const reason = dismissReason.value.trim();
+  if (!reason || !dismissTarget.value) {
+    show("请填写撤销原因", true);
+    return;
+  }
+  dismissSaving.value = true;
+  try {
+    await axios.put(`/api/v1/admin/violations/${dismissTarget.value.id}`, { status: "DISMISSED", comment: reason });
+    dismissTarget.value = null;
+    dismissReason.value = "";
+    show("已撤销该次违约，相关预约限制已重新计算");
+    await loadAll();
+  } catch (e) {
+    show(e.response?.data?.message || "撤销违约失败", true);
+    await loadAll();
+  } finally {
+    dismissSaving.value = false;
+  }
+}
 onMounted(loadAll);
 </script>
 
@@ -367,15 +456,34 @@ onMounted(loadAll);
 
       <template v-if="activeTab === 'overview'">
         <div class="metric-strip" v-if="isSystemAdmin"><div><span>用户总数</span><strong>{{ users.length }}</strong><small>{{ activeUsers }} 个正常账号</small></div><div><span>角色数量</span><strong>{{ roles.length }}</strong><small>基于角色的权限控制</small></div><div><span>系统配置</span><strong>{{ configs.length }}</strong><small>当前参数项</small></div><div><span>管理员日志</span><strong>{{ operationLogs.length }}</strong><small>最近操作记录</small></div></div>
-        <div class="metric-strip" v-else><div><span>资产总数</span><strong>{{ assets.length }}</strong><small>{{ highValueAssets }} 件贵重资产</small></div><div><span>待处理报修</span><strong>{{ openMaintenance }}</strong><small>尚未关闭的维修工单</small></div><div><span>维修中资产</span><strong>{{ repairingAssets }}</strong><small>当前不可正常使用</small></div><div><span>待审批预约</span><strong>{{ approvals.length || pendingBookings }}</strong><small>需要管理员关注</small></div></div>
+        <div class="metric-strip" v-else><div><span>资产总数</span><strong>{{ assets.length }}</strong><small>{{ highValueAssets }} 件贵重资产</small></div><div><span>待处理报修</span><strong>{{ openMaintenance }}</strong><small>尚未关闭的维修工单</small></div><div><span>待处理违约</span><strong>{{ violations.filter((item) => item.status === 'OPEN').length }}</strong><small>未签到待确认或撤销</small></div><div><span>待审批预约</span><strong>{{ approvals.length || pendingBookings }}</strong><small>需要管理员关注</small></div></div>
         <div class="overview-body">
         <section class="admin-section"><div class="section-title"><div><h2>{{ isSystemAdmin ? '账号状态概览' : '近期预约动态' }}</h2><p>{{ isSystemAdmin ? '快速识别禁用和锁定账号' : '查看授权资源的最新预约状态' }}</p></div></div>
           <div v-if="isSystemAdmin" class="compact-list"><div v-for="item in users.slice(0, 6)" :key="item.id"><span class="avatar">{{ item.realName?.slice(0, 1) }}</span><div><b>{{ item.realName }}</b><small>{{ item.username }} · {{ item.roles.map(roleName).join(' / ') }}</small></div><span class="status" :class="item.status.toLowerCase()">{{ statusText(item.status) }}</span></div></div>
           <div v-else class="data-table"><div class="data-row table-head"><span>预约编号</span><span>申请人</span><span>资源</span><span>开始时间</span><span>状态</span></div><div v-for="item in bookings.slice(0, 8)" :key="item.id" class="data-row"><span class="mono">{{ item.bookingNo }}</span><span>{{ item.applicantNameSnapshot }}</span><span>{{ item.resourceNameSnapshot }}</span><span>{{ formatTime(item.startTime) }}</span><span class="status" :class="item.status.toLowerCase()">{{ statusText(item.status) }}</span></div><div v-if="!bookings.length" class="admin-empty">暂无预约数据</div></div>
         </section>
+        <template v-if="isSystemAdmin">
+          <section class="report-grid">
+            <article class="admin-section report-card"><div class="report-card-head"><div><h2>资源使用率</h2><small>有效预约时长 / 可预约总时长，已排除关闭与非开放时间</small></div><BarChart3 :size="18" /></div>
+              <div class="stats-summary" v-if="stats?.totals"><span>近 {{ stats.trend?.length || 7 }} 天综合使用率</span><strong>{{ formatPercent(Number(stats.totals.utilization || 0) * 100) }}</strong><small>使用 {{ formatMinutes(stats.totals.usedMinutes) }} / 可预约 {{ formatMinutes(stats.totals.bookableMinutes) }}</small></div>
+              <div class="report-bars"><div v-for="item in (stats?.utilization || []).slice(0, 6)" :key="item.resourceId" class="report-bar-row"><span :title="item.resourceName">{{ item.resourceName }}</span><div class="report-bar-track"><i :style="{ width: `${Math.max(8, Number(item.ratePercent || 0))}%` }"></i></div><b>{{ formatPercent(item.ratePercent) }}</b></div><div v-if="!(stats?.utilization || []).length" class="admin-empty">暂无使用率数据</div></div>
+            </article>
+            <article class="admin-section report-card"><div class="report-card-head"><div><h2>预约数量趋势</h2><small>按开始日期统计有效预约，不含取消/驳回/超时</small></div><CalendarClock :size="18" /></div>
+              <div class="report-status-list"><div v-for="item in stats?.trend || []" :key="item.date"><span>{{ item.date }}</span><strong>{{ item.count }}</strong><em>次</em></div><div v-if="!(stats?.trend || []).length" class="admin-empty">暂无趋势数据</div></div>
+            </article>
+          </section>
+          <section class="report-grid">
+            <article class="admin-section report-card"><div class="report-card-head"><div><h2>用户预约次数</h2><small>统计窗口内的有效预约</small></div></div>
+              <div class="report-status-list"><div v-for="item in (stats?.userBookings || []).slice(0, 8)" :key="item.userId"><span>用户 {{ item.userId }}</span><strong>{{ item.count }}</strong><em>次</em></div><div v-if="!(stats?.userBookings || []).length" class="admin-empty">暂无用户预约统计</div></div>
+            </article>
+            <article class="admin-section report-card"><div class="report-card-head"><div><h2>用户违约次数</h2><small>统计窗口内生成的违约记录</small></div></div>
+              <div class="report-status-list"><div v-for="item in (stats?.userViolations || []).slice(0, 8)" :key="item.userId"><span>用户 {{ item.userId }}</span><strong>{{ item.count }}</strong><em>次</em></div><div v-if="!(stats?.userViolations || []).length" class="admin-empty">暂无违约统计</div></div>
+            </article>
+          </section>
+        </template>
         <template v-if="!isSystemAdmin">
           <section class="report-grid">
-            <article class="admin-section report-card"><div class="report-card-head"><div><h2>资源使用排行</h2><small>按预约次数统计当前授权资源</small></div><BarChart3 :size="18" /></div><div class="report-bars"><div v-for="item in labReport.resourceRanking" :key="item.name" class="report-bar-row"><span :title="item.name">{{ item.name }}</span><div class="report-bar-track"><i :style="{ width: `${Math.max(8, item.count / labReport.maxResourceCount * 100)}%` }"></i></div><b>{{ item.count }}</b></div><div v-if="!labReport.resourceRanking.length" class="admin-empty">暂无预约数据</div></div></article>
+            <article class="admin-section report-card"><div class="report-card-head"><div><h2>资源使用排行</h2><small>{{ stats?.utilization?.length ? '按有效使用率统计，已排除维护关闭与非开放时间' : '按预约次数统计当前授权资源' }}</small></div><BarChart3 :size="18" /></div><div class="report-bars"><div v-for="item in labReport.resourceRanking" :key="item.name" class="report-bar-row"><span :title="item.name">{{ item.name }}</span><div class="report-bar-track"><i :style="{ width: `${Math.max(8, item.ratePercent != null ? item.ratePercent : item.count / labReport.maxResourceCount * 100)}%` }"></i></div><b>{{ item.ratePercent != null ? formatPercent(item.ratePercent) : item.count }}</b></div><div v-if="!labReport.resourceRanking.length" class="admin-empty">暂无预约数据</div></div></article>
             <article class="admin-section report-card"><div class="report-card-head"><div><h2>预约状态分布</h2><small>当前管理范围内的全部预约</small></div><CalendarClock :size="18" /></div><div class="report-status-list"><div v-for="item in labReport.statusItems" :key="item.key"><span class="status" :class="item.key.toLowerCase()">{{ item.label }}</span><strong>{{ item.count }}</strong><em>{{ labReport.total ? Math.round(item.count / labReport.total * 100) : 0 }}%</em></div></div></article>
           </section>
           <section class="admin-section report-card report-upcoming"><div class="report-card-head"><div><h2>近期预约</h2><small>按开始时间排列，便于安排实验室值守</small></div><button class="quiet" @click="activeTab = 'bookings'">查看全部 <ChevronRight :size="14" /></button></div><div class="data-table"><div class="data-row report-booking-row table-head"><span>预约编号</span><span>申请人</span><span>资源</span><span>开始时间</span><span>状态</span></div><div v-for="item in labReport.upcoming" :key="item.id" class="data-row report-booking-row"><span class="mono">{{ item.bookingNo }}</span><span>{{ item.applicantNameSnapshot || `用户 ${item.userId}` }}</span><span>{{ item.resourceNameSnapshot }}</span><span>{{ formatTime(item.startTime) }}</span><span class="status" :class="item.status.toLowerCase()">{{ statusText(item.status) }}</span></div><div v-if="!labReport.upcoming.length" class="admin-empty">暂无即将开始的预约</div></div></section>
@@ -393,7 +501,7 @@ onMounted(loadAll);
       </template>
 
       <template v-else-if="activeTab === 'flows'">
-        <section class="admin-section"><div class="section-title"><div><h2>发布审批流版本</h2><p>新版本仅影响后续预约，已提交预约继续使用原审批快照</p></div></div><div class="flow-form"><label>资源类型<select v-model="flowForm.resourceTypeId"><option value="" disabled>请选择</option><option v-for="type in resourceTypes" :key="type.id" :value="type.id">{{ type.name }}</option></select></label><label>审批级别<select v-model.number="flowForm.levels"><option :value="1">一级审批</option><option :value="2">一级 + 二级审批</option></select></label><label>每级超时（分钟）<input v-model.number="flowForm.deadlineMinutes" type="number" min="1" /></label><button class="command" @click="createApprovalFlow"><Plus :size="16" />发布新版本</button></div></section>
+        <section class="admin-section"><div class="section-title"><div><h2>发布审批流版本</h2><p>请先把资源类别默认审批设为对应级数。一级由资源负责人审批，二级由实验室管理员终审；未发布审批流时也按此规则逐级进行。新版本只影响后续预约</p></div></div><div class="flow-form"><label>资源类型<select v-model="flowForm.resourceTypeId"><option value="" disabled>请选择</option><option v-for="type in resourceTypes" :key="type.id" :value="type.id">{{ type.name }}</option></select></label><label>审批级别<select v-model.number="flowForm.levels"><option :value="1">一级审批</option><option :value="2">一级 + 二级审批</option></select></label><label>每级超时（分钟）<input v-model.number="flowForm.deadlineMinutes" type="number" min="1" /></label><button class="command" @click="createApprovalFlow"><Plus :size="16" />发布新版本</button></div></section>
         <section class="admin-section data-table flow-history"><div class="data-row flow-grid table-head"><span>资源类型</span><span>版本</span><span>审批节点</span><span>状态</span><span>创建时间</span></div><div v-for="item in approvalFlows" :key="item.id" class="data-row flow-grid"><span>{{ resourceTypes.find(type => type.id === item.resourceTypeId)?.name || `类型 ${item.resourceTypeId}` }}</span><strong>v{{ item.version }}</strong><span class="role-tags"><i v-for="node in item.nodes" :key="node.id">L{{ node.level }} {{ roleName(node.approverRole) }}</i></span><span class="status" :class="item.enabled ? 'active' : 'disabled'">{{ item.enabled ? '当前版本' : '历史版本' }}</span><span>{{ formatTime(item.createdAt) }}</span></div><div v-if="!approvalFlows.length" class="admin-empty">尚未配置审批流</div></section>
       </template>
 
@@ -454,22 +562,38 @@ onMounted(loadAll);
       </template>
 
       <template v-else-if="activeTab === 'violations'">
-        <section class="admin-section data-table"><div class="data-row violation-grid table-head"><span>记录</span><span>用户 / 预约</span><span>类型</span><span>发生时间</span><span>状态</span><span>处理</span></div><div v-for="item in violations" :key="item.id" class="data-row violation-grid"><span class="mono">#{{ item.id }}</span><span>用户 {{ item.userId }}<small>预约 {{ item.bookingId }}</small></span><span>{{ item.violationType }}</span><span>{{ formatTime(item.createdAt) }}</span><span class="status" :class="item.status.toLowerCase()">{{ statusText(item.status) }}</span><span v-if="item.status === 'OPEN'" class="row-actions"><button @click="processViolation(item, 'DISMISSED')">撤销</button><button @click="processViolation(item, 'CONFIRMED')">确认</button></span><span v-else>{{ item.comment || '-' }}</span></div><div v-if="!violations.length" class="admin-empty">暂无违约记录</div></section>
+        <section class="admin-section data-table">
+          <div class="data-row violation-grid table-head"><span>申请人</span><span>预约</span><span>类型</span><span>发生时间</span><span>状态</span><span>处理</span></div>
+          <div v-for="item in violations" :key="item.id" class="data-row violation-grid">
+            <span><b>{{ item.applicantName || `用户 ${item.userId}` }}</b><small>用户 {{ item.userId }}</small></span>
+            <span><b>{{ item.resourceName || '-' }}</b><small>{{ item.bookingNo || `预约 #${item.bookingId}` }} · {{ formatTime(item.startTime) }}</small></span>
+            <span>{{ violationTypeText(item.violationType) }}</span>
+            <span>{{ formatTime(item.createdAt) }}</span>
+            <span><span class="status" :class="item.status.toLowerCase()">{{ statusText(item.status) }}</span><small v-if="item.comment">{{ item.comment }}</small></span>
+            <span class="row-actions" v-if="item.status === 'OPEN'">
+              <button class="danger" type="button" @click="confirmViolation(item)">确认违约</button>
+              <button type="button" @click="openDismiss(item)">撤销误判</button>
+            </span>
+            <span v-else>{{ formatTime(item.processedAt) }}</span>
+          </div>
+          <div v-if="!violations.length" class="admin-empty">暂无违约记录</div>
+        </section>
       </template>
     </section>
 
     <div v-if="selectedUser" class="admin-modal-bg" @click.self="selectedUser = null"><section class="admin-modal"><div class="modal-title"><div><h2>{{ selectedUser.realName }}</h2><p>{{ selectedUser.username }} 的角色与访问凭据</p></div><button class="modal-close" title="关闭" aria-label="关闭用户窗口" @click="selectedUser = null"><X :size="22" /></button></div><div class="modal-body"><fieldset><legend>分配角色</legend><label v-for="role in roles" :key="role.code"><input v-model="selectedRoles" type="checkbox" :value="role.code" /><span>{{ roleName(role.code) }}</span></label></fieldset><button class="command full-command" @click="saveUserRoles"><Save :size="16" />保存角色</button><div class="password-reset"><label>重置密码<input v-model="resetPassword" type="password" placeholder="输入至少 8 位新密码" /></label><button @click="saveResetPassword">确认重置</button></div></div></section></div>
     <div v-if="resourceTypeDialog" class="admin-modal-bg" @click.self="resourceTypeDialog = false"><section class="admin-modal resource-type-modal"><div class="modal-title"><div><h2>{{ editingResourceType ? '编辑资源类别' : '新增资源类别' }}</h2><p>{{ editingResourceType ? '修改类别名称、默认审批级别和启用状态' : '填写类别名称并设置默认审批级别' }}</p></div><button class="modal-close" title="关闭" aria-label="关闭资源类别窗口" @click="resourceTypeDialog = false"><X :size="22" /></button></div><form class="modal-body resource-type-modal-form" @submit.prevent="saveResourceType"><label>类别名称<input v-model="resourceTypeEditForm.name" maxlength="100" /></label><label>默认审批级别<select v-model.number="resourceTypeEditForm.defaultApprovalLevel"><option :value="0">无需审批</option><option :value="1">一级审批</option><option :value="2">二级审批</option></select></label><label>类别状态<select v-model="resourceTypeEditForm.enabled"><option :value="true">启用中</option><option :value="false">已停用</option></select></label><div class="modal-actions"><button class="quiet" type="button" @click="resourceTypeDialog = false">取消</button><button class="command" type="submit"><Save :size="16" />{{ editingResourceType ? '保存修改' : '创建类别' }}</button></div></form></section></div>
-    <div v-if="resourceDialog" class="admin-modal-bg" @click.self="resourceDialog = false"><section class="admin-modal resource-form-modal"><div class="modal-title"><div><h2>{{ selectedResource ? '编辑资源' : '新增资源' }}</h2><p>维护资源基础资料与预约规则</p></div><button class="modal-close" title="关闭" aria-label="关闭资源窗口" @click="resourceDialog = false"><X :size="22" /></button></div><div class="modal-body form-columns"><label>资源类型<select v-model.number="resourceForm.typeId"><option value="" disabled>请选择</option><option v-for="type in resourceTypes" :key="type.id" :value="type.id">{{ type.name }}</option></select></label><label>资源名称<input v-model="resourceForm.name" /></label><label>位置<input v-model="resourceForm.location" /></label><label>容量<input v-model.number="resourceForm.capacity" type="number" min="1" /></label><label>最大预约时长（分钟）<input v-model.number="resourceForm.maxDurationMinutes" type="number" min="1" /></label><label class="check-field"><input v-model="resourceForm.needCheckin" type="checkbox" />需要签到</label><label class="wide-field">图片地址<input v-model.trim="resourceForm.imageUrl" maxlength="500" placeholder="请输入可公开访问的图片 URL" /></label><div v-if="resourceForm.imageUrl" class="resource-image-preview wide-field"><img :src="resourceForm.imageUrl" alt="资源图片预览" /></div><label class="wide-field">描述<textarea v-model="resourceForm.description"></textarea></label><button class="command full-command wide-field" @click="saveResource"><Save :size="16" />保存资源</button></div></section></div>
+    <div v-if="resourceDialog" class="admin-modal-bg" @click.self="resourceDialog = false"><section class="admin-modal resource-form-modal"><div class="modal-title"><div><h2>{{ selectedResource ? '编辑资源' : '新增资源' }}</h2><p>维护资源基础资料与预约规则</p></div><button class="modal-close" title="关闭" aria-label="关闭资源窗口" @click="resourceDialog = false"><X :size="22" /></button></div><div class="modal-body form-columns"><label>资源类型<select v-model.number="resourceForm.typeId"><option value="" disabled>请选择</option><option v-for="type in resourceTypes" :key="type.id" :value="type.id">{{ type.name }}</option></select></label><label>资源名称<input v-model="resourceForm.name" /></label><label>位置<input v-model="resourceForm.location" /></label><label>容量<input v-model.number="resourceForm.capacity" type="number" min="1" /></label><label>最大预约时长（分钟）<input v-model.number="resourceForm.maxDurationMinutes" type="number" min="1" /></label><label class="check-field"><input v-model="resourceForm.needCheckin" type="checkbox" />需要签到</label><label>审批级别<select v-model="resourceForm.approvalLevelOverride"><option value="">跟随类别</option><option :value="0">无需审批</option><option :value="1">一级审批</option><option :value="2">二级审批</option></select></label><label class="wide-field">图片地址<input v-model.trim="resourceForm.imageUrl" maxlength="500" placeholder="请输入可公开访问的图片 URL" /></label><div v-if="resourceForm.imageUrl" class="resource-image-preview wide-field"><img :src="resourceForm.imageUrl" alt="资源图片预览" /></div><label class="wide-field">描述<textarea v-model="resourceForm.description"></textarea></label><button class="command full-command wide-field" @click="saveResource"><Save :size="16" />保存资源</button></div></section></div>
     <div v-if="rejectionTarget" class="approval-reject-backdrop" @click.self="closeRejection"><section class="approval-reject-modal" role="dialog" aria-modal="true" aria-labelledby="admin-reject-title"><header class="approval-reject-head"><div><h2 id="admin-reject-title">驳回预约</h2><p>填写原因后，申请人可在预约记录中查看</p></div><button class="modal-close" type="button" title="关闭" aria-label="关闭驳回窗口" :disabled="rejectionSaving" @click="closeRejection"><X :size="22" /></button></header><div class="approval-reject-body"><div class="approval-reject-context"><b>{{ rejectionTarget.resourceName || `预约 #${rejectionTarget.bookingId}` }}</b><span>申请人：{{ rejectionTarget.applicantName || `用户 ${rejectionTarget.applicantUserId}` }}</span><small>{{ formatTime(rejectionTarget.startTime) }} 至 {{ formatTime(rejectionTarget.endTime) }}</small></div><label class="approval-reject-field"><span>驳回原因 <em>必填</em></span><textarea v-model="rejectionReason" maxlength="500" autofocus placeholder="请说明驳回原因，便于申请人修改后重新提交"></textarea><small>{{ rejectionReason.length }} / 500</small></label></div><footer class="approval-reject-actions"><button class="approval-reject-cancel" type="button" :disabled="rejectionSaving" @click="closeRejection">取消</button><button class="approval-reject-confirm" type="button" :disabled="!rejectionReason.trim() || rejectionSaving" @click="submitRejection">{{ rejectionSaving ? '提交中...' : '确认驳回' }}</button></footer></section></div>
+    <div v-if="dismissTarget" class="approval-reject-backdrop" @click.self="closeDismiss"><section class="approval-reject-modal" role="dialog" aria-modal="true" aria-labelledby="dismiss-title"><header class="approval-reject-head"><div><h2 id="dismiss-title">撤销违约</h2><p>误判未签到时撤销后，不再计入限制次数</p></div><button class="modal-close" type="button" title="关闭" aria-label="关闭撤销窗口" :disabled="dismissSaving" @click="closeDismiss"><X :size="22" /></button></header><div class="approval-reject-body"><div class="approval-reject-context"><b>{{ dismissTarget.resourceName || dismissTarget.bookingNo || `预约 #${dismissTarget.bookingId}` }}</b><span>申请人：{{ dismissTarget.applicantName || `用户 ${dismissTarget.userId}` }}</span><small>{{ formatTime(dismissTarget.startTime) }}</small></div><label class="approval-reject-field"><span>撤销原因 <em>必填</em></span><textarea v-model="dismissReason" maxlength="500" autofocus placeholder="请说明撤销原因，例如申请人已现场使用或系统未及时签到"></textarea><small>{{ dismissReason.length }} / 500</small></label></div><footer class="approval-reject-actions"><button class="approval-reject-cancel" type="button" :disabled="dismissSaving" @click="closeDismiss">取消</button><button class="approval-reject-confirm" type="button" :disabled="!dismissReason.trim() || dismissSaving" @click="submitDismiss">{{ dismissSaving ? '提交中...' : '确认撤销' }}</button></footer></section></div>
   </main>
 </template>
 
 <style scoped>
 .flow-form{padding:18px 20px;display:grid;grid-template-columns:1.2fr 1fr 1fr auto;gap:10px;align-items:end}.flow-form label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#65766e}.flow-form input,.flow-form select{height:36px;border:1px solid #d8e2dd;border-radius:4px;padding:0 9px;background:#fff}.flow-history{margin-top:14px}.flow-grid{grid-template-columns:1.2fr .5fr 1.8fr .8fr 1.2fr}
 .manager-form{display:grid;grid-template-columns:1fr auto;gap:7px;margin-bottom:12px}.manager-form input,.manager-form select{height:36px;border:1px solid #d8e2dd;border-radius:4px;padding:0 9px;background:#fff;color:#243b31}
-.report-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:14px;margin-top:14px}.report-card{padding:0}.report-card-head{display:flex;align-items:flex-start;justify-content:space-between;padding:17px 20px;border-bottom:1px solid #e8eeeb}.report-card-head h2{font-size:14px;margin:0 0 4px}.report-card-head small{font-size:10px;color:#839089}.report-card-head>svg{color:#4b7c68}.report-bars{padding:13px 20px 17px}.report-bar-row{display:grid;grid-template-columns:minmax(90px,1.1fr) 2fr 28px;gap:9px;align-items:center;min-height:34px;font-size:11px}.report-bar-row>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.report-bar-row>b{text-align:right;color:#356c58}.report-bar-track{height:7px;background:#edf2ef;border-radius:4px;overflow:hidden}.report-bar-track i{display:block;height:100%;background:#65a184;border-radius:4px}.report-status-list{padding:9px 20px 13px}.report-status-list>div{display:grid;grid-template-columns:1fr 40px 42px;align-items:center;min-height:33px;border-bottom:1px solid #edf1ef}.report-status-list>div:last-child{border-bottom:0}.report-status-list strong{text-align:right;font-size:15px}.report-status-list em{text-align:right;color:#82918a;font-size:10px;font-style:normal}.report-upcoming{margin-top:14px}.report-upcoming .quiet{display:inline-flex;align-items:center;gap:2px;padding:5px 8px;font-size:10px}.report-booking-row{grid-template-columns:1fr 1fr 1.3fr 1.3fr .7fr;min-width:680px}
-.admin-shell{min-height:calc(100vh - 76px);display:grid;grid-template-columns:230px minmax(0,1fr);background:#f5f7f6;color:#20332b}.admin-sidebar{background:#183b33;color:#dce9e3;padding:26px 14px;display:flex;flex-direction:column;min-height:calc(100vh - 76px)}.workspace-mark{display:flex;gap:11px;align-items:center;padding:0 10px 26px;border-bottom:1px solid #31534b}.workspace-mark svg{color:#b7dd55}.workspace-mark b,.workspace-mark small{display:block}.workspace-mark b{font-size:14px}.workspace-mark small{color:#89a79d;font-size:11px;margin-top:4px}.admin-sidebar nav{display:grid;gap:4px;margin-top:20px}.admin-sidebar nav button{height:42px;border:0;border-radius:5px;background:transparent;color:#aac0b7;display:grid;grid-template-columns:24px 1fr 15px;align-items:center;text-align:left;padding:0 10px}.admin-sidebar nav button:hover,.admin-sidebar nav button.active{background:#285148;color:#fff}.admin-sidebar nav button.active svg:first-child{color:#c9e962}.scope-note{margin-top:auto;border-top:1px solid #31534b;padding:18px 10px 0}.scope-note span,.scope-note b{display:block}.scope-note span{font-size:10px;color:#75948a}.scope-note b{font-size:12px;margin-top:5px}.admin-content{padding:34px clamp(24px,4vw,58px);min-width:0}.admin-topline{height:66px;display:flex;align-items:flex-start;justify-content:space-between}.admin-topline .eyebrow{display:block;margin:0 0 5px;letter-spacing:1px;font-size:10px;color:#49816f}.admin-topline h1{font-size:25px;margin:0}.icon-action{width:38px;height:38px;border:1px solid #d7e1dc;border-radius:6px;background:#fff;color:#597068;display:grid;place-items:center}.admin-notice{min-height:38px;padding:0 12px;margin:4px 0 16px;background:#e8f5ed;color:#347458;display:flex;align-items:center;gap:8px;border-left:3px solid #4d9a70;font-size:12px}.admin-notice.error{background:#faece9;color:#a24d42;border-color:#bd655a}.admin-notice button{margin-left:auto;border:0;background:transparent;color:inherit}.metric-strip{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dfe7e3;background:#fff;margin-bottom:18px}.metric-strip>div{padding:20px;border-right:1px solid #e6ece9}.metric-strip>div:last-child{border:0}.metric-strip span,.metric-strip small,.compact-list small,.data-row small{display:block;color:#7b8b84;font-size:11px}.metric-strip strong{display:block;font-size:27px;margin:7px 0 3px}.admin-section{background:#fff;border:1px solid #dfe7e3;border-radius:6px;overflow:hidden}.section-title{padding:18px 20px;border-bottom:1px solid #e8eeeb;display:flex;align-items:center;justify-content:space-between}.section-title h2{font-size:15px;margin:0 0 4px}.section-title p{margin:0;color:#839089;font-size:11px}.compact-list{padding:5px 20px}.compact-list>div{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #edf1ef}.compact-list>div>div{flex:1}.compact-list b{font-size:13px}.avatar{width:32px;height:32px;border-radius:50%;background:#dcece4;color:#356d59;display:grid;place-items:center;font-style:normal;font-size:12px;flex:0 0 auto}.status{font-size:10px;padding:4px 7px;border-radius:3px;background:#edf1ef;color:#607168;width:max-content}.status.active,.status.approved,.status.checked_in,.status.resolved{background:#e4f3e9;color:#347658}.status.disabled,.status.locked,.status.rejected,.status.canceled,.status.dismissed{background:#f3e9e7;color:#9a5a51}.status.pending_approval,.status.open{background:#fff0d8;color:#8f6a2f}.toolbar{height:50px;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;color:#74847d;font-size:12px}.search{width:min(390px,60%);height:38px;background:#fff;border:1px solid #dce5e0;display:flex;align-items:center;gap:8px;padding:0 11px;border-radius:5px}.search input{border:0;outline:0;flex:1}.command{height:36px;border:0;border-radius:5px;background:#225c4d;color:#fff;padding:0 13px;display:inline-flex;align-items:center;justify-content:center;gap:7px}.quiet{border:1px solid #d7e2dc;background:#fff;border-radius:4px;padding:7px 10px;color:#42695a}.data-table{overflow:auto}.data-row{display:grid;grid-template-columns:1.1fr 1fr 1.2fr 1.3fr .7fr;gap:16px;align-items:center;min-height:52px;padding:0 18px;border-bottom:1px solid #edf1ef;font-size:12px;min-width:760px}.data-row.table-head{min-height:38px;background:#fafbfa;color:#839089;font-size:10px}.user-grid{grid-template-columns:1.2fr 1fr 1.4fr .6fr 1fr}.stats-grid{grid-template-columns:1fr 1fr 2fr .7fr 1fr}.booking-grid{grid-template-columns:1.1fr 1fr 1.2fr 1.7fr .4fr .7fr}.violation-grid{grid-template-columns:.5fr 1fr .8fr 1.2fr .7fr 1.2fr}.user-cell{display:flex;align-items:center;gap:9px}.user-cell b,.data-row b{display:block;font-size:12px}.role-tags{display:flex;flex-wrap:wrap;gap:4px}.role-tags i{font-style:normal;font-size:9px;background:#eaf0ed;color:#46675b;padding:4px 6px;border-radius:3px}.row-actions{display:flex;gap:5px}.row-actions button,.closure-list button{border:1px solid #d4e1da;background:#fff;color:#3d6c5a;border-radius:4px;padding:6px 8px;font-size:10px}.row-actions button.danger{color:#a45149;border-color:#ead1cc}.admin-empty{padding:30px;text-align:center;color:#8d9a94;font-size:12px}.config-list{padding:5px 20px}.config-list label{min-height:58px;display:grid;grid-template-columns:1fr minmax(180px,320px) 38px;gap:10px;align-items:center;border-bottom:1px solid #edf1ef}.config-list label span b,.config-list label span small{display:block}.config-list input,.schedule-row input,.schedule-row select,.closure-form input,.form-columns input,.form-columns select,.form-columns textarea,.password-reset input{height:36px;border:1px solid #d8e2dd;border-radius:4px;padding:0 9px;color:#243b31;background:#fff}.config-list button{width:36px;height:36px;border:0;background:#e7f0eb;color:#356a56;border-radius:4px;display:grid;place-items:center}.resource-admin-layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:14px;align-items:start}.resource-catalog{padding:6px}.resource-catalog>button{width:100%;min-height:61px;border:0;border-bottom:1px solid #edf1ef;background:#fff;display:grid;grid-template-columns:38px 1fr auto;align-items:center;text-align:left;gap:10px;padding:8px}.resource-catalog>button:hover,.resource-catalog>button.selected{background:#edf6f1}.resource-catalog b,.resource-catalog small{display:block}.resource-catalog b{font-size:12px}.resource-catalog small{font-size:10px;color:#82918a;margin-top:4px}.resource-catalog i{font-size:9px;color:#3b7b63;font-style:normal}.resource-symbol{width:34px;height:34px;border-radius:5px;background:#e3eee8;color:#477966;display:grid;place-items:center}.detail-placeholder{min-height:360px;border:1px dashed #cfdad4;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#779087;gap:8px}.detail-placeholder b{font-size:14px}.detail-placeholder span{font-size:11px}.rules-block{padding:17px 20px;border-bottom:1px solid #e9efec}.subhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.subhead b{font-size:12px}.subhead small{font-size:10px;color:#839089}.subhead button{border:0;background:transparent;color:#39735d;display:flex;gap:4px;align-items:center}.schedule-row{display:grid;grid-template-columns:72px 1fr 18px 1fr 70px 30px;gap:7px;align-items:center;margin-bottom:7px}.schedule-row span{text-align:center;font-size:10px}.remove-icon{height:30px;border:0;background:transparent;color:#9a625b}.save-rules{margin-top:8px}.closure-form{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:7px}.closure-list>div{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #edf1ef}.closure-list b,.closure-list small{display:block;font-size:11px}.closure-list small{color:#82918a;margin-top:3px}.approval-admin-list{padding:8px 20px}.approval-admin-list article{display:flex;gap:14px;align-items:center;padding:16px 0;border-bottom:1px solid #edf1ef}.approval-level{width:34px;height:34px;background:#e3eee8;color:#376c58;display:grid;place-items:center;border-radius:4px;font-weight:700}.approval-admin-list article>div:nth-child(2){flex:1}.approval-admin-list b,.approval-admin-list span,.approval-admin-list small{display:block}.approval-admin-list b{font-size:13px}.approval-admin-list span,.approval-admin-list small{font-size:10px;color:#7c8c85;margin-top:3px}.approval-buttons{display:flex;gap:7px}.approval-buttons button{height:32px;border-radius:4px;padding:0 10px;display:flex;gap:5px;align-items:center}.approval-buttons .accept{border:0;background:#225c4d;color:#fff}.approval-buttons .reject{border:1px solid #e3cfcb;background:#fff;color:#9a5149}.admin-modal-bg{position:fixed;z-index:50;inset:0;background:rgba(18,31,26,.48);display:grid;place-items:center;padding:20px}.admin-modal{width:min(520px,100%);max-height:90vh;overflow:auto;background:#fff;border-radius:7px}.modal-title{padding:19px 21px;border-bottom:1px solid #e6ece9;display:flex;justify-content:space-between}.modal-title h2{font-size:17px;margin:0 0 4px}.modal-title p{font-size:11px;color:#82918a;margin:0}.modal-title button{border:0;background:transparent}.modal-body{padding:20px}.modal-body fieldset{border:0;padding:0;margin:0 0 15px}.modal-body legend{font-size:11px;color:#6f8078;margin-bottom:9px}.modal-body fieldset label{display:inline-flex;gap:6px;align-items:center;margin:0 15px 9px 0;font-size:12px}.full-command{width:100%}.password-reset{margin-top:20px;padding-top:17px;border-top:1px solid #e9eeec;display:grid;grid-template-columns:1fr auto;align-items:end;gap:8px}.password-reset label{display:flex;flex-direction:column;gap:6px;font-size:11px}.password-reset button{height:36px;border:1px solid #decac6;background:#fff;color:#965048;border-radius:4px}.resource-form-modal{width:min(650px,100%)}.form-columns{display:grid;grid-template-columns:1fr 1fr;gap:13px}.form-columns label{display:flex;flex-direction:column;gap:6px;font-size:11px}.form-columns textarea{height:72px;padding:8px;resize:vertical}.form-columns .check-field{flex-direction:row;align-items:center}.check-field input{height:auto}.wide-field{grid-column:1/-1}.mono{font-family:ui-monospace,monospace}.eyebrow{letter-spacing:1px}.admin-content button{cursor:pointer}.admin-content button:disabled{opacity:.5;cursor:not-allowed}
+.report-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:14px;margin-top:14px}.report-card{padding:0}.stats-summary{padding:14px 20px 0}.stats-summary span,.stats-summary small{display:block;color:#839089;font-size:10px}.stats-summary strong{display:block;font-size:28px;margin:6px 0 4px}.report-card-head{display:flex;align-items:flex-start;justify-content:space-between;padding:17px 20px;border-bottom:1px solid #e8eeeb}.report-card-head h2{font-size:14px;margin:0 0 4px}.report-card-head small{font-size:10px;color:#839089}.report-card-head>svg{color:#4b7c68}.report-bars{padding:13px 20px 17px}.report-bar-row{display:grid;grid-template-columns:minmax(90px,1.1fr) 2fr 28px;gap:9px;align-items:center;min-height:34px;font-size:11px}.report-bar-row>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.report-bar-row>b{text-align:right;color:#356c58}.report-bar-track{height:7px;background:#edf2ef;border-radius:4px;overflow:hidden}.report-bar-track i{display:block;height:100%;background:#65a184;border-radius:4px}.report-status-list{padding:9px 20px 13px}.report-status-list>div{display:grid;grid-template-columns:1fr 40px 42px;align-items:center;min-height:33px;border-bottom:1px solid #edf1ef}.report-status-list>div:last-child{border-bottom:0}.report-status-list strong{text-align:right;font-size:15px}.report-status-list em{text-align:right;color:#82918a;font-size:10px;font-style:normal}.report-upcoming{margin-top:14px}.report-upcoming .quiet{display:inline-flex;align-items:center;gap:2px;padding:5px 8px;font-size:10px}.report-booking-row{grid-template-columns:1fr 1fr 1.3fr 1.3fr .7fr;min-width:680px}
+.admin-shell{min-height:calc(100vh - 76px);display:grid;grid-template-columns:230px minmax(0,1fr);background:#f5f7f6;color:#20332b}.admin-sidebar{background:#183b33;color:#dce9e3;padding:26px 14px;display:flex;flex-direction:column;min-height:calc(100vh - 76px)}.workspace-mark{display:flex;gap:11px;align-items:center;padding:0 10px 26px;border-bottom:1px solid #31534b}.workspace-mark svg{color:#b7dd55}.workspace-mark b,.workspace-mark small{display:block}.workspace-mark b{font-size:14px}.workspace-mark small{color:#89a79d;font-size:11px;margin-top:4px}.admin-sidebar nav{display:grid;gap:4px;margin-top:20px}.admin-sidebar nav button{height:42px;border:0;border-radius:5px;background:transparent;color:#aac0b7;display:grid;grid-template-columns:24px 1fr 15px;align-items:center;text-align:left;padding:0 10px}.admin-sidebar nav button:hover,.admin-sidebar nav button.active{background:#285148;color:#fff}.admin-sidebar nav button.active svg:first-child{color:#c9e962}.scope-note{margin-top:auto;border-top:1px solid #31534b;padding:18px 10px 0}.scope-note span,.scope-note b{display:block}.scope-note span{font-size:10px;color:#75948a}.scope-note b{font-size:12px;margin-top:5px}.admin-content{padding:34px clamp(24px,4vw,58px);min-width:0}.admin-topline{height:66px;display:flex;align-items:flex-start;justify-content:space-between}.admin-topline .eyebrow{display:block;margin:0 0 5px;letter-spacing:1px;font-size:10px;color:#49816f}.admin-topline h1{font-size:25px;margin:0}.icon-action{width:38px;height:38px;border:1px solid #d7e1dc;border-radius:6px;background:#fff;color:#597068;display:grid;place-items:center}.admin-notice{min-height:38px;padding:0 12px;margin:4px 0 16px;background:#e8f5ed;color:#347458;display:flex;align-items:center;gap:8px;border-left:3px solid #4d9a70;font-size:12px}.admin-notice.error{background:#faece9;color:#a24d42;border-color:#bd655a}.admin-notice button{margin-left:auto;border:0;background:transparent;color:inherit}.metric-strip{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #dfe7e3;background:#fff;margin-bottom:18px}.metric-strip>div{padding:20px;border-right:1px solid #e6ece9}.metric-strip>div:last-child{border:0}.metric-strip span,.metric-strip small,.compact-list small,.data-row small{display:block;color:#7b8b84;font-size:11px}.metric-strip strong{display:block;font-size:27px;margin:7px 0 3px}.admin-section{background:#fff;border:1px solid #dfe7e3;border-radius:6px;overflow:hidden}.section-title{padding:18px 20px;border-bottom:1px solid #e8eeeb;display:flex;align-items:center;justify-content:space-between}.section-title h2{font-size:15px;margin:0 0 4px}.section-title p{margin:0;color:#839089;font-size:11px}.compact-list{padding:5px 20px}.compact-list>div{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #edf1ef}.compact-list>div>div{flex:1}.compact-list b{font-size:13px}.avatar{width:32px;height:32px;border-radius:50%;background:#dcece4;color:#356d59;display:grid;place-items:center;font-style:normal;font-size:12px;flex:0 0 auto}.status{font-size:10px;padding:4px 7px;border-radius:3px;background:#edf1ef;color:#607168;width:max-content}.status.active,.status.approved,.status.checked_in,.status.resolved,.status.lifted{background:#e4f3e9;color:#347658}.status.disabled,.status.locked,.status.rejected,.status.canceled,.status.dismissed,.status.confirmed,.status.no_show{background:#f3e9e7;color:#9a5a51}.status.pending_approval,.status.open{background:#fff0d8;color:#8f6a2f}.toolbar{height:50px;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;color:#74847d;font-size:12px}.search{width:min(390px,60%);height:38px;background:#fff;border:1px solid #dce5e0;display:flex;align-items:center;gap:8px;padding:0 11px;border-radius:5px}.search input{border:0;outline:0;flex:1}.command{height:36px;border:0;border-radius:5px;background:#225c4d;color:#fff;padding:0 13px;display:inline-flex;align-items:center;justify-content:center;gap:7px}.quiet{border:1px solid #d7e2dc;background:#fff;border-radius:4px;padding:7px 10px;color:#42695a}.data-table{overflow:auto}.data-row{display:grid;grid-template-columns:1.1fr 1fr 1.2fr 1.3fr .7fr;gap:16px;align-items:center;min-height:52px;padding:0 18px;border-bottom:1px solid #edf1ef;font-size:12px;min-width:760px}.data-row.table-head{min-height:38px;background:#fafbfa;color:#839089;font-size:10px}.user-grid{grid-template-columns:1.2fr 1fr 1.4fr .6fr 1fr}.stats-grid{grid-template-columns:1fr 1fr 2fr .7fr 1fr}.booking-grid{grid-template-columns:1.1fr 1fr 1.2fr 1.7fr .4fr .7fr}.violation-grid{grid-template-columns:.5fr 1fr .8fr 1.2fr .7fr 1.2fr}.user-cell{display:flex;align-items:center;gap:9px}.user-cell b,.data-row b{display:block;font-size:12px}.role-tags{display:flex;flex-wrap:wrap;gap:4px}.role-tags i{font-style:normal;font-size:9px;background:#eaf0ed;color:#46675b;padding:4px 6px;border-radius:3px}.row-actions{display:flex;gap:5px}.row-actions button,.closure-list button{border:1px solid #d4e1da;background:#fff;color:#3d6c5a;border-radius:4px;padding:6px 8px;font-size:10px}.row-actions button.danger{color:#a45149;border-color:#ead1cc}.admin-empty{padding:30px;text-align:center;color:#8d9a94;font-size:12px}.config-list{padding:5px 20px}.config-list label{min-height:58px;display:grid;grid-template-columns:1fr minmax(180px,320px) 38px;gap:10px;align-items:center;border-bottom:1px solid #edf1ef}.config-list label span b,.config-list label span small{display:block}.config-list input,.schedule-row input,.schedule-row select,.closure-form input,.form-columns input,.form-columns select,.form-columns textarea,.password-reset input{height:36px;border:1px solid #d8e2dd;border-radius:4px;padding:0 9px;color:#243b31;background:#fff}.config-list button{width:36px;height:36px;border:0;background:#e7f0eb;color:#356a56;border-radius:4px;display:grid;place-items:center}.resource-admin-layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:14px;align-items:start}.resource-catalog{padding:6px}.resource-catalog>button{width:100%;min-height:61px;border:0;border-bottom:1px solid #edf1ef;background:#fff;display:grid;grid-template-columns:38px 1fr auto;align-items:center;text-align:left;gap:10px;padding:8px}.resource-catalog>button:hover,.resource-catalog>button.selected{background:#edf6f1}.resource-catalog b,.resource-catalog small{display:block}.resource-catalog b{font-size:12px}.resource-catalog small{font-size:10px;color:#82918a;margin-top:4px}.resource-catalog i{font-size:9px;color:#3b7b63;font-style:normal}.resource-symbol{width:34px;height:34px;border-radius:5px;background:#e3eee8;color:#477966;display:grid;place-items:center}.detail-placeholder{min-height:360px;border:1px dashed #cfdad4;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#779087;gap:8px}.detail-placeholder b{font-size:14px}.detail-placeholder span{font-size:11px}.rules-block{padding:17px 20px;border-bottom:1px solid #e9efec}.subhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.subhead b{font-size:12px}.subhead small{font-size:10px;color:#839089}.subhead button{border:0;background:transparent;color:#39735d;display:flex;gap:4px;align-items:center}.schedule-row{display:grid;grid-template-columns:72px 1fr 18px 1fr 70px 30px;gap:7px;align-items:center;margin-bottom:7px}.schedule-row span{text-align:center;font-size:10px}.remove-icon{height:30px;border:0;background:transparent;color:#9a625b}.save-rules{margin-top:8px}.closure-form{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:7px}.closure-list>div{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #edf1ef}.closure-list b,.closure-list small{display:block;font-size:11px}.closure-list small{color:#82918a;margin-top:3px}.approval-admin-list{padding:8px 20px}.approval-admin-list article{display:flex;gap:14px;align-items:center;padding:16px 0;border-bottom:1px solid #edf1ef}.approval-level{width:34px;height:34px;background:#e3eee8;color:#376c58;display:grid;place-items:center;border-radius:4px;font-weight:700}.approval-admin-list article>div:nth-child(2){flex:1}.approval-admin-list b,.approval-admin-list span,.approval-admin-list small{display:block}.approval-admin-list b{font-size:13px}.approval-admin-list span,.approval-admin-list small{font-size:10px;color:#7c8c85;margin-top:3px}.approval-buttons{display:flex;gap:7px}.approval-buttons button{height:32px;border-radius:4px;padding:0 10px;display:flex;gap:5px;align-items:center}.approval-buttons .accept{border:0;background:#225c4d;color:#fff}.approval-buttons .reject{border:1px solid #e3cfcb;background:#fff;color:#9a5149}.admin-modal-bg{position:fixed;z-index:50;inset:0;background:rgba(18,31,26,.48);display:grid;place-items:center;padding:20px}.admin-modal{width:min(520px,100%);max-height:90vh;overflow:auto;background:#fff;border-radius:7px}.modal-title{padding:19px 21px;border-bottom:1px solid #e6ece9;display:flex;justify-content:space-between}.modal-title h2{font-size:17px;margin:0 0 4px}.modal-title p{font-size:11px;color:#82918a;margin:0}.modal-title button{border:0;background:transparent}.modal-body{padding:20px}.modal-body fieldset{border:0;padding:0;margin:0 0 15px}.modal-body legend{font-size:11px;color:#6f8078;margin-bottom:9px}.modal-body fieldset label{display:inline-flex;gap:6px;align-items:center;margin:0 15px 9px 0;font-size:12px}.full-command{width:100%}.password-reset{margin-top:20px;padding-top:17px;border-top:1px solid #e9eeec;display:grid;grid-template-columns:1fr auto;align-items:end;gap:8px}.password-reset label{display:flex;flex-direction:column;gap:6px;font-size:11px}.password-reset button{height:36px;border:1px solid #decac6;background:#fff;color:#965048;border-radius:4px}.resource-form-modal{width:min(650px,100%)}.form-columns{display:grid;grid-template-columns:1fr 1fr;gap:13px}.form-columns label{display:flex;flex-direction:column;gap:6px;font-size:11px}.form-columns textarea{height:72px;padding:8px;resize:vertical}.form-columns .check-field{flex-direction:row;align-items:center}.check-field input{height:auto}.wide-field{grid-column:1/-1}.mono{font-family:ui-monospace,monospace}.eyebrow{letter-spacing:1px}.admin-content button{cursor:pointer}.admin-content button:disabled{opacity:.5;cursor:not-allowed}
 @media(max-width:950px){.admin-shell{grid-template-columns:72px minmax(0,1fr)}.admin-sidebar{padding:22px 8px}.workspace-mark div,.admin-sidebar nav span,.admin-sidebar nav svg:last-child,.scope-note{display:none}.workspace-mark{justify-content:center;padding:0 0 22px}.admin-sidebar nav button{display:grid;grid-template-columns:1fr;place-items:center;padding:0}.metric-strip{grid-template-columns:1fr 1fr}.resource-admin-layout{grid-template-columns:1fr}.resource-catalog{display:grid;grid-template-columns:1fr 1fr}.closure-form{grid-template-columns:1fr 1fr}.closure-form input:nth-child(3){grid-column:1/-1}.manager-form{grid-template-columns:1fr auto}.report-grid{grid-template-columns:1fr}}
 @media(max-width:650px){.admin-shell{display:block}.admin-sidebar{min-height:auto;padding:10px;position:sticky;top:76px;z-index:5}.workspace-mark,.scope-note{display:none}.admin-sidebar nav{display:flex;overflow:auto;margin:0}.admin-sidebar nav button{min-width:48px}.admin-content{padding:22px 14px}.metric-strip{grid-template-columns:1fr}.metric-strip>div{border-right:0;border-bottom:1px solid #e6ece9}.resource-catalog{grid-template-columns:1fr}.schedule-row{grid-template-columns:65px 1fr 16px 1fr 28px}.schedule-row input:nth-of-type(3){display:none}.closure-form{grid-template-columns:1fr}.manager-form{grid-template-columns:1fr}.manager-form button{grid-column:auto}.form-columns{grid-template-columns:1fr}.wide-field{grid-column:auto}}
 .admin-notice{position:fixed;z-index:100;top:88px;right:24px;width:min(390px,calc(100vw - 32px));min-height:54px;padding:0 14px;gap:10px;border-left-width:4px;box-shadow:0 14px 38px rgba(28,55,44,.2)}.admin-notice>span{min-width:0}.admin-notice b,.admin-notice small{display:block}.admin-notice b{margin-bottom:3px;color:#263b32;font-size:11px}.admin-notice small{font-size:11px;line-height:1.4}@media(max-width:650px){.admin-notice{top:88px;right:12px;width:calc(100vw - 24px)}}

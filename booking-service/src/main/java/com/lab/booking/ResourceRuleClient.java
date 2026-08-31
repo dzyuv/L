@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 
 @Component
 public class ResourceRuleClient {
-    public record BookingRule(String resourceName,int capacity,int slotMinutes,int maxDurationMinutes,boolean needCheckin,int approvalLevel,Long approverUserId,String approverRole){}
+    public record BookingRule(String resourceName,Long resourceTypeId,int capacity,int slotMinutes,int maxDurationMinutes,boolean needCheckin,int approvalLevel,Long approverUserId,String approverRole){}
     private final RestClient client;
     private final ObjectMapper json;
     private final String internalToken;
@@ -28,12 +28,13 @@ public class ResourceRuleClient {
         internalToken=token;
     }
 
-    public BookingRule getRule(Long resourceId,LocalDateTime startTime,LocalDateTime endTime,int participants,String authorization){
+    public BookingRule getRule(Long resourceId,LocalDateTime startTime,LocalDateTime endTime,int participants,Long applicantUserId,String authorization){
         try{
             ApiResponse<BookingRule> response=client.get()
                 .uri(builder->builder.path("/api/v1/internal/resources/{id}/booking-rule")
                     .queryParam("startTime",startTime).queryParam("endTime",endTime)
-                    .queryParam("participants",participants).build(resourceId))
+                    .queryParam("participants",participants)
+                    .queryParam("applicantUserId",applicantUserId).build(resourceId))
                 .header(HttpHeaders.AUTHORIZATION,authorization==null?"":authorization)
                 .header(InternalServiceGuard.HEADER,internalToken)
                 .retrieve().body(new ParameterizedTypeReference<ApiResponse<BookingRule>>(){});

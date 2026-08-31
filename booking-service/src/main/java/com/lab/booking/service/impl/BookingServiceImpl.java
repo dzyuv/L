@@ -7,17 +7,22 @@ import com.lab.common.exception.BusinessException;
 import com.lab.common.api.RoleGuard;
 import com.lab.common.api.Roles;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.*;
 
 @Service
 public class BookingServiceImpl implements BookingService {
+    private static final Logger log = LoggerFactory.getLogger(BookingServiceImpl.class);
     private static final Set<String> QUOTA_STATUSES = Set.of("PENDING_APPROVAL", "APPROVED", "CHECKED_IN");
     private final BookingRepository bookings;
     private final BookingSlotRepository slots;
@@ -95,7 +100,7 @@ public class BookingServiceImpl implements BookingService {
         quotaLocks.ensureExists(userId);
         quotaLocks.lockByUserId(userId).orElseThrow(() -> new IllegalStateException("Booking quota lock was not created"));
         assertFairUse(userId, request, servletRequest);
-        ResourceRuleClient.BookingRule rule = resourceRules.getRule(request.resourceId(), request.startTime(), request.endTime(), request.participants(), servletRequest.getHeader("Authorization"));
+        ResourceRuleClient.BookingRule rule = resourceRules.getRule(request.resourceId(), request.startTime(), request.endTime(), request.participants(), userId, servletRequest.getHeader("Authorization"));
         Booking booking = new Booking();
         booking.bookingNo = "BK" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
         booking.userId = userId;
@@ -129,7 +134,7 @@ public class BookingServiceImpl implements BookingService {
             throw new BusinessException("BOOKING_CONFLICT", "The selected time is already occupied", HttpStatus.CONFLICT);
         }
         if (rule.approvalLevel() > 0) {
-            approvalTasks.create(booking, rule.approverUserId(), rule.approverRole(), servletRequest.getHeader("Authorization"));
+            approvalTasks.create(booking, rule, servletRequest.getHeader("Authorization"));
         }
         return booking;
     }
@@ -171,10 +176,13 @@ public class BookingServiceImpl implements BookingService {
         if (!List.of("PENDING_APPROVAL", "APPROVED").contains(booking.status) || !booking.startTime.isAfter(LocalDateTime.now())) {
             throw new BusinessException("INVALID_STATUS", "Booking cannot be canceled", HttpStatus.UNPROCESSABLE_ENTITY);
         }
+        boolean closeApproval = "PENDING_APPROVAL".equals(booking.status);
         lifecycle.transition(booking, "CANCELED", userId, "Canceled by applicant", requestId(servletRequest));
         booking.canceledAt = LocalDateTime.now();
         lifecycle.releaseSlots(booking.id, "CANCELED");
-        return bookings.save(booking);
+        Booking saved = bookings.save(booking);
+        if (closeApproval) closeApprovalTasksAfterCommit(List.of(saved.id), "CANCELED");
+        return saved;
     }
 
     @Override
@@ -198,6 +206,12 @@ public class BookingServiceImpl implements BookingService {
         LocalDateTime now = LocalDateTime.now();
         bookings.findByStatus("APPROVED").stream().filter(booking -> !booking.needCheckinSnapshot && booking.endTime != null && !booking.endTime.isAfter(now)).forEach(booking -> {
             lifecycle.transition(booking, "COMPLETED", null, "Automatically completed", null);
+            booking.completedAt = now;
+            bookings.save(booking);
+            lifecycle.releaseSlots(booking.id, "COMPLETED");
+        });
+        bookings.findByStatus("CHECKED_IN").stream().filter(booking -> booking.endTime != null && !booking.endTime.isAfter(now)).forEach(booking -> {
+            lifecycle.transition(booking, "COMPLETED", null, "Automatically completed after check-in", null);
             booking.completedAt = now;
             bookings.save(booking);
             lifecycle.releaseSlots(booking.id, "COMPLETED");
@@ -237,19 +251,44 @@ public class BookingServiceImpl implements BookingService {
     @Transactional
     public void expirePendingApprovals() {
         LocalDateTime now = LocalDateTime.now();
-        bookings.findByStatus("PENDING_APPROVAL").stream()
-                .forEach(booking -> {
-                    if (booking.approvalDeadline == null) {
-                        LocalDateTime createdDeadline = booking.createdAt.plusHours(pendingHoldHours);
-                        booking.approvalDeadline = createdDeadline.isBefore(booking.startTime)
-                                ? createdDeadline : booking.startTime;
-                    }
-                    if (!booking.approvalDeadline.isAfter(now)) {
-                        lifecycle.transition(booking, "EXPIRED", null, "Approval hold expired", null);
-                        lifecycle.releaseSlots(booking.id, "APPROVAL_TIMEOUT");
-                    }
-                    bookings.save(booking);
-                });
+        List<Long> expiredIds = new ArrayList<>();
+        bookings.findByStatus("PENDING_APPROVAL").forEach(booking -> {
+            if (booking.approvalDeadline == null) {
+                LocalDateTime createdDeadline = booking.createdAt.plusHours(pendingHoldHours);
+                booking.approvalDeadline = createdDeadline.isBefore(booking.startTime)
+                        ? createdDeadline : booking.startTime;
+            }
+            if (!booking.approvalDeadline.isAfter(now)) {
+                lifecycle.transition(booking, "EXPIRED", null, "Approval hold expired", null);
+                lifecycle.releaseSlots(booking.id, "APPROVAL_TIMEOUT");
+                expiredIds.add(booking.id);
+            }
+            bookings.save(booking);
+        });
+        closeApprovalTasksAfterCommit(expiredIds, "EXPIRED");
+    }
+
+    private void closeApprovalTasksAfterCommit(List<Long> bookingIds, String reason) {
+        if (bookingIds == null || bookingIds.isEmpty()) return;
+        Runnable close = () -> {
+            for (Long bookingId : bookingIds) {
+                try {
+                    approvalTasks.closePending(bookingId, reason);
+                } catch (RuntimeException exception) {
+                    log.warn("Failed to close approval task for booking {}: {}", bookingId, exception.getMessage());
+                }
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    close.run();
+                }
+            });
+        } else {
+            close.run();
+        }
     }
 
     private void assertFairUse(Long userId, BookingController.Create request, HttpServletRequest servletRequest) {
@@ -309,9 +348,61 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
+    public Map<String, Object> statisticsSource(LocalDateTime start, LocalDateTime end) {
+        List<Map<String, Object>> bookingItems = bookings.findAll().stream()
+                .filter(item -> item.startTime != null && item.endTime != null)
+                .filter(item -> item.startTime.isBefore(end) && item.endTime.isAfter(start))
+                .map(item -> {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("id", item.id);
+                    row.put("userId", item.userId);
+                    row.put("resourceId", item.resourceId);
+                    row.put("resourceName", item.resourceNameSnapshot);
+                    row.put("startTime", item.startTime);
+                    row.put("endTime", item.endTime);
+                    row.put("status", item.status);
+                    return row;
+                })
+                .toList();
+        List<Map<String, Object>> violationItems = violations.findAllByOrderByCreatedAtDesc().stream()
+                .filter(item -> item.createdAt != null && !item.createdAt.isBefore(start) && item.createdAt.isBefore(end))
+                .map(item -> {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("id", item.id);
+                    row.put("userId", item.userId);
+                    row.put("bookingId", item.bookingId);
+                    row.put("violationType", item.violationType);
+                    row.put("status", item.status);
+                    row.put("createdAt", item.createdAt);
+                    return row;
+                })
+                .toList();
+        return Map.of("bookings", bookingItems, "violations", violationItems);
+    }
+
+    @Override
     public Map<String, Object> violations(HttpServletRequest servletRequest) {
         roleGuard.requireLabAdmin(servletRequest);
-        List<ViolationRecord> items = violations.findAllByOrderByCreatedAtDesc();
+        List<Map<String, Object>> items = violations.findAllByOrderByCreatedAtDesc().stream().map(item -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", item.id);
+            row.put("bookingId", item.bookingId);
+            row.put("userId", item.userId);
+            row.put("violationType", item.violationType);
+            row.put("status", item.status);
+            row.put("comment", item.comment);
+            row.put("processedBy", item.processedBy);
+            row.put("processedAt", item.processedAt);
+            row.put("createdAt", item.createdAt);
+            bookings.findById(item.bookingId).ifPresent(booking -> {
+                row.put("bookingNo", booking.bookingNo);
+                row.put("applicantName", booking.applicantNameSnapshot);
+                row.put("resourceName", booking.resourceNameSnapshot);
+                row.put("startTime", booking.startTime);
+                row.put("endTime", booking.endTime);
+            });
+            return row;
+        }).toList();
         return Map.of("items", items, "total", items.size());
     }
 
@@ -319,13 +410,25 @@ public class BookingServiceImpl implements BookingService {
     @Transactional
     public Object processViolation(Long violationId, String status, String comment, HttpServletRequest servletRequest) {
         roleGuard.requireLabAdmin(servletRequest);
-        if (!Set.of("RESOLVED", "CONFIRMED", "DISMISSED").contains(status)) {
+        if (!Set.of("CONFIRMED", "DISMISSED").contains(status)) {
             throw new BusinessException("INVALID_STATUS", "Violation status is invalid", HttpStatus.BAD_REQUEST);
         }
         ViolationRecord item = violations.findById(violationId)
                 .orElseThrow(() -> new BusinessException("NOT_FOUND", "Violation record does not exist", HttpStatus.NOT_FOUND));
-        item.status = status; item.comment = comment; item.processedBy = roleGuard.currentUserId(servletRequest); item.processedAt = LocalDateTime.now();
-        return violations.save(item);
+        if (!"OPEN".equals(item.status)) {
+            throw new BusinessException("VIOLATION_ALREADY_PROCESSED", "Violation has already been processed", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        String normalizedComment = comment == null ? "" : comment.trim();
+        if ("DISMISSED".equals(status) && normalizedComment.isBlank()) {
+            throw new BusinessException("VIOLATION_REASON_REQUIRED", "撤销违约时必须填写原因", HttpStatus.BAD_REQUEST);
+        }
+        item.status = status;
+        item.comment = normalizedComment.isBlank() ? item.comment : normalizedComment;
+        item.processedBy = roleGuard.currentUserId(servletRequest);
+        item.processedAt = LocalDateTime.now();
+        ViolationRecord saved = violations.save(item);
+        if ("DISMISSED".equals(status)) lifecycle.refreshRestriction(item.userId);
+        return saved;
     }
     private String requestId(HttpServletRequest request) { return Objects.toString(request.getAttribute("X-Request-Id"), ""); }
 }

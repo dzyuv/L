@@ -47,8 +47,13 @@ public final class UserMessageLocalizer {
             Map.entry("BOOKING_DAILY_DURATION_LIMIT", "当天累计预约时长已达到上限"),
             Map.entry("BOOKING_ADVANCE_LIMIT", "预约日期超出允许的提前预约范围"),
             Map.entry("CHECKIN_WINDOW", "当前不在允许签到的时间范围内"),
+            Map.entry("VIOLATION_ALREADY_PROCESSED", "该违约记录已经处理"),
+            Map.entry("VIOLATION_REASON_REQUIRED", "撤销违约时必须填写原因"),
             Map.entry("USER_RESTRICTED", "当前账号暂时不能创建预约"),
             Map.entry("APPROVAL_EXPIRED", "审批任务已过期"),
+            Map.entry("BOOKING_NOT_PENDING", "该预约已取消或已超时，审批任务已关闭"),
+            Map.entry("BOOKING_CANCELED", "该预约已被申请人取消"),
+            Map.entry("BOOKING_EXPIRED", "该预约已因超时失效"),
             Map.entry("REJECTION_REASON_REQUIRED", "驳回时必须填写原因"),
             Map.entry("SELF_APPROVAL_FORBIDDEN", "不能审批自己提交的预约"),
             Map.entry("TASK_ALREADY_COMPLETED", "该审批任务已经处理"),
@@ -65,7 +70,8 @@ public final class UserMessageLocalizer {
             Map.entry("LOCATION_REQUIRED", "请选择资源或填写问题发生位置"),
             Map.entry("INVALID_REPORT_TYPE", "报修类型不正确"),
             Map.entry("INVALID_SEVERITY", "严重程度不正确"),
-            Map.entry("INVALID_TRANSITION", "当前工单状态不能进行此变更")
+            Map.entry("INVALID_TRANSITION", "当前工单状态不能进行此变更"),
+            Map.entry("INVALID_PHONE", "请填写有效的维修负责人电话")
     );
 
     private UserMessageLocalizer() {}

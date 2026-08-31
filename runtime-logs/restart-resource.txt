@@ -1,5 +1,6 @@
 begin
-killed 37436
+mysql_exit=0
+killed 5988
 mvn_exit=0
-final pids=10316
+final pids=26280
 finished

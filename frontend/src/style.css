@@ -794,6 +794,7 @@ header {
 .teacher-approval-actions .reject { border: 1px solid #e3cfcb; background: #fff; color: #9a5149; }
 .teacher-schedule-list { padding: 8px 20px; }
 .teacher-schedule-list article { min-height: 72px; display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #edf1ef; }
+.teacher-schedule-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .teacher-schedule-list article:last-child { border-bottom: 0; }
 .teacher-schedule-date { padding-right: 10px; border-right: 1px solid #e4ebe7; text-align: center; }
 .teacher-schedule-date strong,
@@ -821,13 +822,16 @@ header {
 .teacher-resource-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .teacher-resource-grid .resource-card { min-width: 0; }
 .teacher-booking-table { overflow: auto; }
-.teacher-booking-row { min-width: 900px; min-height: 58px; display: grid; grid-template-columns: 1.1fr 1.25fr 1.45fr 1fr .75fr .55fr; gap: 15px; align-items: center; padding: 0 20px; border-bottom: 1px solid #edf1ef; font-size: 11px; }
+.teacher-booking-row { min-width: 900px; min-height: 58px; display: grid; grid-template-columns: 1.1fr 1.25fr 1.45fr 1fr .75fr .9fr; gap: 15px; align-items: center; padding: 0 20px; border-bottom: 1px solid #edf1ef; font-size: 11px; }
 .teacher-booking-row.head { min-height: 38px; background: #fafbfa; color: #839089; font-size: 10px; }
 .teacher-booking-row b,
 .teacher-booking-row small { display: block; }
 .teacher-booking-row b { font-size: 12px; }
 .teacher-booking-row small { margin-top: 3px; color: #819088; font-size: 10px; }
 .teacher-booking-row em { color: #a0aaa4; font-style: normal; }
+.teacher-booking-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.teacher-checkin { padding: 6px 9px; border: 0; border-radius: 4px; background: #225c4d; color: #fff; font-size: 10px; }
+.teacher-checkin:disabled { background: #c5d4cc; color: #f7fbf8; cursor: not-allowed; }
 .teacher-cancel { padding: 6px 9px; border: 1px solid #e3cfcb; border-radius: 4px; background: #fff; color: #9a5149; font-size: 10px; }
 .teacher-tab-maintenance .maintenance-panel { margin-top: 0; border-color: #dfe7e3; border-radius: 6px; }
 @media (max-width: 1050px) {
@@ -1048,6 +1052,13 @@ header {
   line-height: 1.4;
   white-space: normal;
 }
+.booking-checkin-hint {
+  margin-top: 4px !important;
+  color: #8f6a2f;
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: normal;
+}
 .booking-card-status {
   align-self: center;
   display: inline-flex;
@@ -1078,6 +1089,25 @@ header {
 .booking-card-status.expired {
   background: #f3e9e7;
   color: #96574e;
+}
+.booking-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.booking-checkin {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: #225c4d;
+  color: #fff;
+  font-size: 10px;
+}
+.booking-checkin:disabled {
+  background: #c5d4cc;
+  color: #f7fbf8;
+  cursor: not-allowed;
 }
 .booking-cancel {
   border: 0;
@@ -1190,7 +1220,7 @@ header {
   .booking-card-status {
     justify-self: end;
   }
-  .booking-cancel {
+  .booking-card-actions {
     grid-column: 2;
     justify-self: end;
   }

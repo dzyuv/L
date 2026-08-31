@@ -31,7 +31,8 @@ public class AssetController {
     public record ReportRequest(Long assetId, Long resourceId, @Size(max = 200) String location,
                                 @Size(max = 500) String assetClue, @NotBlank @Size(max = 30) String reportType,
                                 @NotBlank @Size(max = 2000) String description, @Size(max = 20) String severity) {}
-    public record TicketUpdateRequest(@NotBlank @Size(max = 30) String status, Long assetId, Long assignedTo,
+    public record TicketUpdateRequest(@NotBlank @Size(max = 30) String status, Long assetId,
+                                      @Size(max = 30) String assignedTo,
                                       @Size(max = 2000) String resolution,
                                       @DecimalMin(value = "0.0", inclusive = true) BigDecimal estimatedCost,
                                       @DecimalMin(value = "0.0", inclusive = true) BigDecimal actualCost) {}

@@ -18,7 +18,7 @@ public class MaintenanceTicket {
     public String severity = "MEDIUM";
     public String description;
     public String status = "REPORTED";
-    public Long assignedTo;
+    public String assignedTo;
     public BigDecimal estimatedCost;
     public BigDecimal actualCost;
     public String resolution;

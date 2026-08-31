@@ -100,7 +100,34 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
         }
         return Map.of("resource",resource,"days",days,"calculatedUntil",Instant.now());
     }
-    public ResourceController.BookingRule bookingRule(Long id, LocalDateTime startTime, LocalDateTime endTime, int participants, HttpServletRequest servletRequest) {
+    public List<Map<String, Object>> statisticsCatalog(HttpServletRequest servletRequest) {
+        internalServices.require(servletRequest);
+        return resources.findAll().stream().filter(item -> !item.deleted).map(resource -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", resource.id);
+            row.put("name", resource.name);
+            row.put("status", resource.status);
+            row.put("schedules", schedules.findByResourceIdOrderByWeekdayAscOpenTimeAsc(resource.id).stream().map(item -> {
+                Map<String, Object> schedule = new LinkedHashMap<>();
+                schedule.put("weekday", item.weekday);
+                schedule.put("openTime", item.openTime);
+                schedule.put("closeTime", item.closeTime);
+                schedule.put("enabled", item.enabled);
+                schedule.put("effectiveFrom", item.effectiveFrom);
+                schedule.put("effectiveTo", item.effectiveTo);
+                return schedule;
+            }).toList());
+            row.put("closures", closures.findByResourceIdAndStatusNot(resource.id, "CANCELED").stream().map(item -> {
+                Map<String, Object> closure = new LinkedHashMap<>();
+                closure.put("startTime", item.startTime);
+                closure.put("endTime", item.endTime);
+                closure.put("status", item.status);
+                return closure;
+            }).toList());
+            return row;
+        }).toList();
+    }
+    public ResourceController.BookingRule bookingRule(Long id, LocalDateTime startTime, LocalDateTime endTime, int participants, Long applicantUserId, HttpServletRequest servletRequest) {
         internalServices.require(servletRequest);
         if(!startTime.isBefore(endTime)||!startTime.toLocalDate().equals(endTime.toLocalDate())) throw new BusinessException("INVALID_TIME","Booking interval must be within one day",HttpStatus.BAD_REQUEST);
         if(!startTime.isAfter(LocalDateTime.now())) throw new BusinessException("INVALID_TIME","Booking start time must be in the future",HttpStatus.BAD_REQUEST);
@@ -116,13 +143,20 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
         Long approver=null;
         String approverRole=null;
         if (approvalLevel>0) {
-            Long applicantId=roleGuard.currentUserId(servletRequest);
+            if (applicantUserId == null) {
+                throw new BusinessException("INVALID_ARGUMENT", "Applicant is required to resolve the approver", HttpStatus.BAD_REQUEST);
+            }
             List<ResourceManager> owners=managers.findByResourceIdOrderByIdAsc(id).stream()
                     .filter(item->"OWNER".equals(item.managerType)||"APPROVER".equals(item.managerType)).toList();
-            approver=owners.stream().map(item->item.userId).filter(userId->!Objects.equals(userId,applicantId)).findFirst().orElse(null);
-            approverRole=approver==null?Roles.LAB_ADMIN:Roles.TEACHER;
+            if (approvalLevel >= 2) {
+                approver=null;
+                approverRole=Roles.TEACHER;
+            } else {
+                approver=owners.stream().map(item->item.userId).filter(userId->!Objects.equals(userId,applicantUserId)).findFirst().orElse(null);
+                approverRole=approver==null?Roles.LAB_ADMIN:Roles.TEACHER;
+            }
         }
-        return new ResourceController.BookingRule(resource.name,resource.capacity,schedule.slotMinutes,Math.min(resource.maxDurationMinutes,schedule.maxDurationMinutes),resource.needCheckin,approvalLevel,approver,approverRole);
+        return new ResourceController.BookingRule(resource.name,type.id,resource.capacity,schedule.slotMinutes,Math.min(resource.maxDurationMinutes,schedule.maxDurationMinutes),resource.needCheckin,approvalLevel,approver,approverRole);
     }
     private Resource resource(Long id) { return resources.findById(id).filter(item -> !item.deleted).orElseThrow(()->new BusinessException("NOT_FOUND","Resource does not exist",HttpStatus.NOT_FOUND)); }
     private void requireType(Long id) { if(types.findById(id).filter(item -> !item.deleted && item.enabled).isEmpty()) throw new BusinessException("TYPE_NOT_FOUND","Resource type does not exist",HttpStatus.NOT_FOUND); }

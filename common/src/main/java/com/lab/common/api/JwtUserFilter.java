@@ -17,7 +17,8 @@ public class JwtUserFilter extends OncePerRequestFilter {
     }
     @Override protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.endsWith("/user/login") || path.endsWith("/user/register") || path.endsWith("/user/token/refresh") || path.startsWith("/actuator/");
+        return path.endsWith("/user/login") || path.endsWith("/user/register") || path.endsWith("/user/token/refresh")
+                || path.contains("/api/v1/internal/") || path.startsWith("/actuator/");
     }
     @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
         String header = request.getHeader("Authorization");

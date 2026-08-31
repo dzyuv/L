@@ -22,7 +22,7 @@ public class ResourceController {
                                   boolean needCheckin, @Min(0) Integer approvalLevelOverride) {}
     public record ScheduleRequest(@Min(1) @Max(7) int weekday, @NotNull LocalTime openTime, @NotNull LocalTime closeTime, @Min(5) int slotMinutes, @Min(1) int maxDurationMinutes) {}
     public record ManagerRequest(@NotNull Long userId) {}
-    public record BookingRule(String resourceName, int capacity, int slotMinutes, int maxDurationMinutes, boolean needCheckin, int approvalLevel, Long approverUserId, String approverRole) {}
+    public record BookingRule(String resourceName, Long resourceTypeId, int capacity, int slotMinutes, int maxDurationMinutes, boolean needCheckin, int approvalLevel, Long approverUserId, String approverRole) {}
     @GetMapping("/resources") public ApiResponse<?> list(HttpServletRequest request) { return ok(service.list(), request); }
     @GetMapping("/resource-types") public ApiResponse<?> listPublicTypes(HttpServletRequest request) { return ok(service.listPublicTypes(), request); }
     @GetMapping("/admin/resource-types") public ApiResponse<?> listTypes(HttpServletRequest request) { return ok(service.listTypes(request), request); }
@@ -38,6 +38,9 @@ public class ResourceController {
     @GetMapping("/admin/resources/{id}/managers") public ApiResponse<?> listManagers(@PathVariable("id") Long id, HttpServletRequest request) { return ok(service.listManagers(id, request), request); }
     @DeleteMapping("/admin/resources/{id}/managers/{managerId}") public ApiResponse<?> removeManager(@PathVariable("id") Long id, @PathVariable("managerId") Long managerId, HttpServletRequest request) { service.removeManager(id, managerId, request); return ok(Map.of("removed", true), request); }
     @GetMapping("/resources/{id}/calendar") public ApiResponse<?> calendar(@PathVariable("id") Long id, @RequestParam("start") LocalDate start, @RequestParam("end") LocalDate end, HttpServletRequest request) { return ok(service.calendar(id, start, end), request); }
-    @GetMapping("/internal/resources/{id}/booking-rule") public ApiResponse<BookingRule> bookingRule(@PathVariable("id") Long id, @RequestParam("startTime") LocalDateTime startTime, @RequestParam("endTime") LocalDateTime endTime, @RequestParam("participants") @Min(1) int participants, HttpServletRequest request) { return ok(service.bookingRule(id, startTime, endTime, participants, request), request); }
+    @GetMapping("/internal/resources/{id}/booking-rule") public ApiResponse<BookingRule> bookingRule(@PathVariable("id") Long id, @RequestParam("startTime") LocalDateTime startTime, @RequestParam("endTime") LocalDateTime endTime, @RequestParam("participants") @Min(1) int participants, @RequestParam("applicantUserId") Long applicantUserId, HttpServletRequest request) { return ok(service.bookingRule(id, startTime, endTime, participants, applicantUserId, request), request); }
+    @GetMapping("/internal/resources/statistics-catalog") public ApiResponse<?> statisticsCatalog(HttpServletRequest request) {
+        return ok(service.statisticsCatalog(request), request);
+    }
     private <T> ApiResponse<T> ok(T data, HttpServletRequest request) { return ApiResponse.success(data, Objects.toString(request.getAttribute("X-Request-Id"), "")); }
 }

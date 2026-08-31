@@ -21,18 +21,31 @@ public class ApprovalTaskClient {
         internalToken=token;
     }
 
-    public void create(Booking booking,Long approverUserId,String approverRole,String authorization){
+    public void create(Booking booking, ResourceRuleClient.BookingRule rule, String authorization){
         try{
-            String role=approverRole==null||approverRole.isBlank()?(approverUserId==null?Roles.LAB_ADMIN:Roles.TEACHER):approverRole;
+            Long approverUserId = rule.approverUserId();
+            String role=rule.approverRole()==null||rule.approverRole().isBlank()?(approverUserId==null?Roles.LAB_ADMIN:Roles.TEACHER):rule.approverRole();
+            int totalLevels = Math.max(1, rule.approvalLevel());
             client.post().uri("/api/v1/internal/approvals/tasks")
                 .header(HttpHeaders.AUTHORIZATION,authorization==null?"":authorization)
                 .header(InternalServiceGuard.HEADER,internalToken)
-                .body(new CreateTask(booking.id,booking.userId,booking.applicantNameSnapshot,booking.resourceId,booking.resourceNameSnapshot,booking.startTime,booking.endTime,booking.approvalLevelSnapshot,approverUserId,role)).retrieve().toBodilessEntity();
+                .body(new CreateTask(booking.id,booking.userId,booking.applicantNameSnapshot,booking.resourceId,rule.resourceTypeId(),booking.resourceNameSnapshot,booking.startTime,booking.endTime,1,totalLevels,approverUserId,role)).retrieve().toBodilessEntity();
         }catch(RestClientException exception){
             throw new BusinessException("APPROVAL_SERVICE_UNAVAILABLE","Approval service is unavailable",HttpStatus.SERVICE_UNAVAILABLE);
         }
     }
 
-    private record CreateTask(Long bookingId,Long applicantUserId,String applicantName,Long resourceId,String resourceName,
-                              java.time.LocalDateTime startTime,java.time.LocalDateTime endTime,int level,Long assignedUserId,String approverRole){}
+    public void closePending(Long bookingId, String reason) {
+        try {
+            client.post().uri("/api/v1/internal/approvals/bookings/{id}/close", bookingId)
+                .header(InternalServiceGuard.HEADER, internalToken)
+                .body(new ClosePending(reason)).retrieve().toBodilessEntity();
+        } catch (RestClientException exception) {
+            throw new BusinessException("APPROVAL_SERVICE_UNAVAILABLE", "Approval service is unavailable", HttpStatus.SERVICE_UNAVAILABLE);
+        }
+    }
+
+    private record CreateTask(Long bookingId,Long applicantUserId,String applicantName,Long resourceId,Long resourceTypeId,String resourceName,
+                              java.time.LocalDateTime startTime,java.time.LocalDateTime endTime,int level,int totalLevels,Long assignedUserId,String approverRole){}
+    private record ClosePending(String reason) {}
 }

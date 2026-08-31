@@ -1,0 +1,121 @@
+begin
+09:58:02 stop 8083 8084
+09:58:02 killing port 8083 pid 28160
+09:58:02 killing port 8084 pid 32244
+09:58:04 maven package
+09:58:12 [INFO] Scanning for projects...
+09:58:12 [INFO] ------------------------------------------------------------------------
+09:58:12 [INFO] Reactor Build Order:
+09:58:12 [INFO] 
+09:58:12 [INFO] 实验室设备预约管理系统                                                        [pom]
+09:58:12 [INFO] common                                                             [jar]
+09:58:12 [INFO] booking-service                                                    [jar]
+09:58:12 [INFO] approval-service                                                   [jar]
+09:58:12 [INFO] 
+09:58:12 [INFO] -------------------< com.lab:lab-equipment-booking >--------------------
+09:58:12 [INFO] Building 实验室设备预约管理系统 1.0.0                                         [1/4]
+09:58:12 [INFO]   from pom.xml
+09:58:12 [INFO] --------------------------------[ pom ]---------------------------------
+09:58:12 [INFO] 
+09:58:13 [INFO] ---------------------------< com.lab:common >---------------------------
+09:58:13 [INFO] Building common 1.0.0                                              [2/4]
+09:58:13 [INFO]   from common\pom.xml
+09:58:13 [INFO] --------------------------------[ jar ]---------------------------------
+09:58:13 [INFO] 
+09:58:13 [INFO] --- resources:3.4.0:resources (default-resources) @ common ---
+09:58:13 [INFO] skip non existing resourceDirectory C:\Users\22692\Desktop\zy\L\common\src\main\resources
+09:58:13 [INFO] 
+09:58:13 [INFO] --- compiler:3.13.0:compile (default-compile) @ common ---
+09:58:13 [INFO] Recompiling the module because of changed source code.
+09:58:13 [INFO] Compiling 14 source files with javac [debug release 17] to target\classes
+09:58:13 [INFO] 
+09:58:13 [INFO] --- resources:3.4.0:testResources (default-testResources) @ common ---
+09:58:13 [INFO] skip non existing resourceDirectory C:\Users\22692\Desktop\zy\L\common\src\test\resources
+09:58:13 [INFO] 
+09:58:13 [INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ common ---
+09:58:13 [INFO] No sources to compile
+09:58:13 [INFO] 
+09:58:13 [INFO] --- surefire:3.5.4:test (default-test) @ common ---
+09:58:13 [INFO] Tests are skipped.
+09:58:13 [INFO] 
+09:58:13 [INFO] --- jar:3.5.0:jar (default-jar) @ common ---
+09:58:13 [INFO] Building jar: C:\Users\22692\Desktop\zy\L\common\target\common-1.0.0.jar
+09:58:13 [INFO] 
+09:58:13 [INFO] ----------------------< com.lab:booking-service >-----------------------
+09:58:13 [INFO] Building booking-service 1.0.0                                     [3/4]
+09:58:13 [INFO]   from booking-service\pom.xml
+09:58:13 [INFO] --------------------------------[ jar ]---------------------------------
+09:58:13 [INFO] 
+09:58:13 [INFO] --- resources:3.4.0:resources (default-resources) @ booking-service ---
+09:58:13 [INFO] Copying 1 resource from src\main\resources to target\classes
+09:58:13 [INFO] 
+09:58:13 [INFO] --- compiler:3.13.0:compile (default-compile) @ booking-service ---
+09:58:13 [INFO] Recompiling the module because of changed dependency.
+09:58:13 [INFO] Compiling 26 source files with javac [debug release 17] to target\classes
+09:58:13 [INFO] 
+09:58:13 [INFO] --- resources:3.4.0:testResources (default-testResources) @ booking-service ---
+09:58:13 [INFO] skip non existing resourceDirectory C:\Users\22692\Desktop\zy\L\booking-service\src\test\resources
+09:58:13 [INFO] 
+09:58:13 [INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ booking-service ---
+09:58:13 [INFO] No sources to compile
+09:58:13 [INFO] 
+09:58:13 [INFO] --- surefire:3.5.4:test (default-test) @ booking-service ---
+09:58:13 [INFO] Tests are skipped.
+09:58:13 [INFO] 
+09:58:13 [INFO] --- jar:3.5.0:jar (default-jar) @ booking-service ---
+09:58:13 [INFO] Building jar: C:\Users\22692\Desktop\zy\L\booking-service\target\booking-service-1.0.0.jar
+09:58:13 [INFO] 
+09:58:13 [INFO] --- spring-boot:3.3.5:repackage (default) @ booking-service ---
+09:58:13 [INFO] Replacing main artifact C:\Users\22692\Desktop\zy\L\booking-service\target\booking-service-1.0.0.jar with repackaged archive, adding nested dependencies in BOOT-INF/.
+09:58:14 [INFO] The original artifact has been renamed to C:\Users\22692\Desktop\zy\L\booking-service\target\booking-service-1.0.0.jar.original
+09:58:14 [INFO] 
+09:58:14 [INFO] ----------------------< com.lab:approval-service >----------------------
+09:58:14 [INFO] Building approval-service 1.0.0                                    [4/4]
+09:58:14 [INFO]   from approval-service\pom.xml
+09:58:14 [INFO] --------------------------------[ jar ]---------------------------------
+09:58:14 [INFO] 
+09:58:14 [INFO] --- resources:3.4.0:resources (default-resources) @ approval-service ---
+09:58:14 [INFO] Copying 1 resource from src\main\resources to target\classes
+09:58:14 [INFO] 
+09:58:14 [INFO] --- compiler:3.13.0:compile (default-compile) @ approval-service ---
+09:58:14 [INFO] Recompiling the module because of changed dependency.
+09:58:14 [INFO] Compiling 23 source files with javac [debug release 17] to target\classes
+09:58:14 [INFO] 
+09:58:14 [INFO] --- resources:3.4.0:testResources (default-testResources) @ approval-service ---
+09:58:14 [INFO] skip non existing resourceDirectory C:\Users\22692\Desktop\zy\L\approval-service\src\test\resources
+09:58:14 [INFO] 
+09:58:14 [INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ approval-service ---
+09:58:14 [INFO] No sources to compile
+09:58:14 [INFO] 
+09:58:14 [INFO] --- surefire:3.5.4:test (default-test) @ approval-service ---
+09:58:14 [INFO] Tests are skipped.
+09:58:14 [INFO] 
+09:58:14 [INFO] --- jar:3.5.0:jar (default-jar) @ approval-service ---
+09:58:14 [INFO] Building jar: C:\Users\22692\Desktop\zy\L\approval-service\target\approval-service-1.0.0.jar
+09:58:14 [INFO] 
+09:58:14 [INFO] --- spring-boot:3.3.5:repackage (default) @ approval-service ---
+09:58:14 [INFO] Replacing main artifact C:\Users\22692\Desktop\zy\L\approval-service\target\approval-service-1.0.0.jar with repackaged archive, adding nested dependencies in BOOT-INF/.
+09:58:14 [INFO] The original artifact has been renamed to C:\Users\22692\Desktop\zy\L\approval-service\target\approval-service-1.0.0.jar.original
+09:58:14 [INFO] ------------------------------------------------------------------------
+09:58:14 [INFO] Reactor Summary for 实验室设备预约管理系统 1.0.0:
+09:58:14 [INFO] 
+09:58:14 [INFO] 实验室设备预约管理系统 ........................................ SUCCESS [  0.003 s]
+09:58:14 [INFO] common ............................................. SUCCESS [  2.839 s]
+09:58:14 [INFO] booking-service .................................... SUCCESS [  2.288 s]
+09:58:14 [INFO] approval-service ................................... SUCCESS [  1.002 s]
+09:58:14 [INFO] ------------------------------------------------------------------------
+09:58:14 [INFO] BUILD SUCCESS
+09:58:14 [INFO] ------------------------------------------------------------------------
+09:58:14 [INFO] Total time:  6.525 s
+09:58:14 [INFO] Finished at: 2026-08-31T09:58:12+08:00
+09:58:14 [INFO] ------------------------------------------------------------------------
+09:58:14 mvn_exit=0
+09:58:14 start booking-service
+09:58:14 start approval-service
+09:58:14 cleanup stale approval tasks
+09:58:15 mysql_exit=0
+09:58:23 booking_started=True
+09:58:23 approval_started=True
+09:58:23 final 8083 pids=28740
+09:58:23 final 8084 pids=32444
+09:58:23 finished

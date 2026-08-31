@@ -41,8 +41,13 @@ const ERROR_MESSAGES = {
   BOOKING_DAILY_DURATION_LIMIT: "当天累计预约时长已达到上限",
   BOOKING_ADVANCE_LIMIT: "预约日期超出允许的提前预约范围",
   CHECKIN_WINDOW: "当前不在允许签到的时间范围内",
+  VIOLATION_ALREADY_PROCESSED: "该违约记录已经处理",
+  VIOLATION_REASON_REQUIRED: "撤销违约时必须填写原因",
   USER_RESTRICTED: "当前账号暂时不能创建预约",
   APPROVAL_EXPIRED: "审批任务已过期",
+  BOOKING_NOT_PENDING: "该预约已取消或已超时，审批任务已关闭",
+  BOOKING_CANCELED: "该预约已被申请人取消",
+  BOOKING_EXPIRED: "该预约已因超时失效",
   REJECTION_REASON_REQUIRED: "驳回时必须填写原因",
   SELF_APPROVAL_FORBIDDEN: "不能审批自己提交的预约",
   TASK_ALREADY_COMPLETED: "该审批任务已经处理",
@@ -60,6 +65,7 @@ const ERROR_MESSAGES = {
   INVALID_REPORT_TYPE: "报修类型不正确",
   INVALID_SEVERITY: "严重程度不正确",
   INVALID_TRANSITION: "当前工单状态不能进行此变更",
+  INVALID_PHONE: "请填写有效的维修负责人电话",
 };
 
 export function localizeApiError(error) {
