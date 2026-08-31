@@ -30,6 +30,7 @@ const filterDate = ref("");
 const filterStartTime = ref("");
 const filterEndTime = ref("");
 const selectedDeviceKeys = ref([]);
+const pendingDeviceKey = ref("");
 const publicAssetTypes = ref([]);
 const availabilityByResource = ref({});
 const bookings = ref([]);
@@ -496,10 +497,16 @@ function resourceMatchesDevices(resource) {
     return Boolean(type?.resourceIds?.some((id) => Number(id) === Number(resource.id)));
   });
 }
-function toggleDeviceFilter(key) {
-  selectedDeviceKeys.value = selectedDeviceKeys.value.includes(key)
-    ? selectedDeviceKeys.value.filter((item) => item !== key)
-    : [...selectedDeviceKeys.value, key];
+const availableDeviceTypes = computed(() => publicAssetTypes.value.filter((item) => !selectedDeviceKeys.value.includes(item.key)));
+const selectedDeviceTypes = computed(() => selectedDeviceKeys.value.map((key) => publicAssetTypes.value.find((item) => item.key === key)).filter(Boolean));
+function addDeviceFilter() {
+  const key = pendingDeviceKey.value;
+  if (!key || selectedDeviceKeys.value.includes(key)) return;
+  selectedDeviceKeys.value = [...selectedDeviceKeys.value, key];
+  pendingDeviceKey.value = "";
+}
+function removeDeviceFilter(key) {
+  selectedDeviceKeys.value = selectedDeviceKeys.value.filter((item) => item !== key);
 }
 function clearResourceFilters() {
   resourceQuery.value = "";
@@ -509,6 +516,7 @@ function clearResourceFilters() {
   filterStartTime.value = "";
   filterEndTime.value = "";
   selectedDeviceKeys.value = [];
+  pendingDeviceKey.value = "";
 }
 function deviceTypeLabel(item) {
   const spec = [item.brand, item.model].filter(Boolean).join(" ");
@@ -829,8 +837,11 @@ onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
             <button v-if="hasBookingFilters" class="clear-resource-filter" type="button" @click="clearResourceFilters">清除筛选</button>
           </div>
           <div v-if="publicAssetTypes.length" class="device-filter-row teacher-device-filter">
-            <span>设备组合</span>
-            <button v-for="item in publicAssetTypes" :key="item.key" type="button" class="device-chip" :class="{ active: selectedDeviceKeys.includes(item.key) }" @click="toggleDeviceFilter(item.key)">{{ deviceTypeLabel(item) }}</button>
+            <span>所需设备</span>
+            <select v-model="pendingDeviceKey" class="device-add-select"><option value="">选择要添加的设备</option><option v-for="item in availableDeviceTypes" :key="item.key" :value="item.key">{{ deviceTypeLabel(item) }}</option></select>
+            <button type="button" class="device-add-btn" :disabled="!pendingDeviceKey" @click="addDeviceFilter"><Plus :size="14" />添加</button>
+            <span v-if="!selectedDeviceTypes.length" class="device-add-hint">一个一个添加，资源需同时具备</span>
+            <button v-for="item in selectedDeviceTypes" :key="item.key" type="button" class="device-chip active" @click="removeDeviceFilter(item.key)">{{ deviceTypeLabel(item) }} <X :size="12" /></button>
           </div>
           <div class="resource-card-grid teacher-resource-grid">
             <button v-for="r in filteredResources" :key="r.id" class="resource-card" :class="{ selected: bookingForm.resourceId === r.id }" type="button" @click="selectResource(r)">
@@ -887,8 +898,11 @@ onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
               <span class="resource-filter-count">显示 {{ filteredResources.length }} / {{ resources.length }}</span>
             </div>
             <div v-if="publicAssetTypes.length" class="device-filter-row">
-              <span>设备组合</span>
-              <button v-for="item in publicAssetTypes" :key="item.key" type="button" class="device-chip" :class="{ active: selectedDeviceKeys.includes(item.key) }" @click="toggleDeviceFilter(item.key)">{{ deviceTypeLabel(item) }}</button>
+              <span>所需设备</span>
+              <select v-model="pendingDeviceKey" class="device-add-select"><option value="">选择要添加的设备</option><option v-for="item in availableDeviceTypes" :key="item.key" :value="item.key">{{ deviceTypeLabel(item) }}</option></select>
+              <button type="button" class="device-add-btn" :disabled="!pendingDeviceKey" @click="addDeviceFilter"><Plus :size="14" />添加</button>
+              <span v-if="!selectedDeviceTypes.length" class="device-add-hint">一个一个添加，资源需同时具备</span>
+              <button v-for="item in selectedDeviceTypes" :key="item.key" type="button" class="device-chip active" @click="removeDeviceFilter(item.key)">{{ deviceTypeLabel(item) }} <X :size="12" /></button>
             </div>
             <div class="resource-card-grid">
               <button

@@ -409,19 +409,51 @@ header {
   color: #74847d;
   font-size: 11px;
 }
+.device-add-select {
+  height: 32px;
+  min-width: 180px;
+  border: 1px solid #dce5e0;
+  border-radius: 5px;
+  padding: 0 8px;
+  background: #fff;
+  color: #263b32;
+  font-size: 11px;
+}
+.device-add-btn {
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: #225c4d;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+.device-add-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.device-add-hint {
+  color: #8a9791;
+}
 .device-chip {
   height: 28px;
-  padding: 0 10px;
+  padding: 0 8px 0 10px;
   border: 1px solid #d6e0db;
   border-radius: 14px;
   background: #fff;
   color: #42695a;
   font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .device-chip.active {
   border-color: #225c4d;
-  background: #225c4d;
-  color: #fff;
+  background: #e7f2ed;
+  color: #225c4d;
 }
 .resource-search {
   width: min(290px, 100%);
