@@ -17,13 +17,23 @@ import java.util.List;
 
 @Service
 public class ResourceClosureServiceImpl implements ResourceClosureService {
-    private final ResourceRepository resources; private final ClosureRepository closures; private final RoleGuard roleGuard;
+    private final ResourceRepository resources;
+    private final ClosureRepository closures;
+    private final RoleGuard roleGuard;
     private final BookingClosureClient bookingClosures;
-    public ResourceClosureServiceImpl(ResourceRepository resources, ClosureRepository closures, RoleGuard roleGuard,
-                                      BookingClosureClient bookingClosures) {
-        this.resources=resources; this.closures=closures; this.roleGuard=roleGuard; this.bookingClosures=bookingClosures;
+
+    public ResourceClosureServiceImpl(ResourceRepository resources, ClosureRepository closures, RoleGuard roleGuard, BookingClosureClient bookingClosures) {
+        this.resources=resources;
+        this.closures=closures;
+        this.roleGuard=roleGuard;
+        this.bookingClosures=bookingClosures;
     }
-    public List<ResourceClosure> list(Long resourceId, HttpServletRequest servletRequest) { roleGuard.requireLabAdmin(servletRequest); if(!resources.existsById(resourceId)) throw new BusinessException("NOT_FOUND","Resource does not exist",HttpStatus.NOT_FOUND); return closures.findByResourceIdAndStatusNot(resourceId, "CANCELED"); }
+
+    public List<ResourceClosure> list(Long resourceId, HttpServletRequest servletRequest) {
+        roleGuard.requireLabAdmin(servletRequest);
+        if(!resources.existsById(resourceId)) throw new BusinessException("NOT_FOUND","Resource does not exist",HttpStatus.NOT_FOUND);
+        return closures.findByResourceIdAndStatusNot(resourceId, "CANCELED");
+    }
     public Map<String, Object> create(Long resourceId, ResourceClosureRequest request, HttpServletRequest servletRequest) {
         roleGuard.requireLabAdmin(servletRequest);
         if(!resources.existsById(resourceId)) throw new BusinessException("NOT_FOUND","Resource does not exist",HttpStatus.NOT_FOUND);

@@ -9,10 +9,12 @@ import java.util.Objects;
 @RestController
 @RequestMapping("/api/v1/approvals")
 public class ApprovalController {
+
     private final ApprovalQueryService service;
 
-    public ApprovalController(ApprovalQueryService service) { this.service = service; }
-
+    public ApprovalController(ApprovalQueryService service) {
+        this.service = service;
+    }
     @GetMapping("/pending")
     public ApiResponse<?> pending(HttpServletRequest request) {
         return ApiResponse.success(service.pending(request), Objects.toString(request.getAttribute("X-Request-Id"), ""));

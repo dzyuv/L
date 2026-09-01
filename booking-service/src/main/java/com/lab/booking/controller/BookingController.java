@@ -16,7 +16,9 @@ import java.util.Objects;
 public class BookingController {
     private final BookingService service;
 
-    public BookingController(BookingService service) { this.service = service; }
+    public BookingController(BookingService service) {
+        this.service = service;
+    }
 
     public record Create(@NotNull Long resourceId, @NotNull LocalDateTime startTime, @NotNull LocalDateTime endTime, @NotBlank @Size(max = 500) String purpose, @Min(1) int participants) {}
     public record OccupiedInterval(LocalDateTime startTime, LocalDateTime endTime) {}
