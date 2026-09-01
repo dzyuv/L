@@ -21,6 +21,7 @@ public class AdminUserController {
     public record StatusRequest(@NotBlank String status) {}
     public record RolesRequest(@NotEmpty Set<@NotBlank String> roles) {}
     public record PasswordRequest(@NotBlank @Size(min = 8, max = 72) String password) {}
+    public record ImportRequest(@NotBlank @Size(max = 524288) String csv) {}
 
     @GetMapping("/users")
     public ApiResponse<?> users(@RequestParam(value = "query", required = false) String query,
@@ -29,6 +30,9 @@ public class AdminUserController {
     @GetMapping("/users/teachers")
     public ApiResponse<?> teachers(HttpServletRequest request) { return ok(service.teachers(request), request); }
     @GetMapping("/roles") public ApiResponse<?> roles(HttpServletRequest request) { return ok(service.roles(request), request); }
+    @PostMapping("/users/import") public ApiResponse<?> importUsers(@Valid @RequestBody ImportRequest body, HttpServletRequest request) {
+        return ok(service.importUsers(body.csv(), request), request);
+    }
     @PutMapping("/users/{id}/status") public ApiResponse<?> status(@PathVariable("id") Long id, @Valid @RequestBody StatusRequest body, HttpServletRequest request) { return ok(service.updateStatus(id, body.status(), request), request); }
     @PutMapping("/users/{id}/roles") public ApiResponse<?> roles(@PathVariable("id") Long id, @Valid @RequestBody RolesRequest body, HttpServletRequest request) { return ok(service.updateRoles(id, body.roles(), request), request); }
     @PostMapping("/users/{id}/reset-password") public ApiResponse<?> reset(@PathVariable("id") Long id, @Valid @RequestBody PasswordRequest body, HttpServletRequest request) { return ok(service.resetPassword(id, body.password(), request), request); }

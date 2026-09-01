@@ -21,7 +21,14 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     }
     public List<Map<String, String>> configs(HttpServletRequest request) {
         roleGuard.requireSystemAdmin(request);
-        return configs.findAll().stream().map(item -> Map.of("key", item.configKey, "value", item.configValue, "type", Objects.toString(item.valueType, "STRING"))).toList();
+        return configs.findAll().stream().map(item -> {
+            Map<String, String> row = new LinkedHashMap<>();
+            row.put("key", item.configKey);
+            row.put("value", Objects.toString(item.configValue, ""));
+            row.put("type", Objects.toString(item.valueType, "STRING"));
+            row.put("description", Objects.toString(item.description, ""));
+            return row;
+        }).toList();
     }
     public Map<String, String> update(String key, String value, HttpServletRequest request) {
         roleGuard.requireSystemAdmin(request);

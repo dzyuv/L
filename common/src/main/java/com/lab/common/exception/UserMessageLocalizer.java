@@ -61,6 +61,8 @@ public final class UserMessageLocalizer {
             Map.entry("SELF_APPROVAL_FORBIDDEN", "不能审批自己提交的预约"),
             Map.entry("TASK_ALREADY_COMPLETED", "该审批任务已经处理"),
             Map.entry("ROLE_NOT_FOUND", "所选角色不存在"),
+            Map.entry("IMPORT_EMPTY", "导入内容为空，请按模板填写用户"),
+            Map.entry("IMPORT_TOO_LARGE", "单次最多导入 200 名用户"),
             Map.entry("INVALID_ROLE", "请选择有效的用户角色"),
             Map.entry("SELF_DISABLE_FORBIDDEN", "不能停用当前登录账号"),
             Map.entry("SELF_DELETE_FORBIDDEN", "不能删除当前登录账号"),

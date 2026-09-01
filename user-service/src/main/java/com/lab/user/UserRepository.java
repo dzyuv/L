@@ -18,6 +18,9 @@ public interface UserRepository extends CrudMapper<User>{
     default boolean existsByEmployeeNo(String no) {
         return selectCount(Wrappers.<User>query().eq("employee_no", no)) > 0;
     }
+    default boolean existsByUsername(String username) {
+        return selectCount(Wrappers.<User>query().eq("username", username)) > 0;
+    }
     default boolean existsByEmailIgnoreCase(String email) {
         return selectCount(Wrappers.<User>query().apply("LOWER(email)=LOWER({0})", email)) > 0;
     }
