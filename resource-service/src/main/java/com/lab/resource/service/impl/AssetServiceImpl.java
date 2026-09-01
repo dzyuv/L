@@ -97,8 +97,6 @@ public class AssetServiceImpl implements AssetService {
         validateCategory(body.categoryId());
         validateResource(body.resourceId());
         validateStatus(body.status());
-        AssetCategory category = categories.findById(body.categoryId()).orElseThrow(() -> notFound("Asset category does not exist"));
-        boolean requireSerial = category.serialized || category.highValue;
         List<Asset> created = new ArrayList<>();
         String prefix = normalizePrefix(body.numberPrefix() != null && !body.numberPrefix().isBlank() ? body.numberPrefix() : suggestPrefix(body.name()));
         int generated = 0;
@@ -116,13 +114,11 @@ public class AssetServiceImpl implements AssetService {
             item.originalCost = row.originalCost();
             item.remark = row.remark();
             item.serialNo = row.serialNo() == null || row.serialNo().isBlank() ? null : row.serialNo().trim();
-            if (requireSerial && item.serialNo == null) throw new BusinessException("SERIAL_NO_REQUIRED", "Serialized or high-value assets require a serial number", HttpStatus.BAD_REQUEST);
             if (row.assetNo() != null && !row.assetNo().isBlank()) item.assetNo = row.assetNo().trim();
             else if (body.autoNumber()) {
                 item.assetNo = generateAssetNo(prefix);
                 generated++;
             } else throw new BusinessException("ASSET_NO_REQUIRED", "Asset number is required when auto numbering is disabled", HttpStatus.BAD_REQUEST);
-            validateSerialized(item);
             try { created.add(assets.saveAndFlush(item)); }
             catch (DataIntegrityViolationException e) { throw new BusinessException("ASSET_EXISTS", "Asset number or serial number already exists", HttpStatus.CONFLICT); }
             record(item, null, item.status, "Batch asset created", roles.currentUserId(request));
