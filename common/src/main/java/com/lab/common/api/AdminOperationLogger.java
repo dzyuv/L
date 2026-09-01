@@ -7,7 +7,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
 
 import java.util.Map;
 import java.util.Objects;
@@ -44,7 +43,7 @@ public class AdminOperationLogger {
                     .header(HttpHeaders.AUTHORIZATION, Objects.toString(request.getHeader(HttpHeaders.AUTHORIZATION), ""))
                     .header(InternalServiceGuard.HEADER, internalToken)
                     .body(body).retrieve().toBodilessEntity();
-        } catch (RestClientException exception) {
+        } catch (RuntimeException exception) {
             // An audit-service outage must not roll back the completed business operation.
             log.warn("Unable to persist administrator operation log: {}", operationType, exception);
         }

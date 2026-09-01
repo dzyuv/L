@@ -212,8 +212,12 @@ public class AdminUserServiceImpl implements AdminUserService {
         result.put("created", created);
         result.put("skipped", skipped);
         result.put("failed", failed);
-        operationLogger.success(request, "USER_IMPORTED", "USER", null,
-                Map.of("createdCount", created.size(), "skippedCount", skipped.size(), "failedCount", failed.size()));
+        try {
+            operationLogger.success(request, "USER_IMPORTED", "USER", null,
+                    Map.of("createdCount", created.size(), "skippedCount", skipped.size(), "failedCount", failed.size()));
+        } catch (RuntimeException ignored) {
+            // Import result must still be returned if audit logging fails.
+        }
         return result;
     }
 
