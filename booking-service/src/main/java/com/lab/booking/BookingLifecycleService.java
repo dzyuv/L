@@ -43,6 +43,11 @@ public class BookingLifecycleService {
         record(booking,booking.status,booking.status,operatorId,reason,requestId);
     }
 
+    public void refreshApprovalDeadline(Booking booking){
+        LocalDateTime hold=LocalDateTime.now().plusMinutes(settings.approvalTimeoutMinutes());
+        booking.approvalDeadline=booking.startTime!=null && booking.startTime.isBefore(hold) ? booking.startTime : hold;
+    }
+
     public void transition(Booking booking,String nextStatus,Long operatorId,String reason,String requestId){
         String previous=booking.status;
         booking.status=nextStatus;
@@ -63,19 +68,43 @@ public class BookingLifecycleService {
         violation.bookingId=booking.id;
         violation.userId=booking.userId;
         violation.violationType="NO_SHOW";
+        violation.status="OPEN";
         violation.comment="Missed required check-in";
         violations.save(violation);
+    }
 
+    public void applyRestrictionIfNeeded(Long userId){
         LocalDateTime now=LocalDateTime.now();
-        long count=violations.countActiveNoShows(booking.userId,now.minusDays(noShowWindowDays));
-        boolean alreadyRestricted=restrictions.findFirstByUserIdAndStatusAndRestrictedUntilAfterOrderByRestrictedUntilDesc(booking.userId,"ACTIVE",now).isPresent();
+        long count=violations.countActiveNoShows(userId,now.minusDays(noShowWindowDays));
+        boolean alreadyRestricted=restrictions.findFirstByUserIdAndStatusAndRestrictedUntilAfterOrderByRestrictedUntilDesc(userId,"ACTIVE",now).isPresent();
         if(count>=settings.violationMaxCount() && !alreadyRestricted){
             UserRestriction restriction=new UserRestriction();
-            restriction.userId=booking.userId;
+            restriction.userId=userId;
             restriction.restrictedUntil=now.plusDays(settings.restrictionDays());
             restriction.reason="Repeated no-show bookings";
             restriction.sourceViolationCount=(int)count;
             restrictions.save(restriction);
+        }
+    }
+
+    public void reclaimSlots(Booking booking){
+        java.util.List<BookingSlot> existing=slots.findByBookingId(booking.id);
+        if(!existing.isEmpty()){
+            for(BookingSlot slot:existing){
+                slot.releasedAt=null;
+                slot.releaseReason=null;
+                slots.save(slot);
+            }
+            return;
+        }
+        if(booking.startTime==null||booking.endTime==null) return;
+        int minutes=Math.max(1, booking.slotMinutesSnapshot);
+        for(LocalDateTime slotTime=booking.startTime; slotTime.isBefore(booking.endTime); slotTime=slotTime.plusMinutes(minutes)){
+            BookingSlot slot=new BookingSlot();
+            slot.resourceId=booking.resourceId;
+            slot.bookingId=booking.id;
+            slot.slotStart=slotTime;
+            slots.save(slot);
         }
     }
 

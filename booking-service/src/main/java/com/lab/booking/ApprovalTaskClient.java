@@ -1,14 +1,18 @@
 package com.lab.booking;
 
+import com.lab.common.api.ApiResponse;
 import com.lab.common.exception.BusinessException;
 import com.lab.common.api.InternalServiceGuard;
 import com.lab.common.api.Roles;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+
+import java.util.Map;
 
 @Component
 public class ApprovalTaskClient {
@@ -45,7 +49,20 @@ public class ApprovalTaskClient {
         }
     }
 
+    public boolean reopenCanceled(Long bookingId, java.time.LocalDateTime deadline) {
+        try {
+            ApiResponse<Map<String, Object>> response = client.post().uri("/api/v1/internal/approvals/bookings/{id}/reopen", bookingId)
+                .header(InternalServiceGuard.HEADER, internalToken)
+                .body(new ReopenPending(deadline)).retrieve()
+                .body(new ParameterizedTypeReference<ApiResponse<Map<String, Object>>>() {});
+            return response != null && response.data() != null;
+        } catch (RestClientException exception) {
+            throw new BusinessException("APPROVAL_SERVICE_UNAVAILABLE", "Approval service is unavailable", HttpStatus.SERVICE_UNAVAILABLE);
+        }
+    }
+
     private record CreateTask(Long bookingId,Long applicantUserId,String applicantName,Long resourceId,Long resourceTypeId,String resourceName,
                               java.time.LocalDateTime startTime,java.time.LocalDateTime endTime,int level,int totalLevels,Long assignedUserId,String approverRole){}
     private record ClosePending(String reason) {}
+    private record ReopenPending(java.time.LocalDateTime deadline) {}
 }

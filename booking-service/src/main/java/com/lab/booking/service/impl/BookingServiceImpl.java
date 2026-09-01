@@ -32,6 +32,7 @@ public class BookingServiceImpl implements BookingService {
     private final ResourceRuleClient resourceRules;
     private final ApprovalTaskClient approvalTasks;
     private final BookingLifecycleService lifecycle;
+    private final BookingStatusHistoryRepository histories;
     private final ViolationRecordRepository violations;
     private final RoleGuard roleGuard;
     private final int maxActive;
@@ -48,7 +49,8 @@ public class BookingServiceImpl implements BookingService {
     public BookingServiceImpl(BookingRepository bookings, BookingSlotRepository slots,
                               BookingQuotaLockRepository quotaLocks, ResourceRuleClient resourceRules,
                               ApprovalTaskClient approvalTasks, BookingLifecycleService lifecycle,
-                              ViolationRecordRepository violations, RoleGuard roleGuard, RuntimeSettings settings,
+                              BookingStatusHistoryRepository histories, ViolationRecordRepository violations,
+                              RoleGuard roleGuard, RuntimeSettings settings,
                               @Value("${booking.fair-use.max-active:5}") int maxActive,
                               @Value("${booking.fair-use.teacher-max-active:10}") int teacherMaxActive,
                               @Value("${booking.fair-use.max-pending:3}") int maxPending,
@@ -64,6 +66,7 @@ public class BookingServiceImpl implements BookingService {
         this.resourceRules = resourceRules;
         this.approvalTasks = approvalTasks;
         this.lifecycle = lifecycle;
+        this.histories = histories;
         this.violations = violations;
         this.roleGuard = roleGuard;
         this.maxActive = maxActive;
@@ -117,8 +120,7 @@ public class BookingServiceImpl implements BookingService {
         booking.clientRequestId = key;
         booking.status = rule.approvalLevel() == 0 ? "APPROVED" : "PENDING_APPROVAL";
         if (rule.approvalLevel() > 0) {
-            LocalDateTime holdDeadline = LocalDateTime.now().plusMinutes(settings.approvalTimeoutMinutes());
-            booking.approvalDeadline = holdDeadline.isBefore(request.startTime()) ? holdDeadline : request.startTime();
+            lifecycle.refreshApprovalDeadline(booking);
         }
         try {
             booking = bookings.saveAndFlush(booking);
@@ -405,6 +407,7 @@ public class BookingServiceImpl implements BookingService {
         item.processedBy = roleGuard.currentUserId(servletRequest);
         item.processedAt = LocalDateTime.now();
         ViolationRecord saved = violations.save(item);
+        if ("CONFIRMED".equals(status)) lifecycle.applyRestrictionIfNeeded(item.userId);
         if ("DISMISSED".equals(status)) lifecycle.refreshRestriction(item.userId);
         return saved;
     }
@@ -423,13 +426,53 @@ public class BookingServiceImpl implements BookingService {
             boolean pending = "PENDING_APPROVAL".equals(booking.status);
             lifecycle.transition(booking, "CANCELED", operatorId, history, requestId(servletRequest));
             booking.canceledAt = LocalDateTime.now();
-            booking.cancelReason = history;
+            booking.cancelReason = "RESOURCE_CLOSED";
             lifecycle.releaseSlots(booking.id, "RESOURCE_CLOSED");
             bookings.save(booking);
             if (pending) pendingIds.add(booking.id);
         }
         closeApprovalTasksAfterCommit(pendingIds, "CANCELED");
         return Map.of("cancelledCount", overlapping.size());
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> restoreOverlappingForClosure(Long resourceId, LocalDateTime start, LocalDateTime end, HttpServletRequest servletRequest) {
+        if (resourceId == null || start == null || end == null || !start.isBefore(end)) {
+            throw new BusinessException("INVALID_CLOSURE", "Closure interval is invalid", HttpStatus.BAD_REQUEST);
+        }
+        LocalDateTime now = LocalDateTime.now();
+        int restored = 0;
+        for (Booking booking : bookings.findClosedByMaintenance(resourceId, start, end)) {
+            if (booking.startTime == null || !booking.startTime.isAfter(now)) continue;
+            boolean occupied = bookings.findActiveOccupancy(resourceId, booking.startTime, booking.endTime).stream()
+                    .anyMatch(item -> !Objects.equals(item.id, booking.id));
+            if (occupied) continue;
+            String previous = histories.findLatestCancel(booking.id).map(item -> item.fromStatus).orElse("APPROVED");
+            if (!Set.of("PENDING_APPROVAL", "APPROVED").contains(previous)) continue;
+            lifecycle.reclaimSlots(booking);
+            Long operatorId = servletRequest.getAttribute("userId") instanceof Long value ? value : null;
+            lifecycle.transition(booking, previous, operatorId, "Maintenance closure canceled", requestId(servletRequest));
+            booking.canceledAt = null;
+            booking.cancelReason = null;
+            if ("PENDING_APPROVAL".equals(previous)) {
+                lifecycle.refreshApprovalDeadline(booking);
+            }
+            bookings.save(booking);
+            if ("PENDING_APPROVAL".equals(previous)) {
+                try {
+                    if (!approvalTasks.reopenCanceled(booking.id, booking.approvalDeadline)) {
+                        ResourceRuleClient.BookingRule rule = resourceRules.getRule(booking.resourceId, booking.startTime, booking.endTime,
+                                Math.max(1, booking.participants), booking.userId, servletRequest.getHeader("Authorization"));
+                        approvalTasks.create(booking, rule, servletRequest.getHeader("Authorization"));
+                    }
+                } catch (RuntimeException exception) {
+                    log.warn("Restored booking {} but could not recreate approval task: {}", booking.id, exception.getMessage());
+                }
+            }
+            restored++;
+        }
+        return Map.of("restoredCount", restored);
     }
 
     private String requestId(HttpServletRequest request) { return Objects.toString(request.getAttribute("X-Request-Id"), ""); }

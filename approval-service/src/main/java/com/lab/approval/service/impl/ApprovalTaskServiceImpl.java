@@ -85,7 +85,7 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
                     task.bookingId, decision, normalizedComment, task.level, Math.max(1, task.totalLevels),
                     request.getHeader("Authorization"));
             if ("APPROVED".equals(decision) && booking != null && "PENDING_APPROVAL".equals(booking.status())) {
-                internalApprovals.createNext(task);
+                internalApprovals.createNext(task, booking.approvalDeadline());
             }
         } catch (BusinessException exception) {
             if (STALE_BOOKING_CODES.contains(exception.code())) {

@@ -24,6 +24,7 @@ public class InternalApprovalController {
                              @Min(1) int level, @Min(1) int totalLevels, Long assignedUserId, String approverRole) {}
 
     public record ClosePending(@NotBlank String reason) {}
+    public record ReopenPending(java.time.LocalDateTime deadline) {}
 
     @PostMapping("/tasks")
     public ApiResponse<ApprovalTask> create(@Valid @RequestBody CreateTask request, HttpServletRequest servletRequest) {
@@ -35,6 +36,15 @@ public class InternalApprovalController {
                                            @Valid @RequestBody ClosePending request,
                                            HttpServletRequest servletRequest) {
         return ApiResponse.success(service.closePending(bookingId, request.reason(), servletRequest),
+                Objects.toString(servletRequest.getAttribute("X-Request-Id"), ""));
+    }
+
+    @PostMapping("/bookings/{bookingId}/reopen")
+    public ApiResponse<ApprovalTask> reopen(@PathVariable("bookingId") Long bookingId,
+                                            @RequestBody(required = false) ReopenPending request,
+                                            HttpServletRequest servletRequest) {
+        java.time.LocalDateTime deadline = request == null ? null : request.deadline();
+        return ApiResponse.success(service.reopenCanceled(bookingId, deadline, servletRequest),
                 Objects.toString(servletRequest.getAttribute("X-Request-Id"), ""));
     }
 }

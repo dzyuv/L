@@ -13,7 +13,7 @@ public interface ViolationRecordRepository extends CrudMapper<ViolationRecord>{
     default long countActiveNoShows(Long userId, LocalDateTime createdAt) {
         return selectCount(Wrappers.<ViolationRecord>query().eq("user_id", userId)
                 .eq("violation_type", "NO_SHOW")
-                .in("status", java.util.List.of("OPEN", "CONFIRMED"))
+                .eq("status", "CONFIRMED")
                 .gt("created_at", createdAt));
     }
     default List<ViolationRecord> findAllByOrderByCreatedAtDesc() {

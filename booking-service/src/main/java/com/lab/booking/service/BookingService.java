@@ -22,4 +22,5 @@ public interface BookingService {
     Map<String, Object> violations(HttpServletRequest servletRequest);
     Object processViolation(Long violationId, String status, String comment, HttpServletRequest servletRequest);
     Map<String, Object> cancelOverlappingForClosure(Long resourceId, LocalDateTime start, LocalDateTime end, String reason, HttpServletRequest servletRequest);
+    Map<String, Object> restoreOverlappingForClosure(Long resourceId, LocalDateTime start, LocalDateTime end, HttpServletRequest servletRequest);
 }

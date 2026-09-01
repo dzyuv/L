@@ -26,7 +26,7 @@ public class BookingDecisionClient {
         internalToken=token;
     }
 
-    public record BookingSnapshot(String status, Integer approvalLevelSnapshot) {}
+    public record BookingSnapshot(String status, Integer approvalLevelSnapshot, java.time.LocalDateTime approvalDeadline) {}
 
     public BookingSnapshot submit(Long bookingId,String status,String comment,int level,int totalLevels,String authorization){
         try{

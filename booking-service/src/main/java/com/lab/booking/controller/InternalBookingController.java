@@ -38,4 +38,11 @@ public class InternalBookingController {
         return ApiResponse.success(bookings.cancelOverlappingForClosure(body.resourceId(), body.startTime(), body.endTime(), body.reason(), request),
                 Objects.toString(request.getAttribute("X-Request-Id"), ""));
     }
+
+    @PostMapping("/restore-for-maintenance")
+    public ApiResponse<?> restoreForMaintenance(@RequestBody CloseForMaintenance body, HttpServletRequest request) {
+        internalServices.require(request);
+        return ApiResponse.success(bookings.restoreOverlappingForClosure(body.resourceId(), body.startTime(), body.endTime(), request),
+                Objects.toString(request.getAttribute("X-Request-Id"), ""));
+    }
 }

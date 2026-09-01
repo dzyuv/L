@@ -57,6 +57,7 @@ public class BookingInternalServiceImpl implements BookingInternalService {
         if (decidedLevel < Math.max(1, totalLevels)) {
             String historyReason = comment.isBlank() ? ("Level " + decidedLevel + " approved") : comment;
             lifecycle.recordProgress(booking, operatorId, historyReason, requestId);
+            lifecycle.refreshApprovalDeadline(booking);
             return bookings.save(booking);
         }
         String historyReason = comment.isBlank() ? "Approval decision" : comment;

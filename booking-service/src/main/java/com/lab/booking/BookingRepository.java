@@ -28,4 +28,13 @@ public interface BookingRepository extends CrudMapper<Booking>{
                 .lt("start_time", end)
                 .gt("end_time", start));
     }
+
+    default List<Booking> findClosedByMaintenance(Long resourceId, java.time.LocalDateTime start, java.time.LocalDateTime end) {
+        return selectList(Wrappers.<Booking>query()
+                .eq("resource_id", resourceId)
+                .eq("status", "CANCELED")
+                .eq("cancel_reason", "RESOURCE_CLOSED")
+                .lt("start_time", end)
+                .gt("end_time", start));
+    }
 }

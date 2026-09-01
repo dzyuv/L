@@ -36,11 +36,31 @@ public class ResourceClosureServiceImpl implements ResourceClosureService {
         if(!closure.startTime.isBefore(closure.endTime)) throw new BusinessException("INVALID_CLOSURE","Closure interval is invalid",HttpStatus.BAD_REQUEST);
         closure.reason=Objects.toString(request.reason(),"Maintenance");
         ResourceClosure saved=closures.save(closure);
-        int cancelled=bookingClosures.cancelOverlapping(resourceId, saved.startTime, saved.endTime, saved.reason);
+        int cancelled;
+        try {
+            cancelled=bookingClosures.cancelOverlapping(resourceId, saved.startTime, saved.endTime, saved.reason);
+        } catch (RuntimeException exception) {
+            try {
+                closures.deleteById(saved.id);
+            } catch (RuntimeException suppressed) {
+                exception.addSuppressed(suppressed);
+            }
+            throw exception;
+        }
         Map<String, Object> result=new LinkedHashMap<>();
         result.put("closure", saved);
         result.put("cancelledCount", cancelled);
         return result;
     }
-    public ResourceClosure cancel(Long id, HttpServletRequest servletRequest) { roleGuard.requireLabAdmin(servletRequest); ResourceClosure closure=closures.findById(id).orElseThrow(()->new BusinessException("NOT_FOUND","Closure does not exist",HttpStatus.NOT_FOUND)); closure.status="CANCELED"; return closures.save(closure); }
+    public Map<String, Object> cancel(Long id, HttpServletRequest servletRequest) {
+        roleGuard.requireLabAdmin(servletRequest);
+        ResourceClosure closure=closures.findById(id).orElseThrow(()->new BusinessException("NOT_FOUND","Closure does not exist",HttpStatus.NOT_FOUND));
+        int restored=bookingClosures.restoreOverlapping(closure.resourceId, closure.startTime, closure.endTime);
+        closure.status="CANCELED";
+        ResourceClosure saved=closures.save(closure);
+        Map<String, Object> result=new LinkedHashMap<>();
+        result.put("closure", saved);
+        result.put("restoredCount", restored);
+        return result;
+    }
 }

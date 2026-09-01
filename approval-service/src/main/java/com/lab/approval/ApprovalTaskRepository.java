@@ -32,4 +32,8 @@ public interface ApprovalTaskRepository extends CrudMapper<ApprovalTask>{
     default List<ApprovalTask> findByBookingIdAndStatus(Long bookingId, String status) {
         return selectList(Wrappers.<ApprovalTask>query().eq("booking_id", bookingId).eq("status", status));
     }
+
+    default List<ApprovalTask> findByBookingIdAndStatusIn(Long bookingId, List<String> statuses) {
+        return selectList(Wrappers.<ApprovalTask>query().eq("booking_id", bookingId).in("status", statuses));
+    }
 }

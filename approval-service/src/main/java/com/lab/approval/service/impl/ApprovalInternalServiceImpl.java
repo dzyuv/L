@@ -37,13 +37,18 @@ public class ApprovalInternalServiceImpl implements ApprovalInternalService {
 
     @Override
     @Transactional
-    public ApprovalTask createNext(ApprovalTask previous) {
+    public ApprovalTask createNext(ApprovalTask previous, LocalDateTime deadline) {
         if (previous == null || previous.totalLevels <= previous.level) return null;
-        return upsert(new InternalApprovalController.CreateTask(
+        ApprovalTask task = upsert(new InternalApprovalController.CreateTask(
                 previous.bookingId, previous.applicantUserId, previous.applicantName,
                 previous.resourceId, previous.resourceTypeId, previous.resourceName,
                 previous.startTime, previous.endTime,
                 previous.level + 1, previous.totalLevels, null, Roles.LAB_ADMIN));
+        if (task != null && deadline != null) {
+            task.deadline = deadline;
+            return tasks.save(task);
+        }
+        return task;
     }
 
     @Override
@@ -62,6 +67,32 @@ public class ApprovalInternalServiceImpl implements ApprovalInternalService {
             last = tasks.save(task);
         }
         return last;
+    }
+
+    @Override
+    @Transactional
+    public ApprovalTask reopenCanceled(Long bookingId, LocalDateTime deadline, HttpServletRequest servletRequest) {
+        internalServices.require(servletRequest);
+        if (bookingId == null) return null;
+        List<ApprovalTask> pending = tasks.findByBookingIdAndStatus(bookingId, "PENDING");
+        if (!pending.isEmpty()) {
+            ApprovalTask current = pending.get(0);
+            if (deadline != null) {
+                current.deadline = deadline;
+                return tasks.save(current);
+            }
+            return current;
+        }
+        return tasks.findByBookingIdAndStatusIn(bookingId, List.of("CANCELED", "EXPIRED")).stream()
+                .max(java.util.Comparator.comparingInt(item -> item.level))
+                .map(task -> {
+                    task.status = "PENDING";
+                    task.completedAt = null;
+                    task.comment = null;
+                    task.deadline = deadline != null ? deadline : deadline(task.startTime);
+                    return tasks.save(task);
+                })
+                .orElse(null);
     }
 
     private ApprovalTask upsert(InternalApprovalController.CreateTask request) {

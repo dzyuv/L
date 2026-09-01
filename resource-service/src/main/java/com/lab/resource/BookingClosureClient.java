@@ -25,15 +25,25 @@ public class BookingClosureClient {
     }
 
     public int cancelOverlapping(Long resourceId, LocalDateTime startTime, LocalDateTime endTime, String reason) {
+        return postCount("/api/v1/internal/bookings/close-for-maintenance",
+                new CloseForMaintenance(resourceId, startTime, endTime, reason), "cancelledCount");
+    }
+
+    public int restoreOverlapping(Long resourceId, LocalDateTime startTime, LocalDateTime endTime) {
+        return postCount("/api/v1/internal/bookings/restore-for-maintenance",
+                new CloseForMaintenance(resourceId, startTime, endTime, null), "restoredCount");
+    }
+
+    private int postCount(String uri, CloseForMaintenance body, String countKey) {
         try {
             ApiResponse<Map<String, Object>> response = client.post()
-                    .uri("/api/v1/internal/bookings/close-for-maintenance")
+                    .uri(uri)
                     .header(InternalServiceGuard.HEADER, internalToken)
-                    .body(new CloseForMaintenance(resourceId, startTime, endTime, reason))
+                    .body(body)
                     .retrieve()
                     .body(new ParameterizedTypeReference<ApiResponse<Map<String, Object>>>() {});
             if (response == null || response.data() == null) return 0;
-            Object count = response.data().get("cancelledCount");
+            Object count = response.data().get(countKey);
             if (count instanceof Number number) return number.intValue();
             return 0;
         } catch (RestClientException exception) {
