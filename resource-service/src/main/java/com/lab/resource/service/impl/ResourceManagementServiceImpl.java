@@ -39,16 +39,23 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
         return types.findAll().stream().filter(item -> !item.deleted && item.enabled).toList();
     }
     public List<?> listTypes(HttpServletRequest servletRequest) {
-        roleGuard.requireLabAdmin(servletRequest); return types.findAll().stream().filter(item -> !item.deleted).toList();
+        roleGuard.requireLabAdmin(servletRequest);
+        return types.findAll().stream().filter(item -> !item.deleted).toList();
     }
     public List<?> listSchedules(Long id, HttpServletRequest servletRequest) {
-        roleGuard.requireLabAdmin(servletRequest); resource(id); return schedules.findByResourceIdOrderByWeekdayAscOpenTimeAsc(id);
+        roleGuard.requireLabAdmin(servletRequest);
+        resource(id);
+        return schedules.findByResourceIdOrderByWeekdayAscOpenTimeAsc(id);
     }
     public Resource get(Long id) {
         return resource(id);
     }
     public Object createType(ResourceController.TypeRequest request, HttpServletRequest servletRequest) {
-        roleGuard.requireLabAdmin(servletRequest); ResourceType type=new ResourceType(); type.name=request.name(); type.defaultApprovalLevel=request.defaultApprovalLevel(); return types.save(type);
+        roleGuard.requireLabAdmin(servletRequest);
+        ResourceType type=new ResourceType();
+        type.name=request.name();
+        type.defaultApprovalLevel=request.defaultApprovalLevel();
+        return types.save(type);
     }
     public Object updateType(Long id, ResourceController.TypeUpdateRequest request, HttpServletRequest servletRequest) {
         roleGuard.requireLabAdmin(servletRequest);
@@ -169,7 +176,9 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
         }
         return new ResourceController.BookingRule(resource.name,type.id,resource.capacity,schedule.slotMinutes,Math.min(resource.maxDurationMinutes,schedule.maxDurationMinutes),resource.needCheckin,approvalLevel,approver,approverRole);
     }
-    private Resource resource(Long id) { return resources.findById(id).filter(item -> !item.deleted).orElseThrow(()->new BusinessException("NOT_FOUND","Resource does not exist",HttpStatus.NOT_FOUND)); }
+    private Resource resource(Long id) {
+        return resources.findById(id).filter(item -> !item.deleted).orElseThrow(()->new BusinessException("NOT_FOUND","Resource does not exist",HttpStatus.NOT_FOUND));
+    }
     private void requireType(Long id) { if(types.findById(id).filter(item -> !item.deleted && item.enabled).isEmpty()) throw new BusinessException("TYPE_NOT_FOUND","Resource type does not exist",HttpStatus.NOT_FOUND); }
     private void apply(Resource resource, ResourceController.ResourceRequest request) { resource.typeId=request.typeId(); resource.name=request.name(); resource.location=request.location(); resource.capacity=request.capacity(); resource.description=request.description(); resource.imageUrl=request.imageUrl()==null||request.imageUrl().isBlank()?null:request.imageUrl().trim(); resource.maxDurationMinutes=request.maxDurationMinutes(); resource.needCheckin=request.needCheckin(); resource.approvalLevelOverride=request.approvalLevelOverride(); }
     private boolean effective(ResourceSchedule schedule,LocalDate date) { return (schedule.effectiveFrom==null||!date.isBefore(schedule.effectiveFrom))&&(schedule.effectiveTo==null||!date.isAfter(schedule.effectiveTo)); }
