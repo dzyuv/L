@@ -38,10 +38,12 @@ public class ResourceController {
     }
     @GetMapping("/resource-types")
     public ApiResponse<?> listPublicTypes(HttpServletRequest request) {
+
         return ok(service.listPublicTypes(), request);
     }
     @GetMapping("/admin/resource-types")
     public ApiResponse<?> listTypes(HttpServletRequest request) {
+
         return ok(service.listTypes(request), request);
     }
     @GetMapping("/admin/resources/{id}/schedules")

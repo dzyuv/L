@@ -23,7 +23,9 @@ public class AuthController {
                            @NotBlank @Size(min=8,max=72) String password,
                            @NotBlank @Email @Size(max=100) String email,
                            @NotBlank @Size(max=30) String phone) {}
+
     public record Login(@NotBlank String username, @NotBlank String password) {}
+
     public record Refresh(@NotBlank String refreshToken) {}
 
     @PostMapping("/register")
