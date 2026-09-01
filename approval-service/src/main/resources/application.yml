@@ -32,5 +32,8 @@ mybatis-plus:
 security:
   jwt-secret: ${JWT_SECRET}
   internal-token: ${INTERNAL_SERVICE_TOKEN}
+services:
+  system:
+    base-url: ${SYSTEM_SERVICE_URL:http://localhost:8087}
 approval:
   timeout-hours: ${APPROVAL_TIMEOUT_HOURS:24}

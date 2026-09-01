@@ -1,5 +1,6 @@
 package com.lab.booking;
 
+import com.lab.common.api.RuntimeSettings;
 import com.lab.common.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -8,9 +9,8 @@ import java.time.LocalDateTime;
 
 @Component
 public class BookingLifecycleService {
-    private final int noShowThreshold;
     private final int noShowWindowDays;
-    private final int restrictionDays;
+    private final RuntimeSettings settings;
 
     private final BookingStatusHistoryRepository histories;
     private final BookingSlotRepository slots;
@@ -18,16 +18,14 @@ public class BookingLifecycleService {
     private final UserRestrictionRepository restrictions;
 
     BookingLifecycleService(BookingStatusHistoryRepository h,BookingSlotRepository s,ViolationRecordRepository v,UserRestrictionRepository r,
-                            @Value("${booking.violation.max-count:3}") int noShowThreshold,
-                            @Value("${booking.violation.window-days:30}") int noShowWindowDays,
-                            @Value("${booking.violation.restriction-days:30}") int restrictionDays){
+                            RuntimeSettings settings,
+                            @Value("${booking.violation.window-days:30}") int noShowWindowDays){
         histories=h;
         slots=s;
         violations=v;
         restrictions=r;
-        this.noShowThreshold=noShowThreshold;
+        this.settings=settings;
         this.noShowWindowDays=noShowWindowDays;
-        this.restrictionDays=restrictionDays;
     }
 
     public void assertCanCreate(Long userId){
@@ -71,10 +69,10 @@ public class BookingLifecycleService {
         LocalDateTime now=LocalDateTime.now();
         long count=violations.countActiveNoShows(booking.userId,now.minusDays(noShowWindowDays));
         boolean alreadyRestricted=restrictions.findFirstByUserIdAndStatusAndRestrictedUntilAfterOrderByRestrictedUntilDesc(booking.userId,"ACTIVE",now).isPresent();
-        if(count>=noShowThreshold && !alreadyRestricted){
+        if(count>=settings.violationMaxCount() && !alreadyRestricted){
             UserRestriction restriction=new UserRestriction();
             restriction.userId=booking.userId;
-            restriction.restrictedUntil=now.plusDays(restrictionDays);
+            restriction.restrictedUntil=now.plusDays(settings.restrictionDays());
             restriction.reason="Repeated no-show bookings";
             restriction.sourceViolationCount=(int)count;
             restrictions.save(restriction);
@@ -84,7 +82,7 @@ public class BookingLifecycleService {
     public void refreshRestriction(Long userId){
         LocalDateTime now=LocalDateTime.now();
         long count=violations.countActiveNoShows(userId,now.minusDays(noShowWindowDays));
-        if(count>=noShowThreshold) return;
+        if(count>=settings.violationMaxCount()) return;
         for(UserRestriction restriction:restrictions.findByUserIdAndStatus(userId,"ACTIVE")){
             if(restriction.restrictedUntil!=null && restriction.restrictedUntil.isAfter(now)){
                 restriction.status="LIFTED";

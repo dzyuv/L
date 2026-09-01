@@ -20,4 +20,12 @@ public interface BookingRepository extends CrudMapper<Booking>{
                 .lt("start_time", end)
                 .gt("end_time", start));
     }
+
+    default List<Booking> findActiveOccupancy(Long resourceId, java.time.LocalDateTime start, java.time.LocalDateTime end) {
+        return selectList(Wrappers.<Booking>query()
+                .eq("resource_id", resourceId)
+                .in("status", List.of("PENDING_APPROVAL", "APPROVED", "CHECKED_IN"))
+                .lt("start_time", end)
+                .gt("end_time", start));
+    }
 }

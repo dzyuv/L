@@ -11,7 +11,7 @@ import java.util.Map;
 public interface BookingService {
     Booking create(BookingController.Create request, String idempotencyKey, HttpServletRequest servletRequest);
     List<Booking> my(HttpServletRequest servletRequest);
-    List<LocalDateTime> occupied(Long resourceId, LocalDateTime start, LocalDateTime end, HttpServletRequest servletRequest);
+    List<BookingController.OccupiedInterval> occupied(Long resourceId, LocalDateTime start, LocalDateTime end, HttpServletRequest servletRequest);
     Booking get(Long bookingId, HttpServletRequest servletRequest);
     Booking cancel(Long bookingId, HttpServletRequest servletRequest);
     Booking checkin(Long bookingId, HttpServletRequest servletRequest);

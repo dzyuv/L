@@ -561,7 +561,7 @@ onMounted(loadAll);
       </template>
 
       <template v-else-if="activeTab === 'configs'">
-        <section class="admin-section"><div class="section-title"><div><h2>业务参数</h2><p>保存后由各服务按配置键读取，敏感修改仅系统管理员可执行</p></div></div><div class="config-list"><label v-for="item in configs" :key="item.key"><span><b>{{ item.key }}</b><small>{{ item.type }}</small></span><input v-model="item.value" /><button title="保存配置" @click="saveConfig(item)"><Save :size="17" /></button></label><div v-if="!configs.length" class="admin-empty">暂无系统配置</div></div></section>
+        <section class="admin-section"><div class="section-title"><div><h2>业务参数</h2><p>保存后约 5 秒内签到窗口、违约限制和审批超时会按新值生效</p></div></div><div class="config-list"><label v-for="item in configs" :key="item.key"><span><b>{{ item.key }}</b><small>{{ item.type }}</small></span><input v-model="item.value" /><button title="保存配置" @click="saveConfig(item)"><Save :size="17" /></button></label><div v-if="!configs.length" class="admin-empty">暂无系统配置</div></div></section>
       </template>
 
       <template v-else-if="activeTab === 'logs'">
@@ -589,7 +589,7 @@ onMounted(loadAll);
 
       <template v-else-if="activeTab === 'resource-types'">
         <section class="admin-section resource-type-list">
-            <div class="section-title"><div><h2>资源类别</h2><p>{{ resourceTypes.length }} 个类别会出现在资源管理表单中。默认审批：一级由教师审，二级再由实验室管理员终审；单个资源可覆盖</p></div><button class="command" type="button" @click="beginCreateResourceType"><Plus :size="16" />新建资源类别</button></div>
+            <div class="section-title"><div><h2>资源类别</h2><p>{{ resourceTypes.length }} 个类别会出现在资源管理表单中。默认审批：一级由资源负责人审，二级再由实验室管理员终审；单个资源可覆盖</p></div><button class="command" type="button" @click="beginCreateResourceType"><Plus :size="16" />新建资源类别</button></div>
             <div class="resource-type-row resource-type-head"><span>类别名称</span><span>默认审批</span><span>状态</span><span>创建时间</span><span>操作</span></div>
             <div v-for="item in resourceTypes" :key="item.id" class="resource-type-row"><span><b>{{ item.name }}</b><small>ID {{ item.id }}</small></span><span>{{ item.defaultApprovalLevel === 0 ? '无需审批' : `L${item.defaultApprovalLevel} · ${item.defaultApprovalLevel === 2 ? '二级审批' : '一级审批'}` }}</span><span class="status" :class="item.enabled === false || item.deleted ? 'disabled' : 'active'">{{ item.enabled === false || item.deleted ? '已停用' : '启用中' }}</span><span>{{ formatTime(item.createdAt) }}</span><span class="resource-type-actions"><button class="quiet" type="button" @click.stop="editResourceType(item)">编辑</button><button class="quiet" type="button" :disabled="resourceTypeActionId === item.id" :class="{ danger: item.enabled !== false }" @click.stop="toggleResourceType(item)">{{ resourceTypeActionId === item.id ? '处理中...' : item.enabled === false ? '启用' : '停用' }}</button><button class="quiet danger" type="button" @click.stop="deleteResourceType(item)">删除</button></span></div>
             <div v-if="!resourceTypes.length" class="admin-empty">暂无资源类别，请先创建一个类别</div>
@@ -618,7 +618,7 @@ onMounted(loadAll);
       <template v-else-if="activeTab === 'bookings'">
         <div class="booking-split">
           <section class="admin-section">
-            <div class="section-title"><div><h2>预约审批</h2><p>一级教师审，二级实验室管理员终审</p></div><span>{{ approvals.length }} 项待处理</span></div>
+            <div class="section-title"><div><h2>预约审批</h2><p>一级由资源负责人审，未指定负责人时由教师处理；二级由实验室管理员终审</p></div><span>{{ approvals.length }} 项待处理</span></div>
             <div class="approval-admin-list">
               <article v-for="item in approvals" :key="item.id">
                 <span class="approval-level">L{{ item.level }}</span>

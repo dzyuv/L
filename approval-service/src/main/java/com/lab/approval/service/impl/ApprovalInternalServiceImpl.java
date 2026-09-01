@@ -5,9 +5,9 @@ import com.lab.approval.controller.InternalApprovalController;
 import com.lab.approval.service.ApprovalInternalService;
 import com.lab.common.api.InternalServiceGuard;
 import com.lab.common.api.Roles;
+import com.lab.common.api.RuntimeSettings;
 import com.lab.common.exception.BusinessException;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -19,13 +19,13 @@ import java.util.List;
 public class ApprovalInternalServiceImpl implements ApprovalInternalService {
     private final ApprovalTaskRepository tasks;
     private final InternalServiceGuard internalServices;
-    private final int timeoutHours;
+    private final RuntimeSettings settings;
 
     public ApprovalInternalServiceImpl(ApprovalTaskRepository tasks, InternalServiceGuard internalServices,
-                                       @Value("${approval.timeout-hours:24}") int timeoutHours) {
+                                       RuntimeSettings settings) {
         this.tasks = tasks;
         this.internalServices = internalServices;
-        this.timeoutHours = timeoutHours;
+        this.settings = settings;
     }
 
     @Override
@@ -90,9 +90,7 @@ public class ApprovalInternalServiceImpl implements ApprovalInternalService {
             if (totalLevels >= 2 && level == 1) role = Roles.TEACHER;
             else role = assigned == null ? Roles.LAB_ADMIN : Roles.TEACHER;
         }
-        if (Roles.TEACHER.equals(role)) {
-            if (totalLevels >= 2) assigned = null;
-        } else {
+        if (!Roles.TEACHER.equals(role)) {
             assigned = null;
             role = Roles.LAB_ADMIN;
         }
@@ -103,7 +101,7 @@ public class ApprovalInternalServiceImpl implements ApprovalInternalService {
     }
 
     private LocalDateTime deadline(LocalDateTime startTime) {
-        LocalDateTime byTimeout = LocalDateTime.now().plusHours(timeoutHours);
+        LocalDateTime byTimeout = LocalDateTime.now().plusMinutes(settings.approvalTimeoutMinutes());
         if (startTime != null && startTime.isBefore(byTimeout)) return startTime;
         return byTimeout;
     }

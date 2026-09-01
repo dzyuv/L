@@ -31,6 +31,9 @@ mybatis-plus:
 security:
   jwt-secret: ${JWT_SECRET}
   internal-token: ${INTERNAL_SERVICE_TOKEN}
+services:
+  system:
+    base-url: ${SYSTEM_SERVICE_URL:http://localhost:8087}
 booking:
   checkin:
     before-minutes: ${BOOKING_CHECKIN_BEFORE_MINUTES:15}

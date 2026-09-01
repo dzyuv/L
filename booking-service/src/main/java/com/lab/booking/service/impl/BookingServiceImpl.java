@@ -6,6 +6,7 @@ import com.lab.booking.service.BookingService;
 import com.lab.common.exception.BusinessException;
 import com.lab.common.api.RoleGuard;
 import com.lab.common.api.Roles;
+import com.lab.common.api.RuntimeSettings;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,14 +43,12 @@ public class BookingServiceImpl implements BookingService {
     private final int maxDailyMinutes;
     private final int teacherMaxDailyMinutes;
     private final int maxAdvanceDays;
-    private final int pendingHoldHours;
-    private final int checkinBeforeMinutes;
-    private final int checkinAfterMinutes;
+    private final RuntimeSettings settings;
 
     public BookingServiceImpl(BookingRepository bookings, BookingSlotRepository slots,
                               BookingQuotaLockRepository quotaLocks, ResourceRuleClient resourceRules,
                               ApprovalTaskClient approvalTasks, BookingLifecycleService lifecycle,
-                              ViolationRecordRepository violations, RoleGuard roleGuard,
+                              ViolationRecordRepository violations, RoleGuard roleGuard, RuntimeSettings settings,
                               @Value("${booking.fair-use.max-active:5}") int maxActive,
                               @Value("${booking.fair-use.teacher-max-active:10}") int teacherMaxActive,
                               @Value("${booking.fair-use.max-pending:3}") int maxPending,
@@ -58,10 +57,7 @@ public class BookingServiceImpl implements BookingService {
                               @Value("${booking.fair-use.teacher-max-per-resource:3}") int teacherMaxPerResource,
                               @Value("${booking.fair-use.max-daily-minutes:240}") int maxDailyMinutes,
                               @Value("${booking.fair-use.teacher-max-daily-minutes:480}") int teacherMaxDailyMinutes,
-                              @Value("${booking.fair-use.max-advance-days:30}") int maxAdvanceDays,
-                              @Value("${booking.fair-use.pending-hold-hours:24}") int pendingHoldHours,
-                              @Value("${booking.checkin.before-minutes:15}") int checkinBeforeMinutes,
-                              @Value("${booking.checkin.after-minutes:30}") int checkinAfterMinutes) {
+                              @Value("${booking.fair-use.max-advance-days:30}") int maxAdvanceDays) {
         this.bookings = bookings;
         this.slots = slots;
         this.quotaLocks = quotaLocks;
@@ -79,16 +75,14 @@ public class BookingServiceImpl implements BookingService {
         this.maxDailyMinutes = maxDailyMinutes;
         this.teacherMaxDailyMinutes = teacherMaxDailyMinutes;
         this.maxAdvanceDays = maxAdvanceDays;
-        this.pendingHoldHours = pendingHoldHours;
-        this.checkinBeforeMinutes = checkinBeforeMinutes;
-        this.checkinAfterMinutes = checkinAfterMinutes;
+        this.settings = settings;
     }
 
     @Override
     @Transactional
     public Booking create(BookingController.Create request, String key, HttpServletRequest servletRequest) {
         Long userId = currentUser(servletRequest);
-        roleGuard.requireAny(servletRequest, Roles.STUDENT, Roles.TEACHER, Roles.LAB_ADMIN);
+        roleGuard.requireAny(servletRequest, Roles.STUDENT, Roles.TEACHER);
         if (key == null || key.isBlank() || key.length() > 64) {
             throw new BusinessException("IDEMPOTENCY_REQUIRED", "Idempotency-Key is required", HttpStatus.BAD_REQUEST);
         }
@@ -100,8 +94,13 @@ public class BookingServiceImpl implements BookingService {
         }
         quotaLocks.ensureExists(userId);
         quotaLocks.lockByUserId(userId).orElseThrow(() -> new IllegalStateException("Booking quota lock was not created"));
+        Optional<Booking> lockedExisting = bookings.findByUserIdAndClientRequestId(userId, key);
+        if (lockedExisting.isPresent()) return lockedExisting.get();
         assertFairUse(userId, request, servletRequest);
         ResourceRuleClient.BookingRule rule = resourceRules.getRule(request.resourceId(), request.startTime(), request.endTime(), request.participants(), userId, servletRequest.getHeader("Authorization"));
+        if (!bookings.findActiveOccupancy(request.resourceId(), request.startTime(), request.endTime()).isEmpty()) {
+            throw new BusinessException("BOOKING_CONFLICT", "The selected time is already occupied", HttpStatus.CONFLICT);
+        }
         Booking booking = new Booking();
         booking.bookingNo = "BK" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
         booking.userId = userId;
@@ -118,10 +117,15 @@ public class BookingServiceImpl implements BookingService {
         booking.clientRequestId = key;
         booking.status = rule.approvalLevel() == 0 ? "APPROVED" : "PENDING_APPROVAL";
         if (rule.approvalLevel() > 0) {
-            LocalDateTime holdDeadline = LocalDateTime.now().plusHours(pendingHoldHours);
+            LocalDateTime holdDeadline = LocalDateTime.now().plusMinutes(settings.approvalTimeoutMinutes());
             booking.approvalDeadline = holdDeadline.isBefore(request.startTime()) ? holdDeadline : request.startTime();
         }
-        booking = bookings.saveAndFlush(booking);
+        try {
+            booking = bookings.saveAndFlush(booking);
+        } catch (DataIntegrityViolationException exception) {
+            return bookings.findByUserIdAndClientRequestId(userId, key).orElseThrow(() ->
+                    new BusinessException("BOOKING_CONFLICT", "The selected time is already occupied", HttpStatus.CONFLICT));
+        }
         lifecycle.recordInitial(booking, userId, requestId(servletRequest));
         try {
             for (LocalDateTime slotTime = request.startTime(); slotTime.isBefore(request.endTime()); slotTime = slotTime.plusMinutes(rule.slotMinutes())) {
@@ -142,6 +146,7 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     public List<Booking> my(HttpServletRequest servletRequest) {
+        roleGuard.requireAny(servletRequest, Roles.STUDENT, Roles.TEACHER);
         LocalDateTime now = LocalDateTime.now();
         return bookings.findByUserIdOrderByStartTimeDesc(currentUser(servletRequest)).stream()
                 .sorted((left, right) -> compareByProximity(left, right, now))
@@ -149,18 +154,19 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
-    public List<LocalDateTime> occupied(Long resourceId, LocalDateTime start, LocalDateTime end, HttpServletRequest servletRequest) {
+    public List<BookingController.OccupiedInterval> occupied(Long resourceId, LocalDateTime start, LocalDateTime end, HttpServletRequest servletRequest) {
         if (start == null || end == null || !start.isBefore(end)) {
             throw new BusinessException("INVALID_TIME", "Start time must be before end time", HttpStatus.BAD_REQUEST);
         }
-        return slots.findByResourceIdAndSlotStartGreaterThanEqualAndSlotStartLessThanAndReleasedAtIsNull(resourceId, start, end).stream()
-                .map(slot -> slot.slotStart)
-                .sorted()
+        return bookings.findActiveOccupancy(resourceId, start, end).stream()
+                .sorted(Comparator.comparing((Booking item) -> item.startTime, Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(item -> new BookingController.OccupiedInterval(item.startTime, item.endTime))
                 .toList();
     }
 
     @Override
     public Booking get(Long bookingId, HttpServletRequest servletRequest) {
+        roleGuard.requireAny(servletRequest, Roles.STUDENT, Roles.TEACHER);
         Booking booking = find(bookingId);
         if (!Objects.equals(booking.userId, currentUser(servletRequest))) {
             throw new BusinessException("FORBIDDEN", "You cannot view this booking", HttpStatus.FORBIDDEN);
@@ -171,6 +177,7 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public Booking cancel(Long bookingId, HttpServletRequest servletRequest) {
+        roleGuard.requireAny(servletRequest, Roles.STUDENT, Roles.TEACHER);
         Long userId = currentUser(servletRequest);
         Booking booking = find(bookingId);
         if (!Objects.equals(booking.userId, userId)) throw new BusinessException("FORBIDDEN", "You cannot cancel this booking", HttpStatus.FORBIDDEN);
@@ -189,11 +196,12 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public Booking checkin(Long bookingId, HttpServletRequest servletRequest) {
+        roleGuard.requireAny(servletRequest, Roles.STUDENT, Roles.TEACHER);
         Long userId = currentUser(servletRequest);
         Booking booking = find(bookingId);
         if (!Objects.equals(booking.userId, userId)) throw new BusinessException("FORBIDDEN", "You cannot check in for this booking", HttpStatus.FORBIDDEN);
         LocalDateTime now = LocalDateTime.now();
-        if (!"APPROVED".equals(booking.status) || now.isBefore(booking.startTime.minusMinutes(checkinBeforeMinutes)) || now.isAfter(booking.startTime.plusMinutes(checkinAfterMinutes))) {
+        if (!"APPROVED".equals(booking.status) || now.isBefore(booking.startTime.minusMinutes(settings.checkinBeforeMinutes())) || now.isAfter(booking.startTime.plusMinutes(settings.checkinAfterMinutes()))) {
             throw new BusinessException("CHECKIN_WINDOW", "Check-in is not currently available", HttpStatus.UNPROCESSABLE_ENTITY);
         }
         lifecycle.transition(booking, "CHECKED_IN", userId, null, requestId(servletRequest));
@@ -223,7 +231,7 @@ public class BookingServiceImpl implements BookingService {
     @Transactional
     public void markNoShow() {
         LocalDateTime now = LocalDateTime.now();
-        bookings.findByStatus("APPROVED").stream().filter(booking -> booking.needCheckinSnapshot && booking.startTime != null && now.isAfter(booking.startTime.plusMinutes(checkinAfterMinutes))).forEach(booking -> {
+        bookings.findByStatus("APPROVED").stream().filter(booking -> booking.needCheckinSnapshot && booking.startTime != null && now.isAfter(booking.startTime.plusMinutes(settings.checkinAfterMinutes()))).forEach(booking -> {
             lifecycle.transition(booking, "NO_SHOW", null, "Check-in deadline passed", null);
             bookings.save(booking);
             lifecycle.releaseSlots(booking.id, "NO_SHOW");
@@ -255,7 +263,7 @@ public class BookingServiceImpl implements BookingService {
         List<Long> expiredIds = new ArrayList<>();
         bookings.findByStatus("PENDING_APPROVAL").forEach(booking -> {
             if (booking.approvalDeadline == null) {
-                LocalDateTime createdDeadline = booking.createdAt.plusHours(pendingHoldHours);
+                LocalDateTime createdDeadline = booking.createdAt.plusMinutes(settings.approvalTimeoutMinutes());
                 booking.approvalDeadline = createdDeadline.isBefore(booking.startTime)
                         ? createdDeadline : booking.startTime;
             }

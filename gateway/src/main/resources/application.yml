@@ -46,4 +46,4 @@ spring:
     - id: system-service
       uri: lb://system-service
       predicates:
-        - Path=/api/v1/admin/configs/**,/api/v1/admin/operation-logs/**
+        - Path=/api/v1/admin/configs/**,/api/v1/admin/operation-logs/**,/api/v1/configs/**

@@ -27,10 +27,47 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         roleGuard.requireSystemAdmin(request);
         if (key == null || key.isBlank() || key.length() > 100 || value == null) throw new BusinessException("INVALID_ARGUMENT", "Config key and value are required", HttpStatus.BAD_REQUEST);
         SystemConfig item = configs.findByConfigKey(key).orElseGet(SystemConfig::new);
-        item.configKey = key; item.configValue = value; item.updatedBy = request.getAttribute("userId") instanceof Long id ? id : 0L; item.updatedAt = java.time.LocalDateTime.now();
+        String normalized = value.trim();
+        if ("INT".equalsIgnoreCase(item.valueType) || key.endsWith("_minutes") || key.endsWith("_days") || key.endsWith("_count") || key.endsWith("_duration")) {
+            try {
+                Integer.parseInt(normalized);
+            } catch (NumberFormatException exception) {
+                throw new BusinessException("INVALID_ARGUMENT", "该配置必须是整数", HttpStatus.BAD_REQUEST);
+            }
+        }
+        item.configKey = key; item.configValue = normalized; item.updatedBy = request.getAttribute("userId") instanceof Long id ? id : 0L; item.updatedAt = java.time.LocalDateTime.now();
         configs.save(item);
         operationLogs.recordLocal(request, "SYSTEM_CONFIG_UPDATED", "SYSTEM_CONFIG", item.id,
                 Map.of("key", item.configKey));
         return Map.of("key", item.configKey, "value", item.configValue);
+    }
+
+    public Map<String, String> allValues() {
+        Map<String, String> values = new LinkedHashMap<>();
+        for (SystemConfig item : configs.findAll()) {
+            if (item.configKey != null) values.put(item.configKey, Objects.toString(item.configValue, ""));
+        }
+        return values;
+    }
+
+    public Map<String, Integer> runtime() {
+        Map<String, String> values = allValues();
+        Map<String, Integer> runtime = new LinkedHashMap<>();
+        runtime.put("checkinBeforeMinutes", intValue(values, "checkin.window.before_minutes", 15));
+        runtime.put("checkinAfterMinutes", intValue(values, "checkin.window.after_minutes", 30));
+        runtime.put("approvalTimeoutMinutes", intValue(values, "approval.timeout_minutes", 1440));
+        runtime.put("violationMaxCount", intValue(values, "violation.max_count", 3));
+        runtime.put("violationRestrictionDays", intValue(values, "violation.restriction_days", 30));
+        return runtime;
+    }
+
+    private int intValue(Map<String, String> values, String key, int fallback) {
+        String raw = values.get(key);
+        if (raw == null || raw.isBlank()) return fallback;
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (NumberFormatException exception) {
+            return fallback;
+        }
     }
 }

@@ -142,8 +142,21 @@ function formatDate(date) {
 }
 function formatDateTime(date) {
   const datePart = formatDate(date);
-  const timePart = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  const timePart = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:00`;
   return `${datePart}T${timePart}`;
+}
+function slotDateTime(date, time) {
+  const clock = String(time || "").length === 5 ? `${time}:00` : time;
+  return `${date}T${clock}`;
+}
+function occupiedIntervals(occupied) {
+  return (occupied || []).map((item) => {
+    if (item && typeof item === "object" && item.startTime && item.endTime) {
+      return { start: new Date(item.startTime), end: new Date(item.endTime) };
+    }
+    const start = new Date(String(item).replace(" ", "T"));
+    return { start, end: new Date(start.getTime() + 30 * 60000) };
+  }).filter((item) => Number.isFinite(item.start.getTime()) && Number.isFinite(item.end.getTime()));
 }
 function resourceImage(resource) {
   return String(resource?.imageUrl || "").trim();
@@ -173,8 +186,8 @@ function bookingStatusText(status) {
 function bookingRejectReason(item) {
   return String(item?.rejectReason || "").trim();
 }
-const CHECKIN_BEFORE_MINUTES = 15;
-const CHECKIN_AFTER_MINUTES = 30;
+const checkinBeforeMinutes = ref(15);
+const checkinAfterMinutes = ref(30);
 function bookingStartMs(item) {
   const start = new Date(item?.startTime).getTime();
   return Number.isFinite(start) ? start : NaN;
@@ -188,8 +201,8 @@ function checkinState(item) {
   const start = bookingStartMs(item);
   if (!Number.isFinite(start)) return "hidden";
   const now = currentTime.value.getTime();
-  if (now >= start - CHECKIN_BEFORE_MINUTES * 60000 && now <= start + CHECKIN_AFTER_MINUTES * 60000) return "ready";
-  if (now < start - CHECKIN_BEFORE_MINUTES * 60000) return "waiting";
+  if (now >= start - checkinBeforeMinutes.value * 60000 && now <= start + checkinAfterMinutes.value * 60000) return "ready";
+  if (now < start - checkinBeforeMinutes.value * 60000) return "waiting";
   return "missed";
 }
 function canCheckin(item) {
@@ -198,17 +211,20 @@ function canCheckin(item) {
 function showCheckin(item) {
   return item?.status === "APPROVED" && bookingNeedsCheckin(item);
 }
+function checkinWindowLabel() {
+  return `开始前 ${checkinBeforeMinutes.value} 分钟至开始后 ${checkinAfterMinutes.value} 分钟可签到`;
+}
 function checkinTitle(item) {
   const state = checkinState(item);
   if (state === "ready") return "点击完成签到";
-  if (state === "waiting") return "开始前 15 分钟至开始后 30 分钟可签到";
+  if (state === "waiting") return checkinWindowLabel();
   if (state === "missed") return "已过签到时间";
   return "";
 }
 function checkinHintText(item) {
   const state = checkinState(item);
   if (state === "ready") return "请立即签到，超时将记为未到";
-  if (state === "waiting") return "开始前 15 分钟至开始后 30 分钟可签到";
+  if (state === "waiting") return checkinWindowLabel();
   if (state === "missed") return "已过签到时间，超时未签到将记为未到";
   return "";
 }
@@ -253,7 +269,7 @@ function applyBookableSlot(window) {
 }
 function slotKey(date, time) { return `${date}T${time}`; }
 function buildSlots(windows, occupied = [], closures = [], now = new Date()) {
-  const occupiedKeys = new Set(occupied.map((value) => String(value).replace(" ", "T").slice(0, 16)));
+  const intervals = occupiedIntervals(occupied);
   return windows.flatMap((window) => {
     const open = new Date(`${window.date}T${window.openTime}`);
     const close = new Date(`${window.date}T${window.closeTime}`);
@@ -270,7 +286,8 @@ function buildSlots(windows, occupied = [], closures = [], now = new Date()) {
         return closureStart < end && closureEnd > start;
       });
       const closed = Boolean(matchingClosure);
-      slots.push({ key, date: window.date, startTime, endTime: end.toTimeString().slice(0, 5), slotMinutes: step, available: !occupiedKeys.has(key) && !closed, closed, closureReason: matchingClosure?.reason || "维护关闭" });
+      const taken = intervals.some((item) => item.start < end && item.end > start);
+      slots.push({ key, date: window.date, startTime, endTime: end.toTimeString().slice(0, 5), slotMinutes: step, available: !taken && !closed, closed, closureReason: matchingClosure?.reason || "维护关闭" });
     }
     return slots;
   });
@@ -317,8 +334,8 @@ function toggleSlot(slot) {
   const rangeSelection = selectedSlots.value.slice().sort((a, b) => a.key.localeCompare(b.key));
   if (!rangeSelection.length) {
     selectedSlotKeys.value = [slot.key];
-    bookingForm.value.startTime = `${slot.date}T${slot.startTime}`;
-    bookingForm.value.endTime = `${slot.date}T${slot.endTime}`;
+    bookingForm.value.startTime = slotDateTime(slot.date, slot.startTime);
+    bookingForm.value.endTime = slotDateTime(slot.date, slot.endTime);
     bookingForm.value.slotMinutes = slot.slotMinutes;
     return;
   }
@@ -341,14 +358,14 @@ function toggleSlot(slot) {
       return;
     }
     selectedSlotKeys.value = range.map((item) => item.key);
-    bookingForm.value.startTime = `${range[0].date}T${range[0].startTime}`;
-    bookingForm.value.endTime = `${range[range.length - 1].date}T${range[range.length - 1].endTime}`;
+    bookingForm.value.startTime = slotDateTime(range[0].date, range[0].startTime);
+    bookingForm.value.endTime = slotDateTime(range[range.length - 1].date, range[range.length - 1].endTime);
     bookingForm.value.slotMinutes = range[0].slotMinutes;
     return;
   }
   selectedSlotKeys.value = [slot.key];
-  bookingForm.value.startTime = `${slot.date}T${slot.startTime}`;
-  bookingForm.value.endTime = `${slot.date}T${slot.endTime}`;
+  bookingForm.value.startTime = slotDateTime(slot.date, slot.startTime);
+  bookingForm.value.endTime = slotDateTime(slot.date, slot.endTime);
   bookingForm.value.slotMinutes = slot.slotMinutes;
 }
 function closeBookingModal() { bookingModalOpen.value = false; }
@@ -381,6 +398,7 @@ async function load() {
   try {
     const m = await axios.get("/api/v1/user/me");
     user.value = m.data.data;
+    await loadRuntimeSettings();
     if (isAdmin.value) {
       if (isLabAdmin.value && !isSystemAdmin.value) {
         const r = await axios.get("/api/v1/resources");
@@ -412,6 +430,18 @@ async function load() {
     notice.value = e.response?.data?.message || "服务暂不可用";
   } finally {
     loading.value = false;
+  }
+}
+async function loadRuntimeSettings() {
+  try {
+    const response = await axios.get("/api/v1/configs/runtime");
+    const data = response.data?.data || {};
+    const before = Number(data.checkinBeforeMinutes);
+    const after = Number(data.checkinAfterMinutes);
+    if (before > 0) checkinBeforeMinutes.value = before;
+    if (after > 0) checkinAfterMinutes.value = after;
+  } catch {
+    /* keep defaults if system-service is down */
   }
 }
 async function approveTask(task) {
@@ -459,7 +489,9 @@ function selectResource(r) {
   bookingForm.value.resourceId = r.id;
   bookingForm.value.resourceName = resourceDisplayName(r);
   bookingForm.value.capacity = r.capacity;
-  bookingForm.value.maxDurationMinutes = r.maxDurationMinutes;
+  const windows = availabilityByResource.value[r.id]?.windows || [];
+  const scheduleMax = windows.reduce((min, window) => Math.min(min, Number(window.maxDurationMinutes) || min), Number(r.maxDurationMinutes) || 120);
+  bookingForm.value.maxDurationMinutes = scheduleMax;
   bookingForm.value.needCheckin = r.needCheckin;
   selectedSlotKeys.value = [];
   activeSlotDate.value = slotDates.value.find((item) => item.availableCount)?.date || slotDates.value[0]?.date || "";
@@ -524,7 +556,7 @@ function deviceTypeLabel(item) {
 async function loadAvailability(items) {
   const now = new Date();
   const end = new Date(now);
-  end.setDate(end.getDate() + 14);
+  end.setDate(end.getDate() + 30);
   const entries = await Promise.all(items.map(async (resource) => {
     try {
       const startDate = formatDate(now);
@@ -553,7 +585,7 @@ async function loadAvailability(items) {
 async function loadNextAvailableSlot(resourceId) {
   const from = new Date();
   const end = new Date(from);
-  end.setDate(end.getDate() + 14);
+  end.setDate(end.getDate() + 30);
   const fmt = (date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -583,7 +615,7 @@ async function loadNextAvailableSlot(resourceId) {
     const day = candidate?.day;
     const schedule = candidate?.open;
     if (!day || !schedule) {
-      notice.value = "该资源未来14天没有开放时间，请联系管理员配置排班";
+      notice.value = "该资源未来30天没有开放时间，请联系管理员配置排班";
       bookingForm.value.startTime = "";
       bookingForm.value.endTime = "";
       return;
@@ -621,7 +653,7 @@ function logout() {
 async function createBooking() {
   const selected = selectedSlots.value.slice().sort((a, b) => a.key.localeCompare(b.key));
   if (!selected.length) {
-    notice.value = "请先选择至少一个半小时预约时段";
+    notice.value = "请先选择至少一个预约时段";
     return;
   }
   for (let i = 1; i < selected.length; i += 1) {
@@ -812,7 +844,7 @@ onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
         </template>
 
         <section v-else-if="teacherActiveTab === 'approvals'" class="teacher-section">
-          <div class="teacher-section-title"><div><h2>预约审批</h2><p>一级由教师审批，二级由实验室管理员终审。未指定到人的一级任务，所有教师都可以处理</p></div><span>{{ approvals.length }} 项待处理</span></div>
+          <div class="teacher-section-title"><div><h2>预约审批</h2><p>一级由资源负责人审批；未指定负责人时，其他教师可以处理。二级由实验室管理员终审</p></div><span>{{ approvals.length }} 项待处理</span></div>
           <div class="teacher-approval-list">
             <article v-for="task in approvals" :key="task.id">
               <span class="teacher-level">L{{ task.level }}</span>
@@ -892,7 +924,7 @@ onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
               <label class="time-filter">日期<input v-model="filterDate" type="date" /></label>
               <label class="time-filter">开始<input v-model="filterStartTime" type="time" /></label>
               <label class="time-filter">结束<input v-model="filterEndTime" type="time" /></label>
-              <label class="availability-filter"><input v-model="onlyAvailableResources" type="checkbox" />只看未来14天有空闲</label>
+              <label class="availability-filter"><input v-model="onlyAvailableResources" type="checkbox" />只看未来30天有空闲</label>
               <button v-if="hasBookingFilters" class="clear-resource-filter" @click="clearResourceFilters">清除筛选</button>
               <span class="resource-filter-count">显示 {{ filteredResources.length }} / {{ resources.length }}</span>
             </div>
@@ -912,7 +944,7 @@ onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
                 @click="selectResource(r)"
               >
                 <div class="resource-card-image" :class="{ 'resource-image-fallback': !resourceImage(r) }"><img v-if="resourceImage(r)" :src="resourceImage(r)" :alt="`${resourceDisplayName(r)} 场景图`" loading="lazy" @error="handleResourceImageError" /><span v-else class="resource-image-empty">暂无图片</span><span class="resource-card-kind">{{ resourceTypeName(r) }}</span><span class="resource-card-status" :class="{ unavailable: !resourceHasAvailability(r) }"><i></i>{{ resourceHasAvailability(r) ? '有空闲' : '暂无空闲' }}</span></div>
-                <div class="resource-card-body"><div class="resource-card-title"><strong>{{ resourceDisplayName(r) }}</strong><ChevronRight :size="16" /></div><p>{{ resourceDisplayDescription(r) }}</p><div class="resource-card-meta"><span><CalendarDays :size="14" />{{ r.location }}</span></div><div class="resource-card-footer"><span v-if="nextAvailableSlot(r)">最近开放 {{ nextAvailableSlot(r).date }} {{ nextAvailableSlot(r).startTime }}</span><span v-else>未来14天暂无开放时段</span><b>{{ resourceBookingCounts[r.id] || 0 }} 次我的预约</b></div></div>
+                <div class="resource-card-body"><div class="resource-card-title"><strong>{{ resourceDisplayName(r) }}</strong><ChevronRight :size="16" /></div><p>{{ resourceDisplayDescription(r) }}</p><div class="resource-card-meta"><span><CalendarDays :size="14" />{{ r.location }}</span></div><div class="resource-card-footer"><span v-if="nextAvailableSlot(r)">最近开放 {{ nextAvailableSlot(r).date }} {{ nextAvailableSlot(r).startTime }}</span><span v-else>未来30天暂无开放时段</span><b>{{ resourceBookingCounts[r.id] || 0 }} 次我的预约</b></div></div>
               </button>
               <div v-if="!filteredResources.length" class="empty resource-card-empty">
                 {{ resources.length ? '没有符合当前筛选条件的资源。' : '暂无资源，请先在资源服务中配置。' }}
@@ -955,7 +987,7 @@ onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
           <div>
             <div class="eyebrow">RESERVATION SLOTS</div>
             <h2>{{ bookingForm.resourceName }}</h2>
-            <p>选择连续的半小时预约时段，暗色时段不可预约</p>
+            <p>选择连续的预约时段，暗色时段不可预约</p>
           </div>
           <button class="modal-close" type="button" @click="closeBookingModal" title="关闭" aria-label="关闭预约窗口"><X :size="22" /></button>
         </div>
@@ -975,7 +1007,7 @@ onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
                 </button>
               </div>
             </div>
-            <div v-else class="empty">未来14天没有配置开放时段</div>
+            <div v-else class="empty">未来30天没有配置开放时段</div>
           </div>
           <div class="modal-form">
             <label>使用目的<input v-model="bookingForm.purpose" placeholder="请输入本次使用目的" /></label>

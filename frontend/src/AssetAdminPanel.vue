@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from "vue";
 import axios from "axios";
-import { Boxes, ChevronRight, History, PackagePlus, Pencil, Plus, Save, Settings2, UserRoundCheck, X } from "lucide-vue-next";
+import { Boxes, ChevronRight, History, PackagePlus, Pencil, Plus, Save, Settings2, Truck, UserRoundCheck, X } from "lucide-vue-next";
 
 const props = defineProps({
   assets: { type: Array, default: () => [] },
@@ -28,6 +28,9 @@ const historyRows = ref([]);
 const saving = ref(false);
 const notice = ref("");
 const failed = ref(false);
+const selectedIds = ref([]);
+const moveResourceId = ref("");
+const moveLocation = ref("");
 
 const categoryMap = computed(() => Object.fromEntries(props.categories.map((item) => [item.id, item])));
 const resourceMap = computed(() => Object.fromEntries(props.resources.map((item) => [item.id, item])));
@@ -79,6 +82,50 @@ watch(query, (value) => {
 });
 function toggleGroup(key) {
   expandedKeys.value = { ...expandedKeys.value, [key]: !expandedKeys.value[key] };
+}
+function isSelected(id) {
+  return selectedIds.value.includes(id);
+}
+function groupSelectedCount(group) {
+  return group.items.filter((item) => isSelected(item.id)).length;
+}
+function groupAllSelected(group) {
+  return group.items.length > 0 && group.items.every((item) => isSelected(item.id));
+}
+function toggleOne(id) {
+  selectedIds.value = isSelected(id) ? selectedIds.value.filter((item) => item !== id) : [...selectedIds.value, id];
+}
+function toggleGroupSelect(group) {
+  const ids = group.items.map((item) => item.id);
+  if (groupAllSelected(group)) selectedIds.value = selectedIds.value.filter((id) => !ids.includes(id));
+  else {
+    selectedIds.value = [...new Set([...selectedIds.value, ...ids])];
+    expandedKeys.value = { ...expandedKeys.value, [group.key]: true };
+  }
+}
+function clearSelection() {
+  selectedIds.value = [];
+  moveResourceId.value = "";
+  moveLocation.value = "";
+}
+async function submitMove() {
+  if (!selectedIds.value.length) return show("请先勾选要迁移的设备", true);
+  if (moveResourceId.value === "") return show("请选择目标资源", true);
+  saving.value = true;
+  try {
+    const response = await axios.post("/api/v1/admin/assets/move", {
+      assetIds: selectedIds.value,
+      resourceId: Number(moveResourceId.value),
+      location: moveLocation.value.trim() || null,
+    });
+    show(`已将 ${response.data?.data?.total || selectedIds.value.length} 台设备迁移到目标资源`);
+    clearSelection();
+    emit("refresh");
+  } catch (e) {
+    show(e.response?.data?.message || "批量迁移失败", true);
+  } finally {
+    saving.value = false;
+  }
 }
 const assetTypes = computed(() => {
   const groups = new Map();
@@ -249,19 +296,30 @@ async function openHistory(item) {
     <button class="asset-quiet" :disabled="!assetTypes.length" title="给已有资产类型再登记一台设备" @click="openAddExisting()"><Plus :size="16" />添加已有设备</button>
     <button class="asset-command" @click="openCreateNew"><PackagePlus :size="16" />新资产类型</button>
   </div>
+  <div v-if="selectedIds.length" class="asset-migrate-bar">
+    <span>已选 <b>{{ selectedIds.length }}</b> 台</span>
+    <select v-model="moveResourceId"><option value="">迁移到资源</option><option v-for="resource in resources" :key="resource.id" :value="resource.id">{{ resource.name }}</option></select>
+    <input v-model="moveLocation" placeholder="新位置（选填）" />
+    <button class="asset-command" type="button" :disabled="saving || !moveResourceId" @click="submitMove"><Truck :size="16" />迁移</button>
+    <button class="asset-quiet" type="button" @click="clearSelection">取消选择</button>
+  </div>
   <section class="asset-table-wrap">
-    <div class="asset-row asset-head asset-group-row"><span>同类资产</span><span>分类 / 规格</span><span>数量</span><span>关联资源</span><span>状态概览</span></div>
+    <div class="asset-row asset-head asset-group-row"><span></span><span>同类资产</span><span>分类 / 规格</span><span>数量</span><span>关联资源</span><span>状态概览</span></div>
     <div v-for="group in groupedAssets" :key="group.key" class="asset-group" :class="{ open: expandedKeys[group.key] }">
-      <button class="asset-row asset-group-row" type="button" @click="toggleGroup(group.key)">
-        <span class="asset-group-name"><ChevronRight :size="16" /><span><b>{{ group.name }}</b><small>{{ [group.brand, group.model].filter(Boolean).join(' ') || '未填写品牌型号' }}</small></span></span>
-        <span><b>{{ categoryMap[group.categoryId]?.name || `分类 ${group.categoryId}` }}</b><small>{{ group.specification || '规格未登记' }}</small></span>
-        <span><b>{{ group.count }}</b><small>台设备</small></span>
-        <span>{{ group.resourceNames.length ? group.resourceNames.join('、') : '未关联资源' }}</span>
-        <span>{{ group.statusSummary.join(' · ') }}</span>
-      </button>
+      <div class="asset-row asset-group-row asset-group-select">
+        <label class="asset-check" @click.stop><input type="checkbox" :checked="groupAllSelected(group)" @change="toggleGroupSelect(group)" :title="groupSelectedCount(group) ? `已选 ${groupSelectedCount(group)} 台` : '全选此类'" /></label>
+        <button class="asset-group-toggle" type="button" @click="toggleGroup(group.key)">
+          <span class="asset-group-name"><ChevronRight :size="16" /><span><b>{{ group.name }}</b><small>{{ [group.brand, group.model].filter(Boolean).join(' ') || '未填写品牌型号' }}</small></span></span>
+          <span><b>{{ categoryMap[group.categoryId]?.name || `分类 ${group.categoryId}` }}</b><small>{{ group.specification || '规格未登记' }}</small></span>
+          <span><b>{{ group.count }}</b><small>台设备</small></span>
+          <span>{{ group.resourceNames.length ? group.resourceNames.join('、') : '未关联资源' }}</span>
+          <span>{{ group.statusSummary.join(' · ') }}</span>
+        </button>
+      </div>
       <div v-if="expandedKeys[group.key]" class="asset-group-body">
-        <div class="asset-row asset-unit-row asset-unit-head"><span>资产编号</span><span>序列号</span><span>关联资源</span><span>位置 / 保管人</span><span>原值</span><span>状态</span><span>操作</span></div>
+        <div class="asset-row asset-unit-row asset-unit-head"><span></span><span>资产编号</span><span>序列号</span><span>关联资源</span><span>位置 / 保管人</span><span>原值</span><span>状态</span><span>操作</span></div>
         <div v-for="item in group.items" :key="item.id" class="asset-row asset-unit-row">
+          <label class="asset-check"><input type="checkbox" :checked="isSelected(item.id)" @change="toggleOne(item.id)" /></label>
           <span><b class="mono">{{ item.assetNo }}</b></span>
           <span>{{ item.serialNo || '非序列化' }}</span>
           <span>{{ resourceMap[item.resourceId]?.name || '-' }}</span>
@@ -324,5 +382,6 @@ async function openHistory(item) {
 
 <style scoped>
 .asset-notice{min-height:38px;padding:0 12px;margin-bottom:12px;background:#e8f5ed;color:#347458;display:flex;align-items:center;border-left:3px solid #4d9a70;font-size:12px}.asset-notice.failed{background:#faece9;color:#a24d42;border-color:#bd655a}.asset-notice button{margin-left:auto;border:0;background:transparent;color:inherit}.asset-form-notice{min-height:38px;margin:16px 20px 0;padding:0 12px;background:#eaf5ee;color:#347458;display:flex;align-items:center;gap:7px;font-size:12px;border:1px solid #dcebe2;border-radius:5px}.asset-form-notice.failed{background:#faece9;color:#a24d42;border-color:#ead1cc}.asset-form-notice button{margin-left:auto;border:0;background:transparent;color:inherit}.form-section-title{margin:2px 0 0;padding-top:10px;border-top:1px solid #edf1ef;color:#356c58;font-size:12px;font-weight:700}.asset-form .form-section-title:first-child{border-top:0;padding-top:0}.type-summary{display:grid;gap:4px;padding:12px 14px;background:#f2f7f4;border-radius:5px}.type-summary b{font-size:14px}.type-summary span{font-size:11px;color:#3c6958}.type-summary small{color:#799087;font-size:11px}.existing-form-modal{width:min(640px,100%)}.asset-group-add{padding:8px 18px 12px;background:#f7faf8}.asset-quiet:disabled{opacity:.5;cursor:not-allowed}
-.asset-toolbar{display:grid;grid-template-columns:minmax(160px,1.4fr) 140px 120px auto auto auto auto;gap:8px;align-items:center;margin-bottom:12px;color:#74847d;font-size:11px}.asset-toolbar input,.asset-toolbar select{width:100%;height:38px;border:1px solid #dce5e0;border-radius:5px;background:#fff;padding:0 10px;color:#263b32}.asset-command,.asset-quiet{height:38px;border-radius:5px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}.asset-command{border:0;background:#225c4d;color:#fff}.asset-quiet{border:1px solid #d6e0db;background:#fff;color:#42695a}.asset-table-wrap{background:#fff;border:1px solid #dfe7e3;border-radius:6px;overflow:auto}.asset-row{min-width:1050px;display:grid;gap:14px;align-items:center;min-height:59px;padding:0 18px;border-bottom:1px solid #edf1ef;font-size:11px}.asset-group-row{grid-template-columns:1.6fr 1.2fr .55fr 1.4fr 1.3fr}.asset-unit-row{grid-template-columns:1.1fr 1fr 1.1fr 1.2fr .7fr .7fr .85fr;background:#f7faf8}.asset-unit-head{min-height:34px;background:#eef4f0;color:#7d8c85;font-size:10px}.asset-head{min-height:38px;background:#fafbfa;color:#839089;font-size:10px}.asset-group-row.asset-head{position:sticky;top:0;z-index:1}.asset-group-row[type=button]{width:100%;border:0;background:#fff;text-align:left;color:inherit;cursor:pointer}.asset-group-row[type=button]:hover{background:#f3f8f5}.asset-group-name{display:flex;align-items:center;gap:8px;min-width:0}.asset-group-name svg{flex:0 0 auto;color:#5f7d70;transition:transform .15s ease}.asset-group.open .asset-group-name svg{transform:rotate(90deg)}.asset-group-body{border-bottom:1px solid #edf1ef}.asset-group-body .asset-row:last-child{border-bottom:0}.asset-row b,.asset-row small{display:block}.asset-row b{font-size:12px}.asset-row small{color:#7e8e86;margin-top:4px}.asset-status{font-size:10px;padding:5px 7px;border-radius:3px;background:#edf1ef;color:#607168;width:max-content}.asset-status.in_stock{background:#e4f3e9;color:#347658}.asset-status.in_use{background:#e7eef5;color:#426d8b}.asset-status.reported{background:#fff0d8;color:#8f6a2f}.asset-status.maintenance{background:#eee9f7;color:#68568d}.asset-status.lost,.asset-status.scrapped{background:#f3e9e7;color:#9a5a51}.asset-row-actions{display:flex;gap:5px}.asset-row-actions button{width:30px;height:30px;border:1px solid #d6e1db;background:#fff;color:#416b5b;border-radius:4px;display:grid;place-items:center}.asset-empty{padding:36px;display:flex;align-items:center;justify-content:center;gap:8px;color:#8d9a94;font-size:12px}.asset-modal-bg{position:fixed;z-index:60;inset:0;background:rgba(18,31,26,.48);display:grid;place-items:center;padding:20px}.asset-modal{width:min(650px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:7px}.asset-form-modal{width:min(760px,100%)}.small-modal{width:min(480px,100%)}.asset-modal-title{padding:19px 21px;border-bottom:1px solid #e6ece9;display:flex;justify-content:space-between}.asset-modal-title h2{font-size:17px;margin:0 0 4px}.asset-modal-title p{font-size:11px;color:#82918a;margin:0}.asset-modal-title button{border:0;background:transparent}.asset-form{padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:12px}.asset-form label,.assign-form label,.category-form label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#607169}.asset-form input,.asset-form select,.asset-form textarea,.assign-form input,.assign-form textarea,.category-form input,.category-form textarea{height:36px;border:1px solid #d8e2dd;border-radius:4px;padding:0 9px;color:#243b31;background:#fff}.asset-form textarea,.assign-form textarea,.category-form textarea{height:70px;padding:8px;resize:vertical}.asset-wide{grid-column:1/-1}.category-layout{display:grid;grid-template-columns:1fr 1fr;min-height:390px}.category-list{padding:10px;border-right:1px solid #e8eeeb}.category-list button{width:100%;min-height:54px;padding:8px 10px;border:0;border-bottom:1px solid #edf1ef;background:#fff;display:flex;align-items:center;justify-content:space-between;text-align:left;color:#2f493e}.category-list button.active{background:#edf6f1}.category-list b,.category-list small{display:block}.category-list small{margin-top:4px;color:#839089;font-size:10px}.category-form{padding:18px;display:flex;flex-direction:column;gap:11px}.category-form .category-check{flex-direction:row;align-items:center}.category-check input{height:auto}.assign-form{padding:20px;display:grid;gap:12px}.history-list{padding:18px 22px}.history-list>div{display:grid;grid-template-columns:16px 1fr;gap:8px;min-height:72px}.history-marker{width:9px;height:9px;margin-top:4px;border-radius:50%;background:#4d9273;box-shadow:0 0 0 4px #e8f2ed}.history-list b,.history-list small,.history-list em{display:block}.history-list b{font-size:12px}.history-list small{margin-top:5px;color:#788a82;font-size:11px}.history-list em{margin-top:4px;color:#a0aaa5;font-size:10px;font-style:normal}.mono{font-family:ui-monospace,monospace}@media(max-width:900px){.asset-toolbar{grid-template-columns:1fr 1fr 1fr}.asset-toolbar span{display:none}}@media(max-width:650px){.asset-toolbar{grid-template-columns:1fr 1fr}.asset-search{grid-column:1/-1}.asset-toolbar .asset-command,.asset-toolbar .asset-quiet{font-size:0;padding:0}.asset-toolbar .asset-command svg,.asset-toolbar .asset-quiet svg{margin:0}.asset-form,.category-layout{grid-template-columns:1fr}.asset-wide{grid-column:auto}.category-list{border-right:0;border-bottom:1px solid #e8eeeb;max-height:180px;overflow:auto}}
+.asset-migrate-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:-4px 0 12px;padding:10px 12px;background:#eef6f1;border:1px solid #d5e6dc;border-radius:6px;font-size:12px;color:#2f493e}.asset-migrate-bar b{font-size:14px}.asset-migrate-bar select,.asset-migrate-bar input{height:36px;border:1px solid #d8e2dd;border-radius:4px;padding:0 9px;background:#fff}
+.asset-toolbar{display:grid;grid-template-columns:minmax(160px,1.4fr) 140px 120px auto auto auto auto;gap:8px;align-items:center;margin-bottom:12px;color:#74847d;font-size:11px}.asset-toolbar input,.asset-toolbar select{width:100%;height:38px;border:1px solid #dce5e0;border-radius:5px;background:#fff;padding:0 10px;color:#263b32}.asset-command,.asset-quiet{height:38px;border-radius:5px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}.asset-command{border:0;background:#225c4d;color:#fff}.asset-quiet{border:1px solid #d6e0db;background:#fff;color:#42695a}.asset-table-wrap{background:#fff;border:1px solid #dfe7e3;border-radius:6px;overflow:auto}.asset-row{min-width:1080px;display:grid;gap:14px;align-items:center;min-height:59px;padding:0 18px;border-bottom:1px solid #edf1ef;font-size:11px}.asset-group-row{grid-template-columns:28px 1.6fr 1.2fr .55fr 1.4fr 1.3fr}.asset-group-select{grid-template-columns:28px 1fr;padding:0 18px 0 12px;background:#fff}.asset-group-toggle{display:grid;grid-template-columns:1.6fr 1.2fr .55fr 1.4fr 1.3fr;gap:14px;align-items:center;width:100%;min-height:59px;border:0;background:transparent;text-align:left;color:inherit;cursor:pointer;padding:0}.asset-group-toggle:hover{background:#f3f8f5}.asset-check{display:grid;place-items:center}.asset-check input{width:15px;height:15px}.asset-unit-row{grid-template-columns:28px 1.1fr 1fr 1.1fr 1.2fr .7fr .7fr .85fr;background:#f7faf8}.asset-unit-head{min-height:34px;background:#eef4f0;color:#7d8c85;font-size:10px}.asset-head{min-height:38px;background:#fafbfa;color:#839089;font-size:10px}.asset-group-row.asset-head{position:sticky;top:0;z-index:1}.asset-group-name{display:flex;align-items:center;gap:8px;min-width:0}.asset-group-name svg{flex:0 0 auto;color:#5f7d70;transition:transform .15s ease}.asset-group.open .asset-group-name svg{transform:rotate(90deg)}.asset-group-body{border-bottom:1px solid #edf1ef}.asset-group-body .asset-row:last-child{border-bottom:0}.asset-row b,.asset-row small{display:block}.asset-row b{font-size:12px}.asset-row small{color:#7e8e86;margin-top:4px}.asset-status{font-size:10px;padding:5px 7px;border-radius:3px;background:#edf1ef;color:#607168;width:max-content}.asset-status.in_stock{background:#e4f3e9;color:#347658}.asset-status.in_use{background:#e7eef5;color:#426d8b}.asset-status.reported{background:#fff0d8;color:#8f6a2f}.asset-status.maintenance{background:#eee9f7;color:#68568d}.asset-status.lost,.asset-status.scrapped{background:#f3e9e7;color:#9a5a51}.asset-row-actions{display:flex;gap:5px}.asset-row-actions button{width:30px;height:30px;border:1px solid #d6e1db;background:#fff;color:#416b5b;border-radius:4px;display:grid;place-items:center}.asset-empty{padding:36px;display:flex;align-items:center;justify-content:center;gap:8px;color:#8d9a94;font-size:12px}.asset-modal-bg{position:fixed;z-index:60;inset:0;background:rgba(18,31,26,.48);display:grid;place-items:center;padding:20px}.asset-modal{width:min(650px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:7px}.asset-form-modal{width:min(760px,100%)}.small-modal{width:min(480px,100%)}.asset-modal-title{padding:19px 21px;border-bottom:1px solid #e6ece9;display:flex;justify-content:space-between}.asset-modal-title h2{font-size:17px;margin:0 0 4px}.asset-modal-title p{font-size:11px;color:#82918a;margin:0}.asset-modal-title button{border:0;background:transparent}.asset-form{padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:12px}.asset-form label,.assign-form label,.category-form label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#607169}.asset-form input,.asset-form select,.asset-form textarea,.assign-form input,.assign-form textarea,.category-form input,.category-form textarea{height:36px;border:1px solid #d8e2dd;border-radius:4px;padding:0 9px;color:#243b31;background:#fff}.asset-form textarea,.assign-form textarea,.category-form textarea{height:70px;padding:8px;resize:vertical}.asset-wide{grid-column:1/-1}.category-layout{display:grid;grid-template-columns:1fr 1fr;min-height:390px}.category-list{padding:10px;border-right:1px solid #e8eeeb}.category-list button{width:100%;min-height:54px;padding:8px 10px;border:0;border-bottom:1px solid #edf1ef;background:#fff;display:flex;align-items:center;justify-content:space-between;text-align:left;color:#2f493e}.category-list button.active{background:#edf6f1}.category-list b,.category-list small{display:block}.category-list small{margin-top:4px;color:#839089;font-size:10px}.category-form{padding:18px;display:flex;flex-direction:column;gap:11px}.category-form .category-check{flex-direction:row;align-items:center}.category-check input{height:auto}.assign-form{padding:20px;display:grid;gap:12px}.history-list{padding:18px 22px}.history-list>div{display:grid;grid-template-columns:16px 1fr;gap:8px;min-height:72px}.history-marker{width:9px;height:9px;margin-top:4px;border-radius:50%;background:#4d9273;box-shadow:0 0 0 4px #e8f2ed}.history-list b,.history-list small,.history-list em{display:block}.history-list b{font-size:12px}.history-list small{margin-top:5px;color:#788a82;font-size:11px}.history-list em{margin-top:4px;color:#a0aaa5;font-size:10px;font-style:normal}.mono{font-family:ui-monospace,monospace}@media(max-width:900px){.asset-toolbar{grid-template-columns:1fr 1fr 1fr}.asset-toolbar span{display:none}}@media(max-width:650px){.asset-toolbar{grid-template-columns:1fr 1fr}.asset-search{grid-column:1/-1}.asset-toolbar .asset-command,.asset-toolbar .asset-quiet{font-size:0;padding:0}.asset-toolbar .asset-command svg,.asset-toolbar .asset-quiet svg{margin:0}.asset-form,.category-layout{grid-template-columns:1fr}.asset-wide{grid-column:auto}.category-list{border-right:0;border-bottom:1px solid #e8eeeb;max-height:180px;overflow:auto}}
 </style>

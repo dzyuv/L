@@ -1,0 +1,11 @@
+# 资产编号,名称,分类ID,序列号,品牌,型号,资源ID,位置,原值
+# 分类ID（种子数据常见）：1=计算机  2=仪器设备  3=普通设备
+# 资源ID（种子数据常见）：1=材料分析实验室  2=计算机实验室  3=电子测量实验室  4=科研讨论室  5=频谱分析仪预约
+# 资产编号留空则自动生成。以 # 开头的行会被忽略。
+,教学台式计算机,1,SN-TEST-PC-101,Lenovo,ThinkCentre M90t,2,B305-测试位01,8960
+,教学台式计算机,1,SN-TEST-PC-102,Lenovo,ThinkCentre M90t,2,B305-测试位02,8960
+LAB-PC-201,AI图形工作站,1,SN-TEST-PC-201,Dell,Precision 5860,2,B305-测试位03,42800
+,数字示波器,2,SN-TEST-INS-101,Tektronix,MSO54B,3,C108-测试台01,126000
+LAB-INS-201,精密电子天平,2,SN-TEST-INS-201,Mettler Toledo,XPR205,1,A201-称量区-测试,68500
+,彩色激光打印机,3,SN-TEST-EQP-101,HP,Color LaserJet Pro,2,B305-教师区-测试,5600
+,教学投影仪,3,SN-TEST-EQP-201,Epson,CB-L630U,4,D206-测试位,23800

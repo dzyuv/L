@@ -19,7 +19,15 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
     public ResourceManagementServiceImpl(ResourceRepository resources, ResourceTypeRepository types, ScheduleRepository schedules, ClosureRepository closures, ResourceManagerRepository managers, RoleGuard roleGuard, InternalServiceGuard internalServices) {
         this.resources=resources; this.types=types; this.schedules=schedules; this.closures=closures; this.managers=managers; this.roleGuard=roleGuard; this.internalServices=internalServices;
     }
-    public List<Resource> list() { return resources.findAll().stream().filter(item -> !item.deleted && "ACTIVE".equals(item.status)).toList(); }
+    public List<Resource> list() {
+        Set<Long> enabledTypes = types.findAll().stream()
+                .filter(item -> !item.deleted && item.enabled)
+                .map(item -> item.id)
+                .collect(java.util.stream.Collectors.toSet());
+        return resources.findAll().stream()
+                .filter(item -> !item.deleted && "ACTIVE".equals(item.status) && enabledTypes.contains(item.typeId))
+                .toList();
+    }
     public List<?> listPublicTypes() { return types.findAll().stream().filter(item -> !item.deleted && item.enabled).toList(); }
     public List<?> listTypes(HttpServletRequest servletRequest) { roleGuard.requireLabAdmin(servletRequest); return types.findAll().stream().filter(item -> !item.deleted).toList(); }
     public List<?> listSchedules(Long id, HttpServletRequest servletRequest) { roleGuard.requireLabAdmin(servletRequest); resource(id); return schedules.findByResourceIdOrderByWeekdayAscOpenTimeAsc(id); }
@@ -102,15 +110,19 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
     }
     public ResourceController.BookingRule bookingRule(Long id, LocalDateTime startTime, LocalDateTime endTime, int participants, Long applicantUserId, HttpServletRequest servletRequest) {
         internalServices.require(servletRequest);
-        if(!startTime.isBefore(endTime)||!startTime.toLocalDate().equals(endTime.toLocalDate())) throw new BusinessException("INVALID_TIME","Booking interval must be within one day",HttpStatus.BAD_REQUEST);
-        if(!startTime.isAfter(LocalDateTime.now())) throw new BusinessException("INVALID_TIME","Booking start time must be in the future",HttpStatus.BAD_REQUEST);
+        if(!startTime.isBefore(endTime)) throw new BusinessException("INVALID_TIME","Start time must be before end time",HttpStatus.BAD_REQUEST);
+        if(!startTime.toLocalDate().equals(endTime.toLocalDate())) throw new BusinessException("BOOKING_NOT_SAME_DAY","预约必须在同一天内",HttpStatus.BAD_REQUEST);
+        if(!startTime.isAfter(LocalDateTime.now())) throw new BusinessException("BOOKING_START_IN_PAST","预约开始时间必须晚于当前时间",HttpStatus.BAD_REQUEST);
         Resource resource=resource(id); if(resource.deleted||!"ACTIVE".equals(resource.status)) throw new BusinessException("RESOURCE_UNAVAILABLE","Resource is not available",HttpStatus.UNPROCESSABLE_ENTITY);
         ResourceType type=types.findById(resource.typeId).orElseThrow(()->new BusinessException("TYPE_NOT_FOUND","Resource type does not exist",HttpStatus.NOT_FOUND));
         if(type.deleted||!type.enabled) throw new BusinessException("RESOURCE_UNAVAILABLE","Resource type is not available",HttpStatus.UNPROCESSABLE_ENTITY);
         if(participants>resource.capacity) throw new BusinessException("CAPACITY_EXCEEDED","Participants exceed resource capacity",HttpStatus.BAD_REQUEST);
         ResourceSchedule schedule=schedules.findByResourceIdAndWeekdayAndEnabledTrue(id,startTime.getDayOfWeek().getValue()).stream().filter(item->effective(item,startTime.toLocalDate())).filter(item->contains(item,startTime.toLocalTime(),endTime.toLocalTime())).findFirst().orElseThrow(()->new BusinessException("OUTSIDE_OPEN_HOURS","Booking interval is outside open hours",HttpStatus.UNPROCESSABLE_ENTITY));
         long minutes=Duration.between(startTime,endTime).toMinutes();
-        if(startTime.getSecond()!=0||startTime.getNano()!=0||endTime.getSecond()!=0||endTime.getNano()!=0||minutes%schedule.slotMinutes!=0||Duration.between(startTime.toLocalDate().atTime(schedule.openTime),startTime).toMinutes()%schedule.slotMinutes!=0||minutes>Math.min(resource.maxDurationMinutes,schedule.maxDurationMinutes)) throw new BusinessException("INVALID_TIME","Booking interval does not match resource rules",HttpStatus.BAD_REQUEST);
+        int maxDuration=Math.min(resource.maxDurationMinutes,schedule.maxDurationMinutes);
+        if(startTime.getSecond()!=0||startTime.getNano()!=0||endTime.getSecond()!=0||endTime.getNano()!=0||minutes%schedule.slotMinutes!=0||Duration.between(startTime.toLocalDate().atTime(schedule.openTime),startTime).toMinutes()%schedule.slotMinutes!=0||minutes>maxDuration) {
+            throw new BusinessException("INVALID_SLOT","所选时段不符合开放粒度和最长预约时长",HttpStatus.BAD_REQUEST);
+        }
         if(closures.findByResourceIdAndStatusNot(id,"CANCELED").stream().anyMatch(item->item.startTime.isBefore(endTime)&&item.endTime.isAfter(startTime))) throw new BusinessException("RESOURCE_CLOSED","Resource is closed during this interval",HttpStatus.UNPROCESSABLE_ENTITY);
         int approvalLevel=resource.approvalLevelOverride!=null?resource.approvalLevelOverride:type.defaultApprovalLevel;
         Long approver=null;
@@ -121,12 +133,13 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
             }
             List<ResourceManager> owners=managers.findByResourceIdOrderByIdAsc(id).stream()
                     .filter(item->"OWNER".equals(item.managerType)||"APPROVER".equals(item.managerType)).toList();
-            if (approvalLevel >= 2) {
-                approver=null;
-                approverRole=Roles.TEACHER;
+            approver=owners.stream().map(item->item.userId).filter(userId->!Objects.equals(userId,applicantUserId)).findFirst().orElse(null);
+            if (approver != null) {
+                approverRole = Roles.TEACHER;
+            } else if (approvalLevel >= 2) {
+                approverRole = Roles.TEACHER;
             } else {
-                approver=owners.stream().map(item->item.userId).filter(userId->!Objects.equals(userId,applicantUserId)).findFirst().orElse(null);
-                approverRole=approver==null?Roles.LAB_ADMIN:Roles.TEACHER;
+                approverRole = Roles.LAB_ADMIN;
             }
         }
         return new ResourceController.BookingRule(resource.name,type.id,resource.capacity,schedule.slotMinutes,Math.min(resource.maxDurationMinutes,schedule.maxDurationMinutes),resource.needCheckin,approvalLevel,approver,approverRole);

@@ -398,6 +398,7 @@ VALUES
   ('booking.default_max_duration', '120', 'INT', '默认最大预约时长', @system_admin_id, @seed_now, 0),
   ('booking.slot_minutes', '30', 'INT', '默认预约粒度', @system_admin_id, @seed_now, 0),
   ('violation.max_count', '3', 'INT', '最大违约次数', @system_admin_id, @seed_now, 0),
+  ('violation.restriction_days', '30', 'INT', '违约限制天数', @system_admin_id, @seed_now, 0),
   ('approval.timeout_minutes', '1440', 'INT', '审批超时时间', @system_admin_id, @seed_now, 0)
 ON DUPLICATE KEY UPDATE
   config_value = VALUES(config_value), value_type = VALUES(value_type),
