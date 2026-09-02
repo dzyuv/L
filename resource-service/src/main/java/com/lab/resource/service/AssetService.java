@@ -14,6 +14,7 @@ public interface AssetService {
     List<?> publicTypes(HttpServletRequest request);
     Map<String, Object> nextAssetNo(String prefix, HttpServletRequest request);
     Map<String, Object> batchCreate(AssetController.BatchCreateRequest body, HttpServletRequest request);
+    Map<String, Object> listPurchases(HttpServletRequest request);
     Map<String, Object> moveAssets(AssetController.MoveAssetsRequest body, HttpServletRequest request);
     Map<String, Object> listAssets(String query, String status, Long categoryId, HttpServletRequest request);
     Asset getAsset(Long id, HttpServletRequest request);

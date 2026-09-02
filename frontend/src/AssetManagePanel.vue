@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import axios from "axios";
 import { PackagePlus, Upload, X } from "lucide-vue-next";
 
@@ -16,6 +16,7 @@ const saving = ref(false);
 const importOpen = ref(false);
 const importText = ref("");
 const purchase = ref(emptyPurchase());
+const records = ref([]);
 
 const assetTypes = computed(() => {
   const groups = new Map();
@@ -100,9 +101,12 @@ async function submitPurchase() {
       numberPrefix: purchase.value.numberPrefix.trim() || suggestPrefix(purchase.value.name),
       items,
     });
-    const total = response.data?.data?.total || quantity;
+    const data = response.data?.data || {};
+    const total = data.total || quantity;
+    prependPurchase(data.purchase);
     show(`采购入库 ${total} 台，编号已${purchase.value.autoNumber ? "自动生成" : "按填写入账"}`);
     purchase.value.serials = "";
+    await loadPurchases();
     emit("refresh");
   } catch (e) {
     show(e.response?.data?.message || "采购入库失败", true);
@@ -143,13 +147,16 @@ async function submitImport() {
         status: "IN_STOCK",
         autoNumber: group.items.every((item) => !item.assetNo),
         numberPrefix: suggestPrefix(group.name),
+        source: "CSV_IMPORT",
         items: group.items,
       });
+      prependPurchase(response.data?.data?.purchase);
       success += response.data?.data?.total || group.items.length;
     }
     importText.value = "";
     importOpen.value = false;
     show(`已导入 ${success} 台设备`);
+    await loadPurchases();
     emit("refresh");
   } catch (e) {
     show(e.response?.data?.message || e.message || "批量导入失败", true);
@@ -161,6 +168,28 @@ function openImport() {
   importOpen.value = true;
   notice.value = "";
 }
+function formatTime(value) {
+  return value ? String(value).replace("T", " ").slice(0, 16) : "-";
+}
+function sourceText(value) {
+  return ({ PURCHASE: "采购入库", CSV_IMPORT: "CSV 导入" })[value] || value || "采购入库";
+}
+function resourceName(id) {
+  return props.resources.find((item) => Number(item.id) === Number(id))?.name || (id ? `资源 #${id}` : "未关联");
+}
+function prependPurchase(item) {
+  if (!item) return;
+  records.value = [item, ...records.value.filter((row) => Number(row.id) !== Number(item.id))];
+}
+async function loadPurchases() {
+  try {
+    const response = await axios.get("/api/v1/admin/assets/purchases");
+    records.value = response.data?.data?.items || [];
+  } catch (e) {
+    show(e.response?.data?.message || "采购记录加载失败", true);
+  }
+}
+onMounted(loadPurchases);
 </script>
 
 <template>
@@ -190,6 +219,25 @@ function openImport() {
     </div>
   </section>
 
+  <section class="manage-card purchase-log">
+    <div class="manage-head">
+      <div><h2>采购记录</h2><p>记录每次采购入库和 CSV 导入的操作人与时间</p></div>
+      <span class="record-count">{{ records.length }} 条</span>
+    </div>
+    <div class="purchase-table">
+      <div class="purchase-row head"><span>时间</span><span>采购人</span><span>资产</span><span>数量</span><span>去向</span><span>方式</span></div>
+      <div v-for="item in records" :key="item.id" class="purchase-row">
+        <span>{{ formatTime(item.purchasedAt) }}</span>
+        <span><b>{{ item.purchaserName || `用户 ${item.purchaserId}` }}</b></span>
+        <span><b>{{ item.name }}</b><small>{{ [item.brand, item.model].filter(Boolean).join(" ") || "—" }}</small></span>
+        <span>{{ item.quantity }} 台</span>
+        <span><b>{{ item.resourceName || resourceName(item.resourceId) }}</b><small>{{ item.location || "—" }}</small></span>
+        <span>{{ sourceText(item.source) }}</span>
+      </div>
+      <div v-if="!records.length" class="purchase-empty">暂无采购记录，确认入库后会显示在这里</div>
+    </div>
+  </section>
+
   <div v-if="importOpen" class="manage-modal-bg" @click.self="importOpen = false">
     <section class="manage-modal" role="dialog" aria-modal="true">
       <div class="manage-modal-title">
@@ -208,6 +256,14 @@ function openImport() {
 <style scoped>
 .manage-notice{min-height:38px;padding:0 12px;margin-bottom:12px;background:#e8f5ed;color:#347458;display:flex;align-items:center;border-left:3px solid #4d9a70;font-size:12px}.manage-notice.failed{background:#faece9;color:#a24d42;border-color:#bd655a}.manage-notice button{margin-left:auto;border:0;background:transparent;color:inherit}.manage-notice.in-modal{margin:12px 18px 0}
 .manage-card{background:#fff;border:1px solid #dfe7e3;border-radius:6px;overflow:hidden}
+.purchase-log{margin-top:14px}
+.record-count{color:#74847d;font-size:12px;padding-top:4px}
+.purchase-table{overflow:auto}
+.purchase-row{display:grid;grid-template-columns:1.2fr 1fr 1.4fr .6fr 1.3fr .8fr;gap:12px;align-items:center;min-height:52px;padding:0 18px;border-bottom:1px solid #edf1ef;font-size:12px;min-width:720px}
+.purchase-row.head{min-height:38px;background:#fafbfa;color:#839089;font-size:10px}
+.purchase-row b,.purchase-row small{display:block}
+.purchase-row small{margin-top:3px;color:#82918a;font-size:10px}
+.purchase-empty{padding:28px;text-align:center;color:#8d9a94;font-size:12px}
 .manage-head{padding:16px 18px;border-bottom:1px solid #e8eeeb;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
 .manage-head h2{margin:0 0 4px;font-size:15px}.manage-head p{margin:0;color:#839089;font-size:11px}
 .manage-form{padding:16px 18px 18px;display:grid;grid-template-columns:1fr 1fr;gap:11px}

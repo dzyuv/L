@@ -24,13 +24,15 @@ public class AssetServiceImpl implements AssetService {
     private final AssetCategoryRepository categories;
     private final AssetRepository assets;
     private final AssetStatusHistoryRepository history;
+    private final AssetPurchaseRepository purchases;
     private final MaintenanceTicketRepository tickets;
     private final ResourceRepository resources;
     private final RoleGuard roles;
 
     public AssetServiceImpl(AssetCategoryRepository categories, AssetRepository assets, AssetStatusHistoryRepository history,
-                            MaintenanceTicketRepository tickets, ResourceRepository resources, RoleGuard roles) {
-        this.categories = categories; this.assets = assets; this.history = history; this.tickets = tickets; this.resources = resources; this.roles = roles;
+                            AssetPurchaseRepository purchases, MaintenanceTicketRepository tickets, ResourceRepository resources, RoleGuard roles) {
+        this.categories = categories; this.assets = assets; this.history = history; this.purchases = purchases;
+        this.tickets = tickets; this.resources = resources; this.roles = roles;
     }
 
     public List<AssetCategory> categories(boolean admin, HttpServletRequest request) {
@@ -123,7 +125,56 @@ public class AssetServiceImpl implements AssetService {
             catch (DataIntegrityViolationException e) { throw new BusinessException("ASSET_EXISTS", "Asset number or serial number already exists", HttpStatus.CONFLICT); }
             record(item, null, item.status, "Batch asset created", roles.currentUserId(request));
         }
-        return Map.of("items", created, "total", created.size(), "generated", generated);
+        AssetPurchase purchase = new AssetPurchase();
+        purchase.purchaserId = roles.currentUserId(request);
+        Object nameAttr = request.getAttribute("realName");
+        purchase.purchaserName = nameAttr == null || String.valueOf(nameAttr).isBlank()
+                ? ("用户 " + purchase.purchaserId)
+                : String.valueOf(nameAttr);
+        purchase.purchasedAt = LocalDateTime.now();
+        purchase.source = "CSV_IMPORT".equalsIgnoreCase(Objects.toString(body.source(), "")) ? "CSV_IMPORT" : "PURCHASE";
+        purchase.categoryId = body.categoryId();
+        purchase.name = body.name().trim();
+        purchase.brand = body.brand();
+        purchase.model = body.model();
+        purchase.quantity = created.size();
+        purchase.resourceId = body.resourceId();
+        purchase.location = created.stream().map(item -> item.location).filter(value -> value != null && !value.isBlank()).findFirst().orElse(null);
+        purchase.assetNos = created.stream().map(item -> item.assetNo).filter(Objects::nonNull).reduce((left, right) -> left + "," + right).orElse("");
+        purchases.save(purchase);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("items", created);
+        result.put("total", created.size());
+        result.put("generated", generated);
+        result.put("purchase", viewPurchase(purchase));
+        return result;
+    }
+
+    public Map<String, Object> listPurchases(HttpServletRequest request) {
+        roles.requireLabAdmin(request);
+        List<Map<String, Object>> items = purchases.findAllByOrderByPurchasedAtDesc().stream().map(this::viewPurchase).toList();
+        return Map.of("items", items, "total", items.size());
+    }
+
+    private Map<String, Object> viewPurchase(AssetPurchase item) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", item.id);
+        row.put("purchaserId", item.purchaserId);
+        row.put("purchaserName", item.purchaserName);
+        row.put("purchasedAt", item.purchasedAt);
+        row.put("source", item.source);
+        row.put("categoryId", item.categoryId);
+        row.put("name", item.name);
+        row.put("brand", item.brand);
+        row.put("model", item.model);
+        row.put("quantity", item.quantity);
+        row.put("resourceId", item.resourceId);
+        row.put("location", item.location);
+        row.put("assetNos", item.assetNos);
+        if (item.resourceId != null) {
+            resources.findById(item.resourceId).ifPresent(resource -> row.put("resourceName", resource.name));
+        }
+        return row;
     }
     @Transactional
     public Map<String, Object> moveAssets(AssetController.MoveAssetsRequest body, HttpServletRequest request) {
