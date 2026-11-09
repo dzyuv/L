@@ -1,15 +1,18 @@
 package com.lab.user.service.impl;
 
 import com.lab.common.api.AdminOperationLogger;
+import com.lab.common.api.PageQuery;
 import com.lab.common.api.RoleGuard;
 import com.lab.common.api.Roles;
 import com.lab.common.exception.BusinessException;
 import com.lab.user.RefreshTokenRepository;
+import com.lab.user.ResourceManagerLookupClient;
 import com.lab.user.Role;
 import com.lab.user.RoleRepository;
 import com.lab.user.User;
 import com.lab.user.UserRepository;
 import com.lab.user.service.AdminUserService;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -36,26 +39,23 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final PasswordEncoder passwordEncoder;
     private final RoleGuard roleGuard;
     private final AdminOperationLogger operationLogger;
+    private final ResourceManagerLookupClient resourceManagers;
 
     public AdminUserServiceImpl(UserRepository users, RoleRepository roles, RefreshTokenRepository refreshTokens,
                                 PasswordEncoder passwordEncoder, RoleGuard roleGuard,
-                                AdminOperationLogger operationLogger) {
+                                AdminOperationLogger operationLogger, ResourceManagerLookupClient resourceManagers) {
         this.users = users; this.roles = roles; this.refreshTokens = refreshTokens;
         this.passwordEncoder = passwordEncoder; this.roleGuard = roleGuard;
-        this.operationLogger = operationLogger;
+        this.operationLogger = operationLogger; this.resourceManagers = resourceManagers;
     }
 
     @Override
-    public Map<String, Object> list(String query, String status, HttpServletRequest request) {
+    public Map<String, Object> list(String query, String status, PageQuery pageQuery, HttpServletRequest request) {
         roleGuard.requireSystemAdmin(request);
-        String keyword = Objects.toString(query, "").trim().toLowerCase();
-        List<Map<String, Object>> items = users.findByDeletedFalseOrderByCreatedAtDesc().stream()
-                .filter(user -> status == null || status.isBlank() || status.equals(user.status))
-                .filter(user -> keyword.isBlank() || user.username.toLowerCase().contains(keyword)
-                        || user.realName.toLowerCase().contains(keyword)
-                        || Objects.toString(user.email, "").toLowerCase().contains(keyword))
-                .map(this::view).toList();
-        return Map.of("items", items, "total", items.size());
+        String keyword = Objects.toString(query, "").trim();
+        IPage<User> result = users.search(status, keyword, pageQuery.toPage());
+        List<Map<String, Object>> items = result.getRecords().stream().map(this::view).toList();
+        return Map.of("items", items, "total", result.getTotal(), "page", result.getCurrent(), "size", result.getSize());
     }
 
     @Override
@@ -117,6 +117,11 @@ public class AdminUserServiceImpl implements AdminUserService {
             throw new BusinessException("SELF_ROLE_CHANGE_FORBIDDEN", "Current administrator cannot remove their own system role", HttpStatus.CONFLICT);
         }
         User user = find(userId);
+        boolean removingTeacher = user.roles.stream().anyMatch(role -> Roles.TEACHER.equals(role.code))
+                && !roleCodes.contains(Roles.TEACHER);
+        if (removingTeacher && resourceManagers.isResourceManager(userId)) {
+            throw new BusinessException("USER_IS_RESOURCE_MANAGER", "该用户是资源负责人，请先在资源管理中解除负责人后再移除教师角色", HttpStatus.CONFLICT);
+        }
         user.roles.clear();
         roleCodes.forEach(code -> user.roles.add(roles.findByCode(code)
                 .orElseThrow(() -> new BusinessException("ROLE_NOT_FOUND", "Role does not exist: " + code, HttpStatus.NOT_FOUND))));

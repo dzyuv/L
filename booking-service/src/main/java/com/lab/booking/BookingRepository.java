@@ -1,5 +1,8 @@
 package com.lab.booking;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lab.common.persistence.CrudMapper;
 import java.util.*;
 public interface BookingRepository extends CrudMapper<Booking>{
@@ -36,5 +39,14 @@ public interface BookingRepository extends CrudMapper<Booking>{
                 .eq("cancel_reason", "RESOURCE_CLOSED")
                 .lt("start_time", end)
                 .gt("end_time", start));
+    }
+
+    default IPage<Booking> searchAdmin(Long resourceId, Long userId, String status, Page<Booking> page) {
+        QueryWrapper<Booking> wrapper = new QueryWrapper<>();
+        if (resourceId != null) wrapper.eq("resource_id", resourceId);
+        if (userId != null) wrapper.eq("user_id", userId);
+        if (status != null && !status.isBlank()) wrapper.eq("status", status);
+        wrapper.orderByDesc("start_time");
+        return selectPage(page, wrapper);
     }
 }

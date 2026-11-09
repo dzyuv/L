@@ -9,6 +9,8 @@ import com.lab.common.exception.BusinessException;
 import com.lab.common.api.RoleGuard;
 import com.lab.common.api.Roles;
 import com.lab.common.api.RuntimeSettings;
+import com.lab.common.api.PageQuery;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Value;
@@ -329,21 +331,17 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
-    public Map<String, Object> adminList(Long resourceId, Long userId, String status, HttpServletRequest servletRequest) {
+    public Map<String, Object> adminList(Long resourceId, Long userId, String status, PageQuery pageQuery, HttpServletRequest servletRequest) {
         roleGuard.requireLabAdmin(servletRequest);
-        List<Booking> items = bookings.findAll().stream()
-                .filter(item -> resourceId == null || Objects.equals(item.resourceId, resourceId))
-                .filter(item -> userId == null || Objects.equals(item.userId, userId))
-                .filter(item -> status == null || status.isBlank() || status.equals(item.status))
-                .sorted(Comparator.comparing((Booking item) -> item.startTime, Comparator.nullsLast(Comparator.reverseOrder())))
-                .toList();
-        return Map.of("items", items, "total", items.size());
+        IPage<Booking> result = bookings.searchAdmin(resourceId, userId, status, pageQuery.toPage());
+        return Map.of("items", result.getRecords(), "total", result.getTotal(), "page", result.getCurrent(), "size", result.getSize());
     }
 
     @Override
-    public Map<String, Object> violations(HttpServletRequest servletRequest) {
+    public Map<String, Object> violations(PageQuery pageQuery, HttpServletRequest servletRequest) {
         roleGuard.requireLabAdmin(servletRequest);
-        List<Map<String, Object>> items = violations.findAllByOrderByCreatedAtDesc().stream().map(item -> {
+        IPage<ViolationRecord> result = violations.search(pageQuery.toPage());
+        List<Map<String, Object>> items = result.getRecords().stream().map(item -> {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("id", item.id);
             row.put("bookingId", item.bookingId);
@@ -363,7 +361,7 @@ public class BookingServiceImpl implements BookingService {
             });
             return row;
         }).toList();
-        return Map.of("items", items, "total", items.size());
+        return Map.of("items", items, "total", result.getTotal(), "page", result.getCurrent(), "size", result.getSize());
     }
 
     @Override

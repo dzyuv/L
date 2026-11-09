@@ -1,6 +1,7 @@
 package com.lab.resource.controller;
 
 import com.lab.common.api.ApiResponse;
+import com.lab.common.api.PageQuery;
 import com.lab.resource.*;
 import com.lab.resource.service.AssetService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -61,9 +62,15 @@ public class AssetController {
     @GetMapping("/assets/types") public ApiResponse<?> publicTypes(HttpServletRequest request) { return ok(service.publicTypes(request), request); }
     @GetMapping("/admin/assets/next-no") public ApiResponse<?> nextNo(@RequestParam(value = "prefix", required = false) String prefix, HttpServletRequest request) { return ok(service.nextAssetNo(prefix, request), request); }
     @PostMapping("/admin/assets/batch") public ApiResponse<?> batchCreate(@Valid @RequestBody BatchCreateRequest body, HttpServletRequest request) { return ok(service.batchCreate(body, request), request); }
-    @GetMapping("/admin/assets/purchases") public ApiResponse<?> purchases(HttpServletRequest request) { return ok(service.listPurchases(request), request); }
+    @GetMapping("/admin/assets/purchases") public ApiResponse<?> purchases(@RequestParam(value = "page", required = false) Integer page,
+            @RequestParam(value = "size", required = false) Integer size, HttpServletRequest request) {
+        return ok(service.listPurchases(PageQuery.of(page, size), request), request);
+    }
     @PostMapping("/admin/assets/move") public ApiResponse<?> moveAssets(@Valid @RequestBody MoveAssetsRequest body, HttpServletRequest request) { return ok(service.moveAssets(body, request), request); }
-    @GetMapping("/admin/assets") public ApiResponse<?> assets(@RequestParam(value = "query", required = false) String query, @RequestParam(value = "status", required = false) String status, @RequestParam(value = "categoryId", required = false) Long categoryId, HttpServletRequest request) { return ok(service.listAssets(query, status, categoryId, request), request); }
+    @GetMapping("/admin/assets") public ApiResponse<?> assets(@RequestParam(value = "query", required = false) String query,
+            @RequestParam(value = "status", required = false) String status, @RequestParam(value = "categoryId", required = false) Long categoryId,
+            @RequestParam(value = "page", required = false) Integer page, @RequestParam(value = "size", required = false) Integer size,
+            HttpServletRequest request) { return ok(service.listAssets(query, status, categoryId, PageQuery.of(page, size), request), request); }
     @GetMapping("/admin/assets/{id:\\d+}") public ApiResponse<?> asset(@PathVariable("id") Long id, HttpServletRequest request) { return ok(service.getAsset(id, request), request); }
     @PostMapping("/admin/assets") public ApiResponse<?> createAsset(@Valid @RequestBody AssetRequest body, HttpServletRequest request) { return ok(service.createAsset(body, request), request); }
     @PutMapping("/admin/assets/{id:\\d+}") public ApiResponse<?> updateAsset(@PathVariable("id") Long id, @Valid @RequestBody AssetRequest body, HttpServletRequest request) { return ok(service.updateAsset(id, body, request), request); }
@@ -73,7 +80,10 @@ public class AssetController {
 
     @PostMapping("/maintenance/tickets") public ApiResponse<?> report(@Valid @RequestBody ReportRequest body, HttpServletRequest request) { return ok(service.report(body, request), request); }
     @GetMapping("/maintenance/tickets/mine") public ApiResponse<?> mine(HttpServletRequest request) { return ok(service.myTickets(request), request); }
-    @GetMapping("/admin/maintenance/tickets") public ApiResponse<?> tickets(@RequestParam(value = "status", required = false) String status, @RequestParam(value = "assetId", required = false) Long assetId, HttpServletRequest request) { return ok(service.listTickets(status, assetId, request), request); }
+    @GetMapping("/admin/maintenance/tickets") public ApiResponse<?> tickets(@RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "assetId", required = false) Long assetId,
+            @RequestParam(value = "page", required = false) Integer page, @RequestParam(value = "size", required = false) Integer size,
+            HttpServletRequest request) { return ok(service.listTickets(status, assetId, PageQuery.of(page, size), request), request); }
     @PutMapping("/admin/maintenance/tickets/{id}") public ApiResponse<?> updateTicket(@PathVariable("id") Long id, @Valid @RequestBody TicketUpdateRequest body, HttpServletRequest request) { return ok(service.updateTicket(id, body, request), request); }
 
     private <T> ApiResponse<T> ok(T data, HttpServletRequest request) { return ApiResponse.success(data, Objects.toString(request.getAttribute("X-Request-Id"), "")); }

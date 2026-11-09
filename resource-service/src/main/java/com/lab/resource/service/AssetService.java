@@ -2,6 +2,7 @@ package com.lab.resource.service;
 
 import com.lab.resource.*;
 import com.lab.resource.controller.AssetController;
+import com.lab.common.api.PageQuery;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.Map;
@@ -14,9 +15,9 @@ public interface AssetService {
     List<?> publicTypes(HttpServletRequest request);
     Map<String, Object> nextAssetNo(String prefix, HttpServletRequest request);
     Map<String, Object> batchCreate(AssetController.BatchCreateRequest body, HttpServletRequest request);
-    Map<String, Object> listPurchases(HttpServletRequest request);
+    Map<String, Object> listPurchases(PageQuery pageQuery, HttpServletRequest request);
     Map<String, Object> moveAssets(AssetController.MoveAssetsRequest body, HttpServletRequest request);
-    Map<String, Object> listAssets(String query, String status, Long categoryId, HttpServletRequest request);
+    Map<String, Object> listAssets(String query, String status, Long categoryId, PageQuery pageQuery, HttpServletRequest request);
     Asset getAsset(Long id, HttpServletRequest request);
     Asset createAsset(AssetController.AssetRequest body, HttpServletRequest request);
     Asset updateAsset(Long id, AssetController.AssetRequest body, HttpServletRequest request);
@@ -25,6 +26,6 @@ public interface AssetService {
     List<AssetStatusHistory> history(Long id, HttpServletRequest request);
     MaintenanceTicket report(AssetController.ReportRequest body, HttpServletRequest request);
     List<MaintenanceTicket> myTickets(HttpServletRequest request);
-    Map<String, Object> listTickets(String status, Long assetId, HttpServletRequest request);
+    Map<String, Object> listTickets(String status, Long assetId, PageQuery pageQuery, HttpServletRequest request);
     MaintenanceTicket updateTicket(Long id, AssetController.TicketUpdateRequest body, HttpServletRequest request);
 }

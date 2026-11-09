@@ -39,6 +39,8 @@ const ERROR_MESSAGES = {
   RESOURCE_OWNER_REQUIRED: "请先为该资源配置资源负责人",
   MANAGER_EXISTS: "该用户已经是此资源的负责人",
   MANAGER_MUST_BE_TEACHER: "资源负责人必须是启用状态的教师",
+  USER_IS_RESOURCE_MANAGER: "该用户是资源负责人，请先解除负责人后再移除教师角色",
+  RESOURCE_SERVICE_UNAVAILABLE: "资源服务暂时不可用，请稍后重试",
   USER_SERVICE_UNAVAILABLE: "用户服务暂时不可用，请稍后重试",
   IDEMPOTENCY_REQUIRED: "请勿重复提交，请刷新后重试",
   BOOKING_CONFLICT: "所选时段已被占用，请重新选择",

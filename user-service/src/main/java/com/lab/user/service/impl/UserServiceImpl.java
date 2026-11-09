@@ -69,7 +69,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(noRollbackFor = BusinessException.class)
     public Map<String, Object> login(AuthController.Login request) {
-        User user = users.findByUsernameAndDeletedFalse(request.username()).orElseThrow(() -> new BusinessException("LOGIN_FAILED", "invalid username or password", HttpStatus.UNAUTHORIZED));
+        User user = users.findByUsernameAndDeletedFalseForUpdate(request.username()).orElseThrow(() -> new BusinessException("LOGIN_FAILED", "invalid username or password", HttpStatus.UNAUTHORIZED));
         Instant now = Instant.now();
         if ("LOCKED".equals(user.status)) {
             if (user.lockedUntil == null || user.lockedUntil.isAfter(now)) {
@@ -78,7 +78,6 @@ public class UserServiceImpl implements UserService {
             user.status = "ACTIVE";
             user.lockedUntil = null;
             user.failedLoginCount = 0;
-            users.save(user);
         }
         if (!"ACTIVE".equals(user.status)) {
             throw new BusinessException("USER_DISABLED", "user is not active", HttpStatus.FORBIDDEN);
@@ -88,16 +87,16 @@ public class UserServiceImpl implements UserService {
             if (user.failedLoginCount >= maxLoginFailures) {
                 user.status = "LOCKED";
                 user.lockedUntil = now.plusSeconds(lockMinutes * 60L);
-                users.save(user);
+                users.updateLoginState(user.id, user.status, user.lockedUntil, user.failedLoginCount, user.lastLoginAt);
                 throw new BusinessException("USER_LOCKED", "account is temporarily locked", HttpStatus.LOCKED);
             }
-            users.save(user);
+            users.updateLoginState(user.id, user.status, user.lockedUntil, user.failedLoginCount, user.lastLoginAt);
             throw new BusinessException("LOGIN_FAILED", "invalid username or password", HttpStatus.UNAUTHORIZED);
         }
         user.failedLoginCount = 0;
         user.lockedUntil = null;
         user.lastLoginAt = now;
-        users.save(user);
+        users.updateLoginState(user.id, user.status, user.lockedUntil, user.failedLoginCount, user.lastLoginAt);
         return tokenResponse(user);
     }
 

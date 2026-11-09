@@ -2,6 +2,7 @@ package com.lab.system.controller;
 
 import com.lab.common.api.AdminOperationLogger;
 import com.lab.common.api.ApiResponse;
+import com.lab.common.api.PageQuery;
 import com.lab.system.service.OperationLogService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,8 +27,10 @@ public class OperationLogController {
     public ApiResponse<?> list(@RequestParam(value = "operationType", required = false) String operationType,
                                @RequestParam(value = "result", required = false) String result,
                                @RequestParam(value = "keyword", required = false) String keyword,
+                               @RequestParam(value = "page", required = false) Integer page,
+                               @RequestParam(value = "size", required = false) Integer size,
                                HttpServletRequest request) {
-        return ok(service.list(operationType, result, keyword, request), request);
+        return ok(service.list(operationType, result, keyword, PageQuery.of(page, size), request), request);
     }
 
     @PostMapping("/internal/operation-logs")

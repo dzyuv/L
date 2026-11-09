@@ -35,6 +35,8 @@ mybatis-plus:
 security:
   jwt-secret: ${JWT_SECRET}
   internal-token: ${INTERNAL_SERVICE_TOKEN}
+seed:
+  demo-data: ${SEED_DEMO_DATA:false}
 services:
   booking:
     base-url: ${BOOKING_SERVICE_URL:http://localhost:8083}

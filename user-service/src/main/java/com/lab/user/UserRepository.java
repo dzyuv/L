@@ -1,10 +1,15 @@
 package com.lab.user;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lab.common.persistence.CrudMapper;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.List;
 public interface UserRepository extends CrudMapper<User>{
@@ -15,6 +20,10 @@ public interface UserRepository extends CrudMapper<User>{
         return Optional.ofNullable(hydrate(selectOne(Wrappers.<User>query()
                 .eq("username", username).eq("deleted", false))));
     }
+    default Optional<User> findByUsernameAndDeletedFalseForUpdate(String username) {
+        return Optional.ofNullable(hydrate(selectOne(Wrappers.<User>query()
+                .eq("username", username).eq("deleted", false).last("FOR UPDATE"))));
+    }
     default boolean existsByEmployeeNo(String no) {
         return selectCount(Wrappers.<User>query().eq("employee_no", no)) > 0;
     }
@@ -24,6 +33,21 @@ public interface UserRepository extends CrudMapper<User>{
     default List<User> findByDeletedFalseOrderByCreatedAtDesc() {
         return selectList(Wrappers.<User>query().eq("deleted", false).orderByDesc("created_at"))
                 .stream().map(this::hydrate).toList();
+    }
+
+    default IPage<User> search(String status, String keyword, Page<User> page) {
+        QueryWrapper<User> wrapper = new QueryWrapper<>();
+        wrapper.eq("deleted", false);
+        if (status != null && !status.isBlank()) wrapper.eq("status", status);
+        if (keyword != null && !keyword.isBlank()) {
+            wrapper.and(condition -> condition.like("username", keyword)
+                    .or().like("real_name", keyword)
+                    .or().like("email", keyword));
+        }
+        wrapper.orderByDesc("created_at");
+        IPage<User> result = selectPage(page, wrapper);
+        result.setRecords(result.getRecords().stream().map(this::hydrate).toList());
+        return result;
     }
 
     @Override
@@ -51,6 +75,13 @@ public interface UserRepository extends CrudMapper<User>{
 
     @Insert("INSERT INTO user_role(user_id, role_id) VALUES(#{userId}, #{roleId})")
     int insertRole(@Param("userId") Long userId, @Param("roleId") Long roleId);
+
+    @Update("UPDATE `user` SET status=#{status}, failed_login_count=#{failedLoginCount}, " +
+            "locked_until=#{lockedUntil}, last_login_at=#{lastLoginAt} WHERE id=#{id}")
+    int updateLoginState(@Param("id") Long id, @Param("status") String status,
+                         @Param("lockedUntil") Instant lockedUntil,
+                         @Param("failedLoginCount") int failedLoginCount,
+                         @Param("lastLoginAt") Instant lastLoginAt);
 
     private User hydrate(User user) {
         if (user == null) return null;

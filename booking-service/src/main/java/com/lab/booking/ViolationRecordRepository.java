@@ -1,9 +1,10 @@
 package com.lab.booking;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lab.common.persistence.CrudMapper;
 import java.time.LocalDateTime;
-import java.util.List;
 
 public interface ViolationRecordRepository extends CrudMapper<ViolationRecord>{
     default long countActiveNoShows(Long userId, LocalDateTime createdAt) {
@@ -12,7 +13,7 @@ public interface ViolationRecordRepository extends CrudMapper<ViolationRecord>{
                 .eq("status", "CONFIRMED")
                 .gt("created_at", createdAt));
     }
-    default List<ViolationRecord> findAllByOrderByCreatedAtDesc() {
-        return selectList(Wrappers.<ViolationRecord>query().orderByDesc("created_at"));
+    default IPage<ViolationRecord> search(Page<ViolationRecord> page) {
+        return selectPage(page, Wrappers.<ViolationRecord>query().orderByDesc("created_at"));
     }
 }

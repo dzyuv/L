@@ -60,7 +60,11 @@ INTERNAL_SERVICE_TOKEN=至少32位随机字符串
 | `NACOS_USERNAME` | `nacos` | 客户端 Nacos 用户名 |
 | `NACOS_PASSWORD` | `nacos` | 客户端 Nacos 密码 |
 | `USER_SERVICE_URL` | `http://localhost:8081` | user-service 地址（令牌版本校验使用） |
+| `SEED_DEMO_DATA` | `false` | 是否创建演示账号、演示资源与资产分类；Compose 默认开启，生产环境必须保持关闭 |
 | `GATEWAY_RATE_LIMIT_PER_MINUTE` | `120` | 网关单客户端每分钟请求上限 |
+| `REDIS_HOST` | `localhost` | 网关限流使用的 Redis 地址（Compose 内为 `redis`） |
+| `REDIS_PORT` | `6379` | Redis 端口 |
+| `REDIS_PASSWORD` | 空 | Redis 密码 |
 | `REFRESH_COOKIE_SECURE` | `false` | refresh cookie 是否加 `Secure`，HTTPS 生产环境应为 `true` |
 | `REFRESH_COOKIE_SAME_SITE` | `Lax` | refresh cookie 的 `SameSite` 策略，跨站部署使用 `None` + Secure |
 | `TRACING_SAMPLING_PROBABILITY` | `1.0` | 链路追踪采样率，生产环境建议 `0.1` |
@@ -249,6 +253,8 @@ docker compose down -v            # 停止并删除数据卷（会清空数据�
 
 `test-data.sql` 与 `UserDataInitializer` 使用相同密码：`12345678`。
 
+演示账号仅在 `SEED_DEMO_DATA=true` 时自动创建；非 Compose 环境默认为关闭，生产环境必须保持关闭。`test-data.sql` 可手动导入演示数据。
+
 | 账号 | 角色 |
 |---|---|
 | `S20260001` | 学生 |
@@ -261,7 +267,7 @@ docker compose down -v            # 停止并删除数据卷（会清空数据�
 
 - 不要把 `.env` 提交到版本库；如果历史提交中曾包含真实密钥，请立即轮换 `MYSQL_PASSWORD`、`JWT_SECRET`、`INTERNAL_SERVICE_TOKEN`。
 - 访问令牌包含 `ver` 声明，各服务通过 user-service 校验当前令牌版本（30 秒缓存）；禁用用户或调整角色后旧令牌立即失效。升级后不带 `ver` 的旧令牌会被拒绝，需要重新登录。user-service 不可用时，业务服务返回 503 而不是放行旧令牌。
-- 网关默认按客户端限流 120 请求/分钟，可通过 `GATEWAY_RATE_LIMIT_PER_MINUTE` 调整，并返回 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy`、`Content-Security-Policy` 等安全响应头。
+- 网关默认按客户端限流 120 请求/分钟，可通过 `GATEWAY_RATE_LIMIT_PER_MINUTE` 调整，并返回 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy`、`Content-Security-Policy` 等安全响应头。限流计数默认存储在 Redis，多网关实例共享；Redis 不可用时自动回退到单实例内存限流。
 - 网关限流只信任来自私有网段/回环代理的 `X-Forwarded-For`；前端 Nginx 会覆盖该头。不要把网关直接暴露给不可信网络。
 - 容器内应用使用 `lab_app` 账号，仅授权五个业务库，不再使用 root；`MYSQL_PASSWORD` 同时作为 Compose 中 root 和应用账号密码，生产环境应拆分为不同密码。
 - 内部服务调用通过 `X-Internal-Service-Token` 校验，令牌长度不得少于 32 字符。
@@ -295,6 +301,7 @@ mvn test
 ## 已知待办
 
 - 现有单元测试覆盖创建预约的配额/冲突规则；Testcontainers 集成测试覆盖预约持久化、时段唯一约束与审批任务持久化，审批状态机等跨服务流程仍需补充集成测试。
-- 列表接口尚未分页；预约创建仍在事务内调用 resource-service。
+- 列表接口支持 `page`/`size` 参数，默认最多返回 1000 条；前端管理页目前仍使用客户端分页。
+- 预约创建仍在事务内调用 resource-service。
 - 资源闭馆到预约取消/恢复仍为同步调用。
 - 服务间调用默认指向 `localhost`，容器化部署时需要设置上表中的 `*_SERVICE_URL`。

@@ -100,6 +100,10 @@ public class ResourceController {
     public ApiResponse<BookingRule> bookingRule(@PathVariable("id") Long id, @RequestParam("startTime") LocalDateTime startTime, @RequestParam("endTime") LocalDateTime endTime, @RequestParam("participants") @Min(1) int participants, @RequestParam("applicantUserId") Long applicantUserId, HttpServletRequest request) {
         return ok(service.bookingRule(id, startTime, endTime, participants, applicantUserId, request), request);
     }
+    @GetMapping("/internal/resources/managers/{userId}/exists")
+    public ApiResponse<?> managerExists(@PathVariable("userId") Long userId, HttpServletRequest request) {
+        return ok(Map.of("exists", service.managerExists(userId, request)), request);
+    }
     private <T> ApiResponse<T> ok(T data, HttpServletRequest request) {
         return ApiResponse.success(data, Objects.toString(request.getAttribute("X-Request-Id"), ""));
     }

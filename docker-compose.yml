@@ -9,6 +9,7 @@ x-common-env: &common-env
   NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
   NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
   USER_SERVICE_URL: http://user-service:8081
+  SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
   TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
   MANAGEMENT_OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
 
@@ -61,6 +62,17 @@ services:
       retries: 20
       start_period: 60s
 
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redis_data:/data"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
   # One-shot job: creates the databases and the least-privilege application user.
   # Table creation and evolution are handled by Flyway when each service starts.
   db-init:
@@ -89,6 +101,7 @@ services:
     environment:
       <<: *common-env
       SYSTEM_SERVICE_URL: http://system-service:8087
+      RESOURCE_SERVICE_URL: http://resource-service:8082
 
   resource-service:
     <<: *common-deps
@@ -141,6 +154,8 @@ services:
         condition: service_healthy
       system-service:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     build:
       <<: *service-build
       args:
@@ -151,6 +166,9 @@ services:
       NACOS_ADDR: nacos:8848
       NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
       NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
       TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
       MANAGEMENT_OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
@@ -196,5 +214,6 @@ services:
 volumes:
   mysql_data: {}
   nacos_data: {}
+  redis_data: {}
   prometheus_data: {}
   grafana_data: {}

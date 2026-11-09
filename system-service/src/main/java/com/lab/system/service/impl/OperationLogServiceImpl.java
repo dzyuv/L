@@ -2,12 +2,14 @@ package com.lab.system.service.impl;
 
 import com.lab.common.api.AdminOperationLogger;
 import com.lab.common.api.InternalServiceGuard;
+import com.lab.common.api.PageQuery;
 import com.lab.common.api.RequestIdFilter;
 import com.lab.common.api.RoleGuard;
 import com.lab.common.exception.BusinessException;
 import com.lab.system.OperationLog;
 import com.lab.system.OperationLogRepository;
 import com.lab.system.service.OperationLogService;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -19,7 +21,6 @@ import java.util.Objects;
 
 @Service
 public class OperationLogServiceImpl implements OperationLogService {
-    private static final int MAX_RESULT_SIZE = 500;
     private final OperationLogRepository logs;
     private final RoleGuard roleGuard;
     private final InternalServiceGuard internalServices;
@@ -33,17 +34,12 @@ public class OperationLogServiceImpl implements OperationLogService {
 
     @Override
     public Map<String, Object> list(String operationType, String result, String keyword,
-                                    HttpServletRequest request) {
+                                    PageQuery pageQuery, HttpServletRequest request) {
         roleGuard.requireSystemAdmin(request);
-        String term = Objects.toString(keyword, "").trim().toLowerCase();
-        List<Map<String, Object>> items = logs.findAllByOrderByCreatedAtDesc().stream()
-                .filter(item -> operationType == null || operationType.isBlank() || operationType.equals(item.operationType))
-                .filter(item -> result == null || result.isBlank() || result.equals(item.result))
-                .filter(item -> term.isBlank() || searchable(item).contains(term))
-                .limit(MAX_RESULT_SIZE)
-                .map(this::view)
-                .toList();
-        return Map.of("items", items, "total", items.size());
+        String term = Objects.toString(keyword, "").trim();
+        IPage<OperationLog> page = logs.search(operationType, result, term, pageQuery.toPage());
+        List<Map<String, Object>> items = page.getRecords().stream().map(this::view).toList();
+        return Map.of("items", items, "total", page.getTotal(), "page", page.getCurrent(), "size", page.getSize());
     }
 
     @Override
@@ -78,16 +74,6 @@ public class OperationLogServiceImpl implements OperationLogService {
         item.ip = truncate(clientIp(request), 50);
         item.detail = detail == null ? Map.of() : detail;
         logs.save(item);
-    }
-
-    private String searchable(OperationLog item) {
-        return (Objects.toString(item.operationType, "") + " "
-                + Objects.toString(item.targetType, "") + " "
-                + Objects.toString(item.targetId, "") + " "
-                + Objects.toString(item.operatorId, "") + " "
-                + Objects.toString(item.requestId, "") + " "
-                + Objects.toString(item.reason, "") + " "
-                + Objects.toString(item.detail, "")).toLowerCase();
     }
 
     private Map<String, Object> view(OperationLog item) {

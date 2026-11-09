@@ -2,6 +2,7 @@ package com.lab.booking.controller;
 
 import com.lab.booking.service.BookingService;
 import com.lab.common.api.ApiResponse;
+import com.lab.common.api.PageQuery;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -19,8 +20,12 @@ public class AdminBookingController {
 
     @GetMapping("/bookings") public ApiResponse<?> bookings(@RequestParam(value="resourceId", required=false) Long resourceId,
             @RequestParam(value="userId", required=false) Long userId, @RequestParam(value="status", required=false) String status,
-            HttpServletRequest request) { return ok(service.adminList(resourceId, userId, status, request), request); }
-    @GetMapping("/violations") public ApiResponse<?> violations(HttpServletRequest request) { return ok(service.violations(request), request); }
+            @RequestParam(value="page", required=false) Integer page, @RequestParam(value="size", required=false) Integer size,
+            HttpServletRequest request) { return ok(service.adminList(resourceId, userId, status, PageQuery.of(page, size), request), request); }
+    @GetMapping("/violations") public ApiResponse<?> violations(@RequestParam(value="page", required=false) Integer page,
+            @RequestParam(value="size", required=false) Integer size, HttpServletRequest request) {
+        return ok(service.violations(PageQuery.of(page, size), request), request);
+    }
     @PutMapping("/violations/{id}") public ApiResponse<?> process(@PathVariable("id") Long id, @Valid @RequestBody ViolationRequest body,
             HttpServletRequest request) { return ok(service.processViolation(id, body.status(), body.comment(), request), request); }
     private <T> ApiResponse<T> ok(T data, HttpServletRequest request) { return ApiResponse.success(data, Objects.toString(request.getAttribute("X-Request-Id"), "")); }

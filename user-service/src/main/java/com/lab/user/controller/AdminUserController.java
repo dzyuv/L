@@ -1,6 +1,7 @@
 package com.lab.user.controller;
 
 import com.lab.common.api.ApiResponse;
+import com.lab.common.api.PageQuery;
 import com.lab.user.service.AdminUserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -26,7 +27,9 @@ public class AdminUserController {
     @GetMapping("/users")
     public ApiResponse<?> users(@RequestParam(value = "query", required = false) String query,
                                 @RequestParam(value = "status", required = false) String status,
-                                HttpServletRequest request) { return ok(service.list(query, status, request), request); }
+                                @RequestParam(value = "page", required = false) Integer page,
+                                @RequestParam(value = "size", required = false) Integer size,
+                                HttpServletRequest request) { return ok(service.list(query, status, PageQuery.of(page, size), request), request); }
     @GetMapping("/users/teachers")
     public ApiResponse<?> teachers(HttpServletRequest request) { return ok(service.teachers(request), request); }
     @GetMapping("/roles") public ApiResponse<?> roles(HttpServletRequest request) { return ok(service.roles(request), request); }

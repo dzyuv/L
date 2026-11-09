@@ -2,6 +2,7 @@ package com.lab.booking.service;
 
 import com.lab.booking.Booking;
 import com.lab.booking.controller.BookingController;
+import com.lab.common.api.PageQuery;
 import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.List;
@@ -18,8 +19,8 @@ public interface BookingService {
     void autoComplete();
     void markNoShow();
     void expirePendingApprovals();
-    Map<String, Object> adminList(Long resourceId, Long userId, String status, HttpServletRequest servletRequest);
-    Map<String, Object> violations(HttpServletRequest servletRequest);
+    Map<String, Object> adminList(Long resourceId, Long userId, String status, PageQuery pageQuery, HttpServletRequest servletRequest);
+    Map<String, Object> violations(PageQuery pageQuery, HttpServletRequest servletRequest);
     Object processViolation(Long violationId, String status, String comment, HttpServletRequest servletRequest);
     Map<String, Object> cancelOverlappingForClosure(Long resourceId, LocalDateTime start, LocalDateTime end, String reason, HttpServletRequest servletRequest);
     Map<String, Object> restoreOverlappingForClosure(Long resourceId, LocalDateTime start, LocalDateTime end, HttpServletRequest servletRequest);

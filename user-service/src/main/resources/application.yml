@@ -45,9 +45,13 @@ security:
     refresh-cookie-same-site: ${REFRESH_COOKIE_SAME_SITE:Lax}
   refresh-token:
     cleanup-retention-days: ${REFRESH_TOKEN_RETENTION_DAYS:7}
+seed:
+  demo-data: ${SEED_DEMO_DATA:false}
 services:
   system:
     base-url: ${SYSTEM_SERVICE_URL:http://localhost:8087}
+  resource:
+    base-url: ${RESOURCE_SERVICE_URL:http://localhost:8082}
 
 management:
   endpoints:

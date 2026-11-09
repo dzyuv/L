@@ -1,10 +1,12 @@
 package com.lab.resource.service.impl;
 
 import com.lab.common.api.RoleGuard;
+import com.lab.common.api.PageQuery;
 import com.lab.common.exception.BusinessException;
 import com.lab.resource.*;
 import com.lab.resource.controller.AssetController;
 import com.lab.resource.service.AssetService;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -150,10 +152,11 @@ public class AssetServiceImpl implements AssetService {
         return result;
     }
 
-    public Map<String, Object> listPurchases(HttpServletRequest request) {
+    public Map<String, Object> listPurchases(PageQuery pageQuery, HttpServletRequest request) {
         roles.requireLabAdmin(request);
-        List<Map<String, Object>> items = purchases.findAllByOrderByPurchasedAtDesc().stream().map(this::viewPurchase).toList();
-        return Map.of("items", items, "total", items.size());
+        IPage<AssetPurchase> result = purchases.search(pageQuery.toPage());
+        List<Map<String, Object>> items = result.getRecords().stream().map(this::viewPurchase).toList();
+        return Map.of("items", items, "total", result.getTotal(), "page", result.getCurrent(), "size", result.getSize());
     }
 
     private Map<String, Object> viewPurchase(AssetPurchase item) {
@@ -216,13 +219,10 @@ public class AssetServiceImpl implements AssetService {
         }
         return normalized + "-" + String.format("%0" + width + "d", max + 1);
     }
-    public Map<String, Object> listAssets(String query, String status, Long categoryId, HttpServletRequest request) {
+    public Map<String, Object> listAssets(String query, String status, Long categoryId, PageQuery pageQuery, HttpServletRequest request) {
         roles.requireLabAdmin(request);
-        List<Asset> items = assets.findByDeletedFalseOrderByCreatedAtDesc().stream()
-                .filter(item -> query == null || query.isBlank() || item.name.toLowerCase().contains(query.toLowerCase()) || item.assetNo.toLowerCase().contains(query.toLowerCase()) || Objects.toString(item.serialNo, "").toLowerCase().contains(query.toLowerCase()))
-                .filter(item -> status == null || status.isBlank() || status.equals(item.status))
-                .filter(item -> categoryId == null || Objects.equals(categoryId, item.categoryId)).toList();
-        return Map.of("items", items, "total", items.size());
+        IPage<Asset> result = assets.search(query, status, categoryId, pageQuery.toPage());
+        return Map.of("items", result.getRecords(), "total", result.getTotal(), "page", result.getCurrent(), "size", result.getSize());
     }
     public Asset getAsset(Long id, HttpServletRequest request) { roles.requireLabAdmin(request); return findAsset(id); }
     @Transactional
@@ -267,8 +267,10 @@ public class AssetServiceImpl implements AssetService {
         return ticket;
     }
     public List<MaintenanceTicket> myTickets(HttpServletRequest request) { return tickets.findByReportedByOrderByCreatedAtDesc(roles.currentUserId(request)); }
-    public Map<String, Object> listTickets(String status, Long assetId, HttpServletRequest request) {
-        roles.requireLabAdmin(request); List<MaintenanceTicket> items = tickets.findAllByOrderByCreatedAtDesc().stream().filter(x -> status == null || status.isBlank() || status.equals(x.status)).filter(x -> assetId == null || Objects.equals(assetId, x.assetId)).toList(); return Map.of("items", items, "total", items.size());
+    public Map<String, Object> listTickets(String status, Long assetId, PageQuery pageQuery, HttpServletRequest request) {
+        roles.requireLabAdmin(request);
+        IPage<MaintenanceTicket> result = tickets.search(status, assetId, pageQuery.toPage());
+        return Map.of("items", result.getRecords(), "total", result.getTotal(), "page", result.getCurrent(), "size", result.getSize());
     }
     @Transactional
     public MaintenanceTicket updateTicket(Long id, AssetController.TicketUpdateRequest body, HttpServletRequest request) {

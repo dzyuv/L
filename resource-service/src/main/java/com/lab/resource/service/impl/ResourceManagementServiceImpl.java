@@ -123,6 +123,10 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
         if (!Objects.equals(manager.resourceId, id)) throw new BusinessException("NOT_FOUND", "Resource manager does not exist", HttpStatus.NOT_FOUND);
         managers.delete(manager);
     }
+    public boolean managerExists(Long userId, HttpServletRequest servletRequest) {
+        internalServices.require(servletRequest);
+        return managers.existsByUserIdAndManagerTypeIn(userId, List.of("OWNER", "APPROVER"));
+    }
     public Map<String,Object> calendar(Long id, LocalDate start, LocalDate end) {
         if (start == null || end == null || start.isAfter(end)) throw new BusinessException("INVALID_DATE_RANGE", "Calendar start must not be after end", HttpStatus.BAD_REQUEST);
         if (start.plusDays(62).isBefore(end)) throw new BusinessException("INVALID_DATE_RANGE", "日历查询范围不能超过 63 天", HttpStatus.BAD_REQUEST);
