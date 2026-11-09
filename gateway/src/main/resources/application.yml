@@ -5,45 +5,84 @@ spring:
   cloud.nacos:
     discovery:
       server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      username: ${NACOS_USERNAME:nacos}
+      password: ${NACOS_PASSWORD:nacos}
       group: LAB_BOOKING
       service: gateway
     config:
       server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      username: ${NACOS_USERNAME:nacos}
+      password: ${NACOS_PASSWORD:nacos}
       group: LAB_BOOKING
       file-extension: yaml
-  cloud.gateway.routes:
-    - id: user-service
-      uri: lb://user-service
-      predicates:
-        - Path=/api/v1/user/**
+  cloud.gateway:
+    globalcors:
+      add-to-simple-url-handler-mapping: true
+      cors-configurations:
+        '[/**]':
+          allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+          allowedMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+          allowedHeaders: "*"
+          exposedHeaders: [X-Request-Id]
+          allowCredentials: true
+          maxAge: 3600
+    routes:
+      - id: user-service
+        uri: lb://user-service
+        predicates:
+          - Path=/api/v1/user/**
 
-    - id: user-admin-service
-      uri: lb://user-service
-      predicates:
-        - Path=/api/v1/admin/users/**,/api/v1/admin/roles/**
+      - id: user-admin-service
+        uri: lb://user-service
+        predicates:
+          - Path=/api/v1/admin/users/**,/api/v1/admin/roles/**
 
-    - id: resource-service
-      uri: lb://resource-service
-      predicates:
-        - Path=/api/v1/resources/**,/api/v1/resource-types,/api/v1/admin/resources/**,/api/v1/admin/resource-types/**,/api/v1/assets/**,/api/v1/admin/assets/**,/api/v1/maintenance/**,/api/v1/admin/maintenance/**
+      - id: resource-service
+        uri: lb://resource-service
+        predicates:
+          - Path=/api/v1/resources/**,/api/v1/resource-types,/api/v1/admin/resources/**,/api/v1/admin/resource-types/**,/api/v1/assets/**,/api/v1/admin/assets/**,/api/v1/maintenance/**,/api/v1/admin/maintenance/**
 
-    - id: booking-service
-      uri: lb://booking-service
-      predicates:
-      - Path=/api/v1/bookings/**
+      - id: booking-service
+        uri: lb://booking-service
+        predicates:
+          - Path=/api/v1/bookings/**
 
-    - id: booking-admin-service
-      uri: lb://booking-service
-      predicates:
-      - Path=/api/v1/admin/bookings/**,/api/v1/admin/violations/**
+      - id: booking-admin-service
+        uri: lb://booking-service
+        predicates:
+          - Path=/api/v1/admin/bookings/**,/api/v1/admin/violations/**
 
+      - id: booking-approvals
+        uri: lb://booking-service
+        predicates:
+          - Path=/api/v1/approvals/**
 
-    - id: approval-service
-      uri: lb://approval-service
-      predicates:
-        - Path=/api/v1/approvals/**
+      - id: system-service
+        uri: lb://system-service
+        predicates:
+          - Path=/api/v1/admin/configs/**,/api/v1/admin/operation-logs/**,/api/v1/configs/**
 
-    - id: system-service
-      uri: lb://system-service
-      predicates:
-        - Path=/api/v1/admin/configs/**,/api/v1/admin/operation-logs/**,/api/v1/configs/**
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+
+logging:
+  pattern:
+    level: "%5p [%X{traceId:-},%X{spanId:-},%X{requestId:-}]"
+
+gateway:
+  rate-limit:
+    requests-per-minute: ${GATEWAY_RATE_LIMIT_PER_MINUTE:120}

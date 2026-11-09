@@ -1,8 +1,8 @@
 <script setup>
 import { ref, computed, onBeforeUnmount, onMounted, watch } from "vue";
 import axios from "axios";
-import AdminDashboard from "./AdminDashboard.vue";
-import UserMaintenance from "./UserMaintenance.vue";
+import AdminDashboard from "./components/AdminDashboard.vue";
+import UserMaintenance from "./components/UserMaintenance.vue";
 import {
   CalendarDays,
   CheckCircle2,
@@ -117,21 +117,47 @@ watch(notice, (message) => {
   toastTimer = setTimeout(() => { toast.value.visible = false; }, 4500);
 });
 axios.defaults.baseURL = API_ORIGIN;
+axios.defaults.withCredentials = true;
 axios.interceptors.request.use((c) => {
   if (token.value) c.headers.Authorization = `Bearer ${token.value}`;
   return c;
 });
+let refreshPromise = null;
+function clearSession(message) {
+  token.value = "";
+  user.value = null;
+  localStorage.removeItem("token");
+  if (message) notice.value = message;
+}
 axios.interceptors.response.use(
   (response) => response,
-  (error) => {
-    const isLoginRequest = String(error.config?.url || "").includes("/user/login");
-    if (error.response?.status === 401 && !isLoginRequest) {
-      token.value = "";
-      user.value = null;
-      localStorage.removeItem("token");
-      notice.value = "登录已失效，请重新登录";
+  async (error) => {
+    const original = error.config || {};
+    const url = String(original.url || "");
+    const isAuthEndpoint = url.includes("/user/login") || url.includes("/user/token/refresh") || url.includes("/user/logout");
+    if (error.response?.status !== 401 || original._retry || isAuthEndpoint) {
+      if (error.response?.status === 401 && !isAuthEndpoint) clearSession("登录已失效，请重新登录");
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+    original._retry = true;
+    try {
+      if (!refreshPromise) {
+        refreshPromise = axios.post("/api/v1/user/token/refresh", {}, { withCredentials: true })
+          .finally(() => { refreshPromise = null; });
+      }
+      const refreshed = await refreshPromise;
+      const nextToken = refreshed.data?.data?.accessToken;
+      if (!nextToken) throw new Error("refresh response is missing an access token");
+      token.value = nextToken;
+      localStorage.setItem("token", nextToken);
+      if (refreshed.data?.data?.user) user.value = refreshed.data.data.user;
+      original.headers = original.headers || {};
+      original.headers.Authorization = `Bearer ${nextToken}`;
+      return axios(original);
+    } catch (refreshError) {
+      clearSession("登录已失效，请重新登录");
+      return Promise.reject(refreshError);
+    }
   },
 );
 function formatDate(date) {
@@ -641,14 +667,20 @@ async function loadNextAvailableSlot(resourceId) {
     notice.value = e.response?.data?.message || "无法读取资源开放时间";
   }
 }
-function logout() {
-  token.value = "";
-  user.value = null;
-  resources.value = [];
-  bookings.value = [];
-  approvals.value = [];
-  localStorage.removeItem("token");
-  notice.value = "已退出登录";
+async function logout() {
+  try {
+    await axios.post("/api/v1/user/logout", {});
+  } catch (e) {
+    // The local session is cleared even if the server cannot be reached.
+  } finally {
+    token.value = "";
+    user.value = null;
+    resources.value = [];
+    bookings.value = [];
+    approvals.value = [];
+    localStorage.removeItem("token");
+    notice.value = "已退出登录";
+  }
 }
 async function createBooking() {
   const selected = selectedSlots.value.slice().sort((a, b) => a.key.localeCompare(b.key));

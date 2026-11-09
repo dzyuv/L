@@ -32,7 +32,7 @@ public class RuntimeSettings {
                            @Value("${booking.violation.max-count:3}") int defaultViolationMax,
                            @Value("${booking.violation.restriction-days:30}") int defaultRestrictionDays,
                            @Value("${approval.timeout-hours:24}") int defaultTimeoutHours) {
-        this.client = RestClient.builder().baseUrl(baseUrl).build();
+        this.client = RemoteClientFactory.create(baseUrl);
         this.internalToken = internalToken;
         this.defaultCheckinBefore = defaultCheckinBefore;
         this.defaultCheckinAfter = defaultCheckinAfter;

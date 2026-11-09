@@ -6,6 +6,7 @@ import java.util.Map;
 public final class UserMessageLocalizer {
     private static final Map<String, String> MESSAGES = Map.ofEntries(
             Map.entry("LOGIN_FAILED", "账号或密码错误"),
+            Map.entry("USER_LOCKED", "账号因多次登录失败已被临时锁定，请稍后再试或联系管理员"),
             Map.entry("USER_DISABLED", "账号当前不可用，请联系系统管理员"),
             Map.entry("USER_EXISTS", "该工号已经注册"),
             Map.entry("USER_NOT_FOUND", "用户不存在"),

@@ -1,0 +1,16 @@
+.git
+.gitignore
+.idea
+.github
+.env
+.env.*
+!.env.example
+**/target
+frontend/node_modules
+frontend/dist
+runtime-logs
+docs
+database
+deploy
+README.md
+*.log

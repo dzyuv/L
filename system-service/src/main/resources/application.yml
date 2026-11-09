@@ -2,17 +2,26 @@ server: { port: 8087 }
 spring:
   application.name: system-service
   config.import: optional:file:../.env[.properties],optional:file:.env[.properties],optional:nacos:system-service.yaml?group=LAB_BOOKING
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 1
   cloud.nacos:
     discovery:
       server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      username: ${NACOS_USERNAME:nacos}
+      password: ${NACOS_PASSWORD:nacos}
       group: LAB_BOOKING
       service: system-service
     config:
       server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      username: ${NACOS_USERNAME:nacos}
+      password: ${NACOS_PASSWORD:nacos}
       group: LAB_BOOKING
       file-extension: yaml
   datasource:
-    url: jdbc:mysql://localhost:3306/lab_system?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/lab_system?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USERNAME:root}
     password: ${MYSQL_PASSWORD}
 mybatis-plus:
@@ -25,3 +34,28 @@ mybatis-plus:
 security:
   jwt-secret: ${JWT_SECRET}
   internal-token: ${INTERNAL_SERVICE_TOKEN}
+
+system:
+  operation-log:
+    retention-days: ${OPERATION_LOG_RETENTION_DAYS:90}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+
+logging:
+  pattern:
+    level: "%5p [%X{traceId:-},%X{spanId:-},%X{requestId:-}]"

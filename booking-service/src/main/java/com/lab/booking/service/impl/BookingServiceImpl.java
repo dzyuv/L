@@ -1,6 +1,8 @@
 package com.lab.booking.service.impl;
 
 import com.lab.booking.*;
+import com.lab.booking.approval.ApprovalTask;
+import com.lab.booking.approval.service.ApprovalInternalService;
 import com.lab.booking.controller.BookingController;
 import com.lab.booking.service.BookingService;
 import com.lab.common.exception.BusinessException;
@@ -8,29 +10,24 @@ import com.lab.common.api.RoleGuard;
 import com.lab.common.api.Roles;
 import com.lab.common.api.RuntimeSettings;
 import jakarta.servlet.http.HttpServletRequest;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.*;
 
 @Service
 public class BookingServiceImpl implements BookingService {
-    private static final Logger log = LoggerFactory.getLogger(BookingServiceImpl.class);
     private static final Set<String> QUOTA_STATUSES = Set.of("PENDING_APPROVAL", "APPROVED", "CHECKED_IN");
     private static final Set<String> DAILY_MINUTE_STATUSES = Set.of("PENDING_APPROVAL", "APPROVED", "CHECKED_IN", "COMPLETED", "NO_SHOW");
     private final BookingRepository bookings;
     private final BookingSlotRepository slots;
     private final BookingQuotaLockRepository quotaLocks;
     private final ResourceRuleClient resourceRules;
-    private final ApprovalTaskClient approvalTasks;
+    private final ApprovalInternalService approvals;
     private final BookingLifecycleService lifecycle;
     private final BookingStatusHistoryRepository histories;
     private final ViolationRecordRepository violations;
@@ -48,7 +45,7 @@ public class BookingServiceImpl implements BookingService {
 
     public BookingServiceImpl(BookingRepository bookings, BookingSlotRepository slots,
                               BookingQuotaLockRepository quotaLocks, ResourceRuleClient resourceRules,
-                              ApprovalTaskClient approvalTasks, BookingLifecycleService lifecycle,
+                              ApprovalInternalService approvals, BookingLifecycleService lifecycle,
                               BookingStatusHistoryRepository histories, ViolationRecordRepository violations,
                               RoleGuard roleGuard, RuntimeSettings settings,
                               @Value("${booking.fair-use.max-active:5}") int maxActive,
@@ -64,7 +61,7 @@ public class BookingServiceImpl implements BookingService {
         this.slots = slots;
         this.quotaLocks = quotaLocks;
         this.resourceRules = resourceRules;
-        this.approvalTasks = approvalTasks;
+        this.approvals = approvals;
         this.lifecycle = lifecycle;
         this.histories = histories;
         this.violations = violations;
@@ -141,7 +138,10 @@ public class BookingServiceImpl implements BookingService {
             throw new BusinessException("BOOKING_CONFLICT", "The selected time is already occupied", HttpStatus.CONFLICT);
         }
         if (rule.approvalLevel() > 0) {
-            approvalTasks.create(booking, rule, servletRequest.getHeader("Authorization"));
+            approvals.create(new ApprovalInternalService.CreateTask(
+                    booking.id, booking.userId, booking.applicantNameSnapshot, booking.resourceId,
+                    rule.resourceTypeId(), booking.resourceNameSnapshot, booking.startTime, booking.endTime,
+                    1, Math.max(1, rule.approvalLevel()), rule.approverUserId(), rule.approverRole()));
         }
         return booking;
     }
@@ -191,7 +191,7 @@ public class BookingServiceImpl implements BookingService {
         booking.canceledAt = LocalDateTime.now();
         lifecycle.releaseSlots(booking.id, "CANCELED");
         Booking saved = bookings.save(booking);
-        if (closeApproval) closeApprovalTasksAfterCommit(List.of(saved.id), "CANCELED");
+        if (closeApproval) approvals.closePending(saved.id, "CANCELED");
         return saved;
     }
 
@@ -276,30 +276,7 @@ public class BookingServiceImpl implements BookingService {
             }
             bookings.save(booking);
         });
-        closeApprovalTasksAfterCommit(expiredIds, "EXPIRED");
-    }
-
-    private void closeApprovalTasksAfterCommit(List<Long> bookingIds, String reason) {
-        if (bookingIds == null || bookingIds.isEmpty()) return;
-        Runnable close = () -> {
-            for (Long bookingId : bookingIds) {
-                try {
-                    approvalTasks.closePending(bookingId, reason);
-                } catch (RuntimeException exception) {
-                    log.warn("Failed to close approval task for booking {}: {}", bookingId, exception.getMessage());
-                }
-            }
-        };
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    close.run();
-                }
-            });
-        } else {
-            close.run();
-        }
+        expiredIds.forEach(id -> approvals.closePending(id, "EXPIRED"));
     }
 
     private void assertFairUse(Long userId, BookingController.Create request, HttpServletRequest servletRequest) {
@@ -431,7 +408,7 @@ public class BookingServiceImpl implements BookingService {
             bookings.save(booking);
             if (pending) pendingIds.add(booking.id);
         }
-        closeApprovalTasksAfterCommit(pendingIds, "CANCELED");
+        pendingIds.forEach(id -> approvals.closePending(id, "CANCELED"));
         return Map.of("cancelledCount", overlapping.size());
     }
 
@@ -460,14 +437,12 @@ public class BookingServiceImpl implements BookingService {
             }
             bookings.save(booking);
             if ("PENDING_APPROVAL".equals(previous)) {
-                try {
-                    if (!approvalTasks.reopenCanceled(booking.id, booking.approvalDeadline)) {
-                        ResourceRuleClient.BookingRule rule = resourceRules.getRule(booking.resourceId, booking.startTime, booking.endTime,
-                                Math.max(1, booking.participants), booking.userId, servletRequest.getHeader("Authorization"));
-                        approvalTasks.create(booking, rule, servletRequest.getHeader("Authorization"));
-                    }
-                } catch (RuntimeException exception) {
-                    log.warn("Restored booking {} but could not recreate approval task: {}", booking.id, exception.getMessage());
+                ApprovalTask reopened = approvals.reopenCanceled(booking.id, booking.approvalDeadline);
+                if (reopened == null) {
+                    approvals.create(new ApprovalInternalService.CreateTask(
+                            booking.id, booking.userId, booking.applicantNameSnapshot, booking.resourceId,
+                            null, booking.resourceNameSnapshot, booking.startTime, booking.endTime,
+                            1, Math.max(1, booking.approvalLevelSnapshot), null, null));
                 }
             }
             restored++;

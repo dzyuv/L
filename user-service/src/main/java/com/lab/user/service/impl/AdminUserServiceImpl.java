@@ -97,6 +97,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         User user = find(userId);
         user.status = status;
         user.failedLoginCount = 0;
+        user.lockedUntil = null;
         user.tokenVersion++;
         refreshTokens.deleteByUserId(user.id);
         Map<String, Object> result = view(users.save(user));

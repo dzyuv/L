@@ -337,7 +337,7 @@ FROM booking WHERE booking_no = 'TEST-BK-0007'
 -- Approval tasks. The teacher sees the student's task; the laboratory
 -- administrator receives the teacher's own request, preventing self-approval.
 -- ---------------------------------------------------------------------------
-USE lab_approval;
+USE lab_booking;
 
 INSERT INTO approval_task
   (booking_id, applicant_user_id, applicant_name, resource_id, resource_name,

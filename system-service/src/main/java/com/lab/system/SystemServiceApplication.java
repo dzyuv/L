@@ -3,6 +3,8 @@ import com.lab.common.persistence.CrudMapper;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.*;
 import org.springframework.boot.autoconfigure.*;
+import org.springframework.scheduling.annotation.EnableScheduling;
+@EnableScheduling
 @MapperScan(basePackages="com.lab.system", markerInterface=CrudMapper.class)
 @SpringBootApplication(scanBasePackages={
     "com.lab.system","com.lab.common"

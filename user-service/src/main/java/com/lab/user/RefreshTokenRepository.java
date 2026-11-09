@@ -16,4 +16,10 @@ public interface RefreshTokenRepository extends CrudMapper<RefreshToken> {
     default long deleteByUserId(Long userId) {
         return delete(Wrappers.<RefreshToken>query().eq("user_id", userId));
     }
+    default long deleteExpiredOrRevokedBefore(Instant cutoff) {
+        return delete(Wrappers.<RefreshToken>query()
+                .lt("expires_at", cutoff)
+                .or()
+                .isNotNull("revoked_at").lt("revoked_at", cutoff));
+    }
 }

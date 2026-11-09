@@ -32,17 +32,20 @@ public class UserServiceImpl implements UserService {
     private final long accessTokenMillis;
     private final long refreshTokenSeconds;
     private final int maxLoginFailures;
+    private final int lockMinutes;
 
     public UserServiceImpl(UserRepository users, RoleRepository roles, PasswordEncoder encoder,
                            JwtKeyProvider jwtKeys, RefreshTokenRepository refreshTokens,
                            @Value("${security.jwt.access-token-hours:2}") int accessTokenHours,
                            @Value("${security.jwt.refresh-token-days:30}") int refreshTokenDays,
-                           @Value("${security.login.max-failures:5}") int maxLoginFailures) {
+                           @Value("${security.login.max-failures:5}") int maxLoginFailures,
+                           @Value("${security.login.lock-minutes:15}") int lockMinutes) {
         this.users = users; this.roles = roles; this.encoder = encoder;
         this.jwtKeys = jwtKeys; this.refreshTokens = refreshTokens;
         this.accessTokenMillis = accessTokenHours * 60L * 60L * 1000L;
         this.refreshTokenSeconds = refreshTokenDays * 24L * 60L * 60L;
         this.maxLoginFailures = maxLoginFailures;
+        this.lockMinutes = lockMinutes;
     }
 
     @Override
@@ -64,26 +67,42 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = BusinessException.class)
     public Map<String, Object> login(AuthController.Login request) {
         User user = users.findByUsernameAndDeletedFalse(request.username()).orElseThrow(() -> new BusinessException("LOGIN_FAILED", "invalid username or password", HttpStatus.UNAUTHORIZED));
+        Instant now = Instant.now();
+        if ("LOCKED".equals(user.status)) {
+            if (user.lockedUntil == null || user.lockedUntil.isAfter(now)) {
+                throw new BusinessException("USER_LOCKED", "account is temporarily locked", HttpStatus.LOCKED);
+            }
+            user.status = "ACTIVE";
+            user.lockedUntil = null;
+            user.failedLoginCount = 0;
+            users.save(user);
+        }
         if (!"ACTIVE".equals(user.status)) {
             throw new BusinessException("USER_DISABLED", "user is not active", HttpStatus.FORBIDDEN);
         }
         if (!encoder.matches(request.password(), user.passwordHash)) {
             user.failedLoginCount++;
-            if (user.failedLoginCount >= maxLoginFailures) user.status = "LOCKED";
+            if (user.failedLoginCount >= maxLoginFailures) {
+                user.status = "LOCKED";
+                user.lockedUntil = now.plusSeconds(lockMinutes * 60L);
+                users.save(user);
+                throw new BusinessException("USER_LOCKED", "account is temporarily locked", HttpStatus.LOCKED);
+            }
             users.save(user);
             throw new BusinessException("LOGIN_FAILED", "invalid username or password", HttpStatus.UNAUTHORIZED);
         }
         user.failedLoginCount = 0;
-        user.lastLoginAt = Instant.now();
+        user.lockedUntil = null;
+        user.lastLoginAt = now;
         users.save(user);
         return tokenResponse(user);
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = BusinessException.class)
     public Map<String, Object> refresh(String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank()) {
             throw new BusinessException("REFRESH_TOKEN_INVALID", "Refresh token is invalid", HttpStatus.UNAUTHORIZED);
@@ -146,7 +165,7 @@ public class UserServiceImpl implements UserService {
         String accessToken = Jwts.builder().subject(user.id.toString())
                 .claim("tokenType", "access")
                 .claim("username", user.username).claim("realName", user.realName)
-                .claim("roles", roleCodes(user)).issuedAt(new Date())
+                .claim("roles", roleCodes(user)).claim("ver", user.tokenVersion).issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + accessTokenMillis))
                 .signWith(jwtKeys.key()).compact();
         String refreshToken = randomToken();

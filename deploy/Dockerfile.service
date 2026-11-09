@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1
+
+FROM maven:3.9-eclipse-temurin-17 AS build
+ARG SERVICE
+WORKDIR /workspace
+COPY . .
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -q -DskipTests -pl ${SERVICE} -am package \
+    && cp ${SERVICE}/target/${SERVICE}-1.0.0.jar /workspace/app.jar
+
+FROM eclipse-temurin:17-jre
+ARG PORT
+WORKDIR /app
+RUN groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --home-dir /app app
+COPY --from=build /workspace/app.jar app.jar
+ENV SERVER_PORT=${PORT}
+EXPOSE ${SERVER_PORT}
+HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=10 \
+  CMD ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/${SERVER_PORT} && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q 'status.*UP' <&3"]
+ENV JAVA_OPTS=""
+USER 10001:10001
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]

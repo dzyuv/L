@@ -11,13 +11,15 @@ import java.util.Objects;
 /** Validates the access token at every business service; identity headers are derived, never trusted. */
 public class JwtUserFilter extends OncePerRequestFilter {
     private final JwtKeyProvider keys;
+    private final TokenVersionResolver tokenVersions;
 
-    public JwtUserFilter(JwtKeyProvider keys) {
+    public JwtUserFilter(JwtKeyProvider keys, TokenVersionResolver tokenVersions) {
         this.keys = keys;
+        this.tokenVersions = tokenVersions;
     }
     @Override protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.endsWith("/user/login") || path.endsWith("/user/register") || path.endsWith("/user/token/refresh")
+        return path.endsWith("/user/login") || path.endsWith("/user/register") || path.endsWith("/user/token/refresh") || path.endsWith("/user/logout")
                 || path.contains("/api/v1/internal/") || path.startsWith("/actuator/");
     }
     @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
@@ -32,7 +34,18 @@ public class JwtUserFilter extends OncePerRequestFilter {
                 unauthorized(request, response, "请先登录后再操作");
                 return;
             }
-            request.setAttribute("userId", Long.valueOf(claims.getSubject()));
+            Long userId = Long.valueOf(claims.getSubject());
+            Object rawVersion = claims.get("ver");
+            if (!(rawVersion instanceof Number number)) {
+                unauthorized(request, response, "登录已失效，请重新登录");
+                return;
+            }
+            Integer currentVersion = tokenVersions.currentVersion(userId);
+            if (currentVersion != null && currentVersion.intValue() != number.intValue()) {
+                unauthorized(request, response, "登录已失效，请重新登录");
+                return;
+            }
+            request.setAttribute("userId", userId);
             request.setAttribute("username", claims.get("username", String.class));
             request.setAttribute("realName", claims.get("realName", String.class));
             request.setAttribute("roles", claims.get("roles"));

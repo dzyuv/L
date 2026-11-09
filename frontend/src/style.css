@@ -1332,3 +1332,31 @@ header {
     justify-self: end;
   }
 }
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 4px 2px;
+  color: var(--muted, #6b7280);
+  font-size: 13px;
+}
+.pagination-bar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border: 1px solid rgba(36, 72, 59, 0.18);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.pagination-bar button:hover:not(:disabled) {
+  background: rgba(36, 72, 59, 0.06);
+}
+.pagination-bar button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

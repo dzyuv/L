@@ -1,5 +1,6 @@
 package com.lab.common.exception;
 import com.lab.common.api.ApiResponse;
+import com.lab.common.api.RequestIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
@@ -37,12 +39,19 @@ public class GlobalExceptionHandler {
     ResponseEntity<ApiResponse<Void>> methodNotAllowed(Exception e, HttpServletRequest r) {
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(ApiResponse.error("INVALID_ACTION", "不支持该操作", id(r)));
     }
+    @ExceptionHandler(ResourceAccessException.class)
+    ResponseEntity<ApiResponse<Void>> upstreamUnavailable(ResourceAccessException e, HttpServletRequest r) {
+        log.warn("Downstream service is unavailable: {} {}", r.getMethod(), r.getRequestURI(), e);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error("SERVICE_UNAVAILABLE", "服务暂时不可用，请稍后重试", id(r)));
+    }
+
     @ExceptionHandler(Exception.class) ResponseEntity<ApiResponse<Void>> other(Exception e, HttpServletRequest r){
         log.error("Unhandled request failure: {} {}", r.getMethod(), r.getRequestURI(), e);
         return ResponseEntity.internalServerError().body(ApiResponse.error("INTERNAL_ERROR", "系统处理失败，请稍后重试", id(r)));
     }
     private String id(HttpServletRequest r){
-        Object id=r.getAttribute("X-Request-Id");
+        Object id=r.getAttribute(RequestIdFilter.HEADER);
         return id==null?"":id.toString();
     }
 }

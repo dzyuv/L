@@ -2,13 +2,17 @@ package com.lab.booking;
 
 import com.lab.common.api.ApiResponse;
 import com.lab.common.api.InternalServiceGuard;
+import com.lab.common.api.RemoteClientFactory;
 import com.lab.common.exception.BusinessException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
@@ -23,11 +27,13 @@ public class ResourceRuleClient {
 
     ResourceRuleClient(@Value("${services.resource.base-url:http://localhost:8082}") String baseUrl,
                        @Value("${security.internal-token:}") String token,ObjectMapper objectMapper){
-        client=RestClient.builder().baseUrl(baseUrl).build();
+        client=RemoteClientFactory.create(baseUrl);
         json=objectMapper;
         internalToken=token;
     }
 
+    @CircuitBreaker(name = "resourceService", fallbackMethod = "ruleFallback")
+    @Retry(name = "resourceService")
     public BookingRule getRule(Long resourceId,LocalDateTime startTime,LocalDateTime endTime,int participants,Long applicantUserId,String authorization){
         try{
             ApiResponse<BookingRule> response=client.get()
@@ -46,9 +52,16 @@ public class ResourceRuleClient {
             throw e;
         }catch(RestClientResponseException e){
             throw downstreamError(e);
+        }catch(ResourceAccessException e){
+            throw e;
         }catch(RestClientException e){
             throw new BusinessException("RESOURCE_SERVICE_UNAVAILABLE","Resource service is unavailable",HttpStatus.SERVICE_UNAVAILABLE);
         }
+    }
+
+    private BookingRule ruleFallback(Long resourceId,LocalDateTime startTime,LocalDateTime endTime,int participants,
+                                     Long applicantUserId,String authorization,Throwable throwable){
+        throw new BusinessException("RESOURCE_SERVICE_UNAVAILABLE","Resource service is unavailable",HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     private BusinessException downstreamError(RestClientResponseException exception){

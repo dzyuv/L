@@ -6,6 +6,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.client.RestClient;
 
 import java.util.Map;
@@ -20,7 +22,7 @@ public class AdminOperationLogger {
 
     public AdminOperationLogger(@Value("${services.system.base-url:http://localhost:8087}") String baseUrl,
                                 @Value("${security.internal-token:}") String internalToken) {
-        this.client = RestClient.builder().baseUrl(baseUrl).build();
+        this.client = RemoteClientFactory.create(baseUrl);
         this.internalToken = internalToken;
     }
 
@@ -38,14 +40,29 @@ public class AdminOperationLogger {
                 clientIp(request),
                 detail == null ? Map.of() : detail
         );
+        String authorization = Objects.toString(request.getHeader(HttpHeaders.AUTHORIZATION), "");
+        Runnable send = () -> send(body, authorization);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    send.run();
+                }
+            });
+        } else {
+            send.run();
+        }
+    }
+
+    private void send(OperationLogRequest body, String authorization) {
         try {
             client.post().uri("/api/v1/internal/operation-logs")
-                    .header(HttpHeaders.AUTHORIZATION, Objects.toString(request.getHeader(HttpHeaders.AUTHORIZATION), ""))
+                    .header(HttpHeaders.AUTHORIZATION, authorization)
                     .header(InternalServiceGuard.HEADER, internalToken)
                     .body(body).retrieve().toBodilessEntity();
         } catch (RuntimeException exception) {
             // An audit-service outage must not roll back the completed business operation.
-            log.warn("Unable to persist administrator operation log: {}", operationType, exception);
+            log.warn("Unable to persist administrator operation log: {}", body.operationType(), exception);
         }
     }
 

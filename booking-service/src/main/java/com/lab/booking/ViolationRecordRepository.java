@@ -6,10 +6,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public interface ViolationRecordRepository extends CrudMapper<ViolationRecord>{
-    default long countByUserIdAndViolationTypeAndCreatedAtAfter(Long userId,String violationType,LocalDateTime createdAt) {
-        return countActiveNoShows(userId, createdAt);
-    }
-
     default long countActiveNoShows(Long userId, LocalDateTime createdAt) {
         return selectCount(Wrappers.<ViolationRecord>query().eq("user_id", userId)
                 .eq("violation_type", "NO_SHOW")

@@ -21,9 +21,6 @@ public interface UserRepository extends CrudMapper<User>{
     default boolean existsByUsername(String username) {
         return selectCount(Wrappers.<User>query().eq("username", username)) > 0;
     }
-    default boolean existsByEmailIgnoreCase(String email) {
-        return selectCount(Wrappers.<User>query().apply("LOWER(email)=LOWER({0})", email)) > 0;
-    }
     default List<User> findByDeletedFalseOrderByCreatedAtDesc() {
         return selectList(Wrappers.<User>query().eq("deleted", false).orderByDesc("created_at"))
                 .stream().map(this::hydrate).toList();

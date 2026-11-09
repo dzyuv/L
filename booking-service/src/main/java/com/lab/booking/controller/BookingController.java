@@ -5,7 +5,6 @@ import com.lab.common.api.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -47,15 +46,6 @@ public class BookingController {
 
     @PostMapping("/{id}/checkin")
     public ApiResponse<?> checkin(@PathVariable("id") Long id, HttpServletRequest servletRequest) { return ApiResponse.success(service.checkin(id, servletRequest), requestId(servletRequest)); }
-
-    @Scheduled(fixedDelay = 60000)
-    public void autoComplete() { service.autoComplete(); }
-
-    @Scheduled(fixedDelay = 60000)
-    public void markNoShow() { service.markNoShow(); }
-
-    @Scheduled(fixedDelay = 60000)
-    public void expirePendingApprovals() { service.expirePendingApprovals(); }
 
     private String requestId(HttpServletRequest request) { return Objects.toString(request.getAttribute("X-Request-Id"), ""); }
 }
