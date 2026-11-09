@@ -166,7 +166,7 @@ docker run --rm -p 8081:8081 \
 docker compose up -d --build
 ```
 
-Compose 会启动 MySQL、Nacos、`db-init`、5 个应用服务、前端以及 Prometheus/Grafana/Jaeger。`db-init` 在 MySQL 健康后执行 `database/init-databases.sh` 创建数据库与最小权限应用账号；各服务启动时由 Flyway 创建/升级表结构。应用服务与前端都配置了健康检查，gateway 会等待业务服务健康后再启动。
+Compose 会启动 MySQL、Nacos、Redis、`db-init`、5 个应用服务、前端以及 Prometheus/Grafana/Jaeger。Redis 用于网关分布式限流。`db-init` 在 MySQL 健康后执行 `database/init-databases.sh` 创建数据库与最小权限应用账号；各服务启动时由 Flyway 创建/升级表结构。应用服务与前端都配置了健康检查，gateway 会等待业务服务和 Redis 健康后再启动。
 
 > 从旧版本升级时，使用 `docker compose up -d --build --remove-orphans` 启动，以移除已合并的 `approval-service` 容器。Flyway V3 会把 `lab_approval` 中的审批数据复制到 `lab_booking`。
 
@@ -242,6 +242,7 @@ docker compose down -v            # 停止并删除数据卷（会清空数据�
 | frontend (dev / compose) | 5173（对外） |
 | MySQL | 3306（本地）/ 3307（Compose） |
 | Nacos | 8848（本地）/ 8858（Compose） |
+| Redis | 6379（Compose 内部） |
 | Prometheus | 9090 |
 | Grafana | 3000 |
 | Jaeger UI | 16686 |
@@ -273,7 +274,7 @@ docker compose down -v            # 停止并删除数据卷（会清空数据�
 - 内部服务调用通过 `X-Internal-Service-Token` 校验，令牌长度不得少于 32 字符。
 - 轮换密钥可使用 `openssl rand -base64 48` 生成新值，更新 `.env` 后重启服务；清理 Git 历史中的旧密钥属于不可逆操作，需要 `git filter-repo`/BFG 等工具并单独确认。
 - Compose 默认开启 Nacos 鉴权；`nacos/nacos` 登录账号以及默认的 `NACOS_AUTH_TOKEN`/identity 仅用于本地开发，生产环境必须替换。可用 `openssl rand -base64 32` 生成新的 `NACOS_AUTH_TOKEN`，并在 Nacos 控制台修改默认密码。
-- 前端将 access token 存于 localStorage；refresh token 使用 httpOnly Cookie（默认 `SameSite=Lax`，HTTPS 生产环境建议 `REFRESH_COOKIE_SECURE=true`），401 时自动刷新并重试原请求。
+- 前端 access token 仅保存在内存中；refresh token 使用 httpOnly Cookie（默认 `SameSite=Lax`，HTTPS 生产环境建议 `REFRESH_COOKIE_SECURE=true`），页面刷新时自动通过 Cookie 恢复会话，401 时自动刷新并重试原请求。
 
 ## 运维任务
 

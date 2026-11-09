@@ -282,7 +282,6 @@ CREATE TABLE IF NOT EXISTS booking (
   reject_reason VARCHAR(500) NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uk_booking_no (booking_no),
-  UNIQUE KEY uk_client_request_id (client_request_id),
   UNIQUE KEY uk_booking_user_request (user_id, client_request_id),
   KEY idx_booking_resource_status_time (resource_id, status, start_time),
   KEY idx_booking_status_time (status, start_time),

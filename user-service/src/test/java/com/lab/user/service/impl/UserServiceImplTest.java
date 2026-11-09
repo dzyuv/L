@@ -25,7 +25,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -77,18 +76,42 @@ class UserServiceImplTest {
     void lockedAccountRejectsLoginBeforeExpiry() {
         User user = user("LOCKED", 0, Instant.now().plusSeconds(300));
         when(users.findByUsernameAndDeletedFalseForUpdate("u")).thenReturn(Optional.of(user));
+        when(encoder.matches("good", "hash")).thenReturn(true);
 
         BusinessException exception = catchThrowableOfType(() -> service.login(login("good")), BusinessException.class);
 
         assertThat(exception.code()).isEqualTo("USER_LOCKED");
         assertThat(exception.status()).isEqualTo(HttpStatus.LOCKED);
-        verifyNoInteractions(encoder);
+        verify(encoder).matches("good", "hash");
+    }
+
+    @Test
+    void lockedAccountWithWrongPasswordReturnsGenericFailure() {
+        User user = user("LOCKED", 0, Instant.now().plusSeconds(300));
+        when(users.findByUsernameAndDeletedFalseForUpdate("u")).thenReturn(Optional.of(user));
+        when(encoder.matches("bad", "hash")).thenReturn(false);
+
+        BusinessException exception = catchThrowableOfType(() -> service.login(login("bad")), BusinessException.class);
+
+        assertThat(exception.code()).isEqualTo("LOGIN_FAILED");
+        assertThat(exception.status()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void unknownUsernameReturnsGenericFailure() {
+        when(users.findByUsernameAndDeletedFalseForUpdate("u")).thenReturn(Optional.empty());
+
+        BusinessException exception = catchThrowableOfType(() -> service.login(login("good")), BusinessException.class);
+
+        assertThat(exception.code()).isEqualTo("LOGIN_FAILED");
+        assertThat(exception.status()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     @Test
     void legacyLockedAccountWithoutExpiryRequiresAdminUnlock() {
         User user = user("LOCKED", 0, null);
         when(users.findByUsernameAndDeletedFalseForUpdate("u")).thenReturn(Optional.of(user));
+        when(encoder.matches("good", "hash")).thenReturn(true);
 
         BusinessException exception = catchThrowableOfType(() -> service.login(login("good")), BusinessException.class);
 

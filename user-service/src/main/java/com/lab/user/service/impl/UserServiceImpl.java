@@ -33,6 +33,7 @@ public class UserServiceImpl implements UserService {
     private final long refreshTokenSeconds;
     private final int maxLoginFailures;
     private final int lockMinutes;
+    private final String timingEqualizationHash;
 
     public UserServiceImpl(UserRepository users, RoleRepository roles, PasswordEncoder encoder,
                            JwtKeyProvider jwtKeys, RefreshTokenRepository refreshTokens,
@@ -46,6 +47,7 @@ public class UserServiceImpl implements UserService {
         this.refreshTokenSeconds = refreshTokenDays * 24L * 60L * 60L;
         this.maxLoginFailures = maxLoginFailures;
         this.lockMinutes = lockMinutes;
+        this.timingEqualizationHash = encoder.encode("timing-equalization-placeholder");
     }
 
     @Override
@@ -69,10 +71,16 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(noRollbackFor = BusinessException.class)
     public Map<String, Object> login(AuthController.Login request) {
-        User user = users.findByUsernameAndDeletedFalseForUpdate(request.username()).orElseThrow(() -> new BusinessException("LOGIN_FAILED", "invalid username or password", HttpStatus.UNAUTHORIZED));
+        User user = users.findByUsernameAndDeletedFalseForUpdate(request.username()).orElseThrow(() -> {
+            encoder.matches(request.password(), timingEqualizationHash);
+            return new BusinessException("LOGIN_FAILED", "invalid username or password", HttpStatus.UNAUTHORIZED);
+        });
         Instant now = Instant.now();
         if ("LOCKED".equals(user.status)) {
             if (user.lockedUntil == null || user.lockedUntil.isAfter(now)) {
+                if (!encoder.matches(request.password(), user.passwordHash)) {
+                    throw new BusinessException("LOGIN_FAILED", "invalid username or password", HttpStatus.UNAUTHORIZED);
+                }
                 throw new BusinessException("USER_LOCKED", "account is temporarily locked", HttpStatus.LOCKED);
             }
             user.status = "ACTIVE";

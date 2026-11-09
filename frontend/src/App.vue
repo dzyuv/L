@@ -18,7 +18,7 @@ import {
   ShieldCheck,
   X,
 } from "lucide-vue-next";
-const token = ref(localStorage.getItem("token") || "");
+const token = ref("");
 const user = ref(null);
 const resources = ref([]);
 const resourceTypes = ref([]);
@@ -126,7 +126,6 @@ let refreshPromise = null;
 function clearSession(message) {
   token.value = "";
   user.value = null;
-  localStorage.removeItem("token");
   if (message) notice.value = message;
 }
 axios.interceptors.response.use(
@@ -149,7 +148,6 @@ axios.interceptors.response.use(
       const nextToken = refreshed.data?.data?.accessToken;
       if (!nextToken) throw new Error("refresh response is missing an access token");
       token.value = nextToken;
-      localStorage.setItem("token", nextToken);
       if (refreshed.data?.data?.user) user.value = refreshed.data.data.user;
       original.headers = original.headers || {};
       original.headers.Authorization = `Bearer ${nextToken}`;
@@ -409,7 +407,6 @@ async function login() {
     return;
   }
   token.value = "";
-  localStorage.removeItem("token");
   try {
     const r = await axios.post("/api/v1/user/login", loginForm.value);
     if (r.data?.code !== "SUCCESS" || !r.data?.data?.accessToken) {
@@ -417,7 +414,6 @@ async function login() {
     }
     token.value = r.data.data.accessToken;
     user.value = r.data.data.user;
-    localStorage.setItem("token", token.value);
     notice.value = "登录成功";
     await load();
   } catch (e) {
@@ -685,7 +681,6 @@ async function logout() {
     resources.value = [];
     bookings.value = [];
     approvals.value = [];
-    localStorage.removeItem("token");
     notice.value = "已退出登录";
   }
 }
@@ -759,9 +754,21 @@ async function checkin(id) {
     await load();
   }
 }
-onMounted(() => {
+async function restoreSession() {
+  try {
+    const response = await axios.post("/api/v1/user/token/refresh", {}, { withCredentials: true });
+    const nextToken = response.data?.data?.accessToken;
+    if (!nextToken) return false;
+    token.value = nextToken;
+    if (response.data?.data?.user) user.value = response.data.data.user;
+    return true;
+  } catch {
+    return false;
+  }
+}
+onMounted(async () => {
   currentTimeTimer = window.setInterval(() => { currentTime.value = new Date(); }, 60000);
-  if (token.value) load();
+  if (token.value || await restoreSession()) load();
 });
 onBeforeUnmount(() => window.clearInterval(currentTimeTimer));
 </script>
