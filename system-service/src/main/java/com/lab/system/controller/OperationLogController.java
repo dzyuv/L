@@ -33,6 +33,11 @@ public class OperationLogController {
         return ok(service.list(operationType, result, keyword, PageQuery.of(page, size), request), request);
     }
 
+    @GetMapping("/admin/operation-logs/types")
+    public ApiResponse<?> types(HttpServletRequest request) {
+        return ok(service.operationTypes(request), request);
+    }
+
     @PostMapping("/internal/operation-logs")
     public ApiResponse<?> record(@RequestBody AdminOperationLogger.OperationLogRequest body,
                                  HttpServletRequest request) {

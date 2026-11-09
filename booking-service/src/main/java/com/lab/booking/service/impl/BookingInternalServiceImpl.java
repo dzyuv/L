@@ -39,7 +39,7 @@ public class BookingInternalServiceImpl implements BookingInternalService {
         String comment = decision.comment() == null ? "" : decision.comment().trim();
         if ("REJECTED".equals(decision.status())) {
             if (comment.isBlank()) {
-                throw new BusinessException("REJECTION_REASON_REQUIRED", "驳回时必须填写原因", HttpStatus.BAD_REQUEST);
+                throw new BusinessException("REJECTION_REASON_REQUIRED", "A rejection reason is required", HttpStatus.BAD_REQUEST);
             }
             booking.rejectReason = comment;
             lifecycle.transition(booking, "REJECTED", operatorId, comment, requestId);

@@ -2,6 +2,7 @@ package com.lab.user.service.impl;
 
 import com.lab.common.api.JwtKeyProvider;
 import com.lab.common.exception.BusinessException;
+import com.lab.user.ApprovalReleaseClient;
 import com.lab.user.RefreshTokenRepository;
 import com.lab.user.RoleRepository;
 import com.lab.user.User;
@@ -33,13 +34,14 @@ class UserServiceImplTest {
     @Mock RoleRepository roles;
     @Mock PasswordEncoder encoder;
     @Mock RefreshTokenRepository refreshTokens;
+    @Mock ApprovalReleaseClient approvals;
 
     private final JwtKeyProvider keys = new JwtKeyProvider("0123456789abcdef0123456789abcdef");
     private UserServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new UserServiceImpl(users, roles, encoder, keys, refreshTokens, 2, 30, 3, 15);
+        service = new UserServiceImpl(users, roles, encoder, keys, refreshTokens, approvals, 2, 30, 3, 15);
     }
 
     @Test
@@ -70,6 +72,7 @@ class UserServiceImplTest {
         assertThat(user.status).isEqualTo("LOCKED");
         assertThat(user.lockedUntil).isAfter(Instant.now());
         verify(users).updateLoginState(eq(1L), eq("LOCKED"), any(Instant.class), eq(3), isNull());
+        verify(approvals).release(1L);
     }
 
     @Test

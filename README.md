@@ -231,6 +231,8 @@ docker compose down -v            # 停止并删除数据卷（会清空数据�
 
 审批能力已合并到 `booking-service`。审批任务、审批记录与预约状态位于同一个数据库，并在同一本地事务中更新，不再依赖 Outbox 或跨服务回调。
 
+> 停用、删除用户或移除教师角色时，user-service 会同步调用 booking-service 释放该用户待处理的审批任务；booking-service 不可用时，这些管理员操作会返回 503。
+
 ## 端口
 
 | 服务 | 端口 |
@@ -299,6 +301,9 @@ mvn test
 当前单元测试覆盖：鉴权、错误信息、预约生命周期，以及创建预约时的配额上限、时间冲突、日时长限制与资源占用冲突。
 
 集成测试使用 Testcontainers + MySQL 验证真实 SQL 约束与持久化行为；Docker 不可用时自动跳过。
+
+> Windows + Docker Desktop 默认使用 `dockerDesktopLinuxEngine` 管道，Testcontainers 不会自动发现。运行集成测试前设置：
+> `DOCKER_HOST=npipe:////./pipe/dockerDesktopLinuxEngine`。项目已在 Surefire 中固定 docker-java API 版本，避免 Docker 29 拒绝旧版本请求。
 
 ## 已知待办
 

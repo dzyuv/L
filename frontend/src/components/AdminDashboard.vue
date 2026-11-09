@@ -90,25 +90,20 @@ const displayUsers = computed(() => {
   if (!term) return users.value;
   return users.value.filter((item) => [item.username, item.realName, item.email].some((value) => String(value || "").toLowerCase().includes(term)));
 });
-const operationTypes = computed(() => [...new Set(operationLogs.value.map((item) => item.operationType).filter(Boolean))]);
-const displayOperationLogs = computed(() => {
-  const term = logQuery.value.trim().toLowerCase();
-  return operationLogs.value.filter((item) => {
-    const operator = users.value.find((user) => Number(user.id) === Number(item.operatorId));
-    const matchesTerm = !term || [operator?.realName, operator?.username, item.operationType,
-      item.targetType, item.targetId, item.requestId, item.ip, JSON.stringify(item.detail || {})]
-      .some((value) => String(value || "").toLowerCase().includes(term));
-    return matchesTerm
-      && (!logTypeFilter.value || item.operationType === logTypeFilter.value)
-      && (!logResultFilter.value || item.result === logResultFilter.value);
-  });
-});
+const operationTypes = ref([]);
 const { page: usersPage, items: pagedUsers, total: usersTotal } = usePagination(displayUsers, 10);
-const { page: logsPage, items: pagedLogs, total: logsTotal } = usePagination(displayOperationLogs, 20);
+const logsPage = ref(1);
+const logsTotal = ref(0);
+const lastLoadedLogPage = ref(1);
 const { page: violationsPage, items: pagedViolations, total: violationsTotal } = usePagination(violations, 10);
 const { page: approvalsPage, items: pagedApprovals, total: approvalsTotal } = usePagination(approvals, 5);
 watch(query, () => { usersPage.value = 1; });
-watch([logQuery, logTypeFilter, logResultFilter], () => { logsPage.value = 1; });
+let logReloadTimer;
+watch([logQuery, logTypeFilter, logResultFilter], () => {
+  clearTimeout(logReloadTimer);
+  logReloadTimer = setTimeout(reloadLogsFromFirstPage, 300);
+});
+watch(logsPage, (page) => { if (page !== lastLoadedLogPage.value) loadOperationLogs(page); });
 const labReport = computed(() => {
   const counts = bookings.value.reduce((map, item) => { map[item.status] = (map[item.status] || 0) + 1; return map; }, {});
   const resourceCounts = bookings.value.reduce((map, item) => {
@@ -220,18 +215,58 @@ function operationDetail(item) {
   return item.reason || "-";
 }
 
+async function loadOperationLogs(page = logsPage.value) {
+  try {
+    const response = await axios.get("/api/v1/admin/operation-logs", {
+      params: {
+        page,
+        size: 20,
+        keyword: logQuery.value.trim() || undefined,
+        operationType: logTypeFilter.value || undefined,
+        result: logResultFilter.value || undefined,
+      },
+    });
+    const data = response.data?.data || {};
+    operationLogs.value = data.items || [];
+    logsTotal.value = Number(data.total) || 0;
+    lastLoadedLogPage.value = Number(data.page) || page;
+  } catch (e) {
+    show(e.response?.data?.message || "管理员日志加载失败", true);
+  }
+}
+function reloadLogsFromFirstPage() {
+  logsPage.value = 1;
+  lastLoadedLogPage.value = 1;
+  loadOperationLogs(1);
+}
+async function loadOperationTypes() {
+  try {
+    const response = await axios.get("/api/v1/admin/operation-logs/types");
+    operationTypes.value = response.data?.data || [];
+  } catch {
+    operationTypes.value = [];
+  }
+}
+
 async function loadAll() {
   loading.value = true;
   try {
     if (isSystemAdmin.value) {
-      const [userResponse, roleResponse, configResponse, logResponse] = await Promise.all([
+      const [userResponse, roleResponse, configResponse, logResponse, logTypeResponse] = await Promise.all([
         axios.get("/api/v1/admin/users"), axios.get("/api/v1/admin/roles"),
-        axios.get("/api/v1/admin/configs"), axios.get("/api/v1/admin/operation-logs"),
+        axios.get("/api/v1/admin/configs"),
+        axios.get("/api/v1/admin/operation-logs", { params: { page: 1, size: 20 } }),
+        axios.get("/api/v1/admin/operation-logs/types"),
       ]);
       users.value = apiData(userResponse, {}).items || [];
       roles.value = apiData(roleResponse, {}).items || [];
       configs.value = apiData(configResponse, []);
-      operationLogs.value = apiData(logResponse, {}).items || [];
+      const logData = apiData(logResponse, {});
+      operationLogs.value = logData.items || [];
+      logsTotal.value = Number(logData.total) || 0;
+      logsPage.value = 1;
+      lastLoadedLogPage.value = 1;
+      operationTypes.value = apiData(logTypeResponse, []) || [];
     } else {
       const [resourceResponse, typeResponse, bookingResponse, approvalResponse, assetResponse, categoryResponse, ticketResponse, teacherResponse, violationResponse] = await Promise.all([
         axios.get("/api/v1/resources"), axios.get("/api/v1/admin/resource-types"),
@@ -596,7 +631,7 @@ onMounted(loadAll);
 
       <template v-else-if="activeTab === 'logs'">
         <div class="toolbar log-toolbar">
-          <label class="search"><Search :size="16" /><input v-model="logQuery" placeholder="搜索管理员、对象、请求号或 IP" /></label>
+          <label class="search"><Search :size="16" /><input v-model="logQuery" placeholder="搜索操作类型、对象、请求号或 IP" /></label>
           <div class="log-filters">
             <select v-model="logTypeFilter"><option value="">全部操作</option><option v-for="type in operationTypes" :key="type" :value="type">{{ operationName(type) }}</option></select>
             <select v-model="logResultFilter"><option value="">全部结果</option><option value="SUCCESS">成功</option><option value="FAILED">失败</option></select>
@@ -605,7 +640,7 @@ onMounted(loadAll);
         </div>
         <section class="admin-section data-table operation-log-table">
           <div class="data-row log-grid table-head"><span>操作时间</span><span>管理员</span><span>操作</span><span>目标与摘要</span><span>结果</span><span>请求信息</span></div>
-          <div v-for="item in pagedLogs" :key="item.id" class="data-row log-grid">
+          <div v-for="item in operationLogs" :key="item.id" class="data-row log-grid">
             <span>{{ formatTime(item.createdAt) }}</span>
             <span><b>{{ operationOperator(item) }}</b><small>ID {{ item.operatorId }}</small></span>
             <span><b>{{ operationName(item.operationType) }}</b><small>{{ item.operationType }}</small></span>

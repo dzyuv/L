@@ -101,7 +101,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         User user = find(userId);
         if (!"ACTIVE".equals(status)) {
             if (resourceManagers.isResourceManager(userId)) {
-                throw new BusinessException("USER_IS_RESOURCE_MANAGER", "该用户是资源负责人，请先在资源管理中解除负责人后再停用账号", HttpStatus.CONFLICT);
+                throw new BusinessException("USER_IS_RESOURCE_MANAGER", "The user is a resource manager; remove the manager assignment before disabling the account", HttpStatus.CONFLICT);
             }
             approvals.release(userId);
         }
@@ -130,7 +130,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         boolean removingTeacher = user.roles.stream().anyMatch(role -> Roles.TEACHER.equals(role.code))
                 && !roleCodes.contains(Roles.TEACHER);
         if (removingTeacher && resourceManagers.isResourceManager(userId)) {
-            throw new BusinessException("USER_IS_RESOURCE_MANAGER", "该用户是资源负责人，请先在资源管理中解除负责人后再移除教师角色", HttpStatus.CONFLICT);
+            throw new BusinessException("USER_IS_RESOURCE_MANAGER", "The user is a resource manager; remove the manager assignment before removing the teacher role", HttpStatus.CONFLICT);
         }
         if (removingTeacher) approvals.release(userId);
         user.roles.clear();
@@ -266,7 +266,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         }
         User user = find(userId);
         if (resourceManagers.isResourceManager(userId)) {
-            throw new BusinessException("USER_IS_RESOURCE_MANAGER", "该用户是资源负责人，请先在资源管理中解除负责人后再删除账号", HttpStatus.CONFLICT);
+            throw new BusinessException("USER_IS_RESOURCE_MANAGER", "The user is a resource manager; remove the manager assignment before deleting the account", HttpStatus.CONFLICT);
         }
         approvals.release(userId);
         user.deleted = true;

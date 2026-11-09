@@ -103,11 +103,11 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
         roleGuard.requireLabAdmin(servletRequest); resource(id);
         UserLookupClient.UserSummary managerUser = userLookup.find(request.userId());
         if (managerUser.deleted() || !"ACTIVE".equals(managerUser.status()) || !managerUser.roles().contains(Roles.TEACHER)) {
-            throw new BusinessException("MANAGER_MUST_BE_TEACHER", "资源负责人必须是启用状态的教师", HttpStatus.BAD_REQUEST);
+            throw new BusinessException("MANAGER_MUST_BE_TEACHER", "The resource manager must be an active teacher", HttpStatus.BAD_REQUEST);
         }
         boolean exists=managers.findByResourceIdOrderByIdAsc(id).stream()
                 .anyMatch(item->"OWNER".equals(item.managerType)&&Objects.equals(item.userId, request.userId()));
-        if (exists) throw new BusinessException("MANAGER_EXISTS", "该用户已经是此资源的负责人", HttpStatus.CONFLICT);
+        if (exists) throw new BusinessException("MANAGER_EXISTS", "This user is already a manager of this resource", HttpStatus.CONFLICT);
         ResourceManager manager=new ResourceManager(); manager.resourceId=id; manager.userId=request.userId(); manager.managerType="OWNER";
         manager.scopeType="RESOURCE"; manager.scopeValue="";
         return managers.save(manager);
@@ -129,7 +129,7 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
     }
     public Map<String,Object> calendar(Long id, LocalDate start, LocalDate end) {
         if (start == null || end == null || start.isAfter(end)) throw new BusinessException("INVALID_DATE_RANGE", "Calendar start must not be after end", HttpStatus.BAD_REQUEST);
-        if (start.plusDays(62).isBefore(end)) throw new BusinessException("INVALID_DATE_RANGE", "日历查询范围不能超过 63 天", HttpStatus.BAD_REQUEST);
+        if (start.plusDays(62).isBefore(end)) throw new BusinessException("INVALID_DATE_RANGE", "Calendar range must not exceed 63 days", HttpStatus.BAD_REQUEST);
         Resource resource=resource(id); List<Map<String,Object>> days=new ArrayList<>();
         List<ResourceClosure> activeClosures=closures.findByResourceIdAndStatusNot(id,"CANCELED");
         for(LocalDate date=start;!date.isAfter(end);date=date.plusDays(1)) {
@@ -157,8 +157,8 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
     public ResourceController.BookingRule bookingRule(Long id, LocalDateTime startTime, LocalDateTime endTime, int participants, Long applicantUserId, HttpServletRequest servletRequest) {
         internalServices.require(servletRequest);
         if(!startTime.isBefore(endTime)) throw new BusinessException("INVALID_TIME","Start time must be before end time",HttpStatus.BAD_REQUEST);
-        if(!startTime.toLocalDate().equals(endTime.toLocalDate())) throw new BusinessException("BOOKING_NOT_SAME_DAY","预约必须在同一天内",HttpStatus.BAD_REQUEST);
-        if(!startTime.isAfter(LocalDateTime.now())) throw new BusinessException("BOOKING_START_IN_PAST","预约开始时间必须晚于当前时间",HttpStatus.BAD_REQUEST);
+        if(!startTime.toLocalDate().equals(endTime.toLocalDate())) throw new BusinessException("BOOKING_NOT_SAME_DAY","Bookings must start and end on the same day",HttpStatus.BAD_REQUEST);
+        if(!startTime.isAfter(LocalDateTime.now())) throw new BusinessException("BOOKING_START_IN_PAST","Booking start time must be in the future",HttpStatus.BAD_REQUEST);
         Resource resource=resource(id); if(resource.deleted||!"ACTIVE".equals(resource.status)) throw new BusinessException("RESOURCE_UNAVAILABLE","Resource is not available",HttpStatus.UNPROCESSABLE_ENTITY);
         ResourceType type=types.findById(resource.typeId).orElseThrow(()->new BusinessException("TYPE_NOT_FOUND","Resource type does not exist",HttpStatus.NOT_FOUND));
         if(type.deleted||!type.enabled) throw new BusinessException("RESOURCE_UNAVAILABLE","Resource type is not available",HttpStatus.UNPROCESSABLE_ENTITY);
@@ -167,7 +167,7 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
         long minutes=Duration.between(startTime,endTime).toMinutes();
         int maxDuration=Math.min(resource.maxDurationMinutes,schedule.maxDurationMinutes);
         if(startTime.getSecond()!=0||startTime.getNano()!=0||endTime.getSecond()!=0||endTime.getNano()!=0||minutes%schedule.slotMinutes!=0||Duration.between(startTime.toLocalDate().atTime(schedule.openTime),startTime).toMinutes()%schedule.slotMinutes!=0||minutes>maxDuration) {
-            throw new BusinessException("INVALID_SLOT","所选时段不符合开放粒度和最长预约时长",HttpStatus.BAD_REQUEST);
+            throw new BusinessException("INVALID_SLOT","The selected slot does not match the schedule granularity or maximum duration",HttpStatus.BAD_REQUEST);
         }
         if(closures.findByResourceIdAndStatusNot(id,"CANCELED").stream().anyMatch(item->item.startTime.isBefore(endTime)&&item.endTime.isAfter(startTime))) throw new BusinessException("RESOURCE_CLOSED","Resource is closed during this interval",HttpStatus.UNPROCESSABLE_ENTITY);
         int approvalLevel=resource.approvalLevelOverride!=null?resource.approvalLevelOverride:type.defaultApprovalLevel;
@@ -179,7 +179,10 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
             }
             List<ResourceManager> owners=managers.findByResourceIdOrderByIdAsc(id).stream()
                     .filter(item->"OWNER".equals(item.managerType)||"APPROVER".equals(item.managerType)).toList();
-            approver=owners.stream().map(item->item.userId).filter(userId->!Objects.equals(userId,applicantUserId)).findFirst().orElse(null);
+            approver=owners.stream().map(item->item.userId)
+                    .filter(userId->!Objects.equals(userId,applicantUserId))
+                    .filter(this::isEligibleApprover)
+                    .findFirst().orElse(null);
             if (approver != null) {
                 approverRole = Roles.TEACHER;
             } else if (approvalLevel >= 2) {
@@ -192,6 +195,14 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
     }
     private Resource resource(Long id) {
         return resources.findById(id).filter(item -> !item.deleted).orElseThrow(()->new BusinessException("NOT_FOUND","Resource does not exist",HttpStatus.NOT_FOUND));
+    }
+    private boolean isEligibleApprover(Long userId) {
+        UserLookupClient.LookupResult result = userLookup.lookupForRouting(userId);
+        if (!result.available()) return true;
+        UserLookupClient.UserSummary user = result.summary();
+        return user != null && !user.deleted()
+                && "ACTIVE".equals(user.status())
+                && user.roles().contains(Roles.TEACHER);
     }
     private void requireType(Long id) {
         if(types.findById(id).filter(item -> !item.deleted && item.enabled).isEmpty()) throw new BusinessException("TYPE_NOT_FOUND","Resource type does not exist",HttpStatus.NOT_FOUND);

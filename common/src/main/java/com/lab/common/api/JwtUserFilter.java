@@ -25,28 +25,28 @@ public class JwtUserFilter extends OncePerRequestFilter {
     @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
         String header = request.getHeader("Authorization");
         if (header == null || !header.startsWith("Bearer ")) {
-            unauthorized(request, response, "请先登录后再操作");
+            unauthorized(request, response, "Authentication required");
             return;
         }
         try {
             Claims claims = Jwts.parser().verifyWith(keys.key()).build().parseSignedClaims(header.substring(7)).getPayload();
             if(!"access".equals(claims.get("tokenType",String.class))){
-                unauthorized(request, response, "请先登录后再操作");
+                unauthorized(request, response, "Authentication required");
                 return;
             }
             Long userId = Long.valueOf(claims.getSubject());
             Object rawVersion = claims.get("ver");
             if (!(rawVersion instanceof Number number)) {
-                unauthorized(request, response, "登录已失效，请重新登录");
+                unauthorized(request, response, "Session expired; please sign in again");
                 return;
             }
             Integer currentVersion = tokenVersions.currentVersion(userId);
             if (currentVersion == null) {
-                serviceUnavailable(request, response, "登录状态暂时无法校验，请稍后重试");
+                serviceUnavailable(request, response, "Unable to verify the session; please retry later");
                 return;
             }
             if (currentVersion.intValue() != number.intValue()) {
-                unauthorized(request, response, "登录已失效，请重新登录");
+                unauthorized(request, response, "Session expired; please sign in again");
                 return;
             }
             request.setAttribute("userId", userId);
@@ -55,7 +55,7 @@ public class JwtUserFilter extends OncePerRequestFilter {
             request.setAttribute("roles", claims.get("roles"));
         }
         catch (Exception ex) {
-            unauthorized(request, response, "登录已失效，请重新登录");
+            unauthorized(request, response, "Session expired; please sign in again");
             return;
         }
         chain.doFilter(request, response);

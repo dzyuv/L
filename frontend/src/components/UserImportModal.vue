@@ -24,7 +24,7 @@ function downloadTemplate() {
   link.href = url;
   link.download = "用户导入模板.csv";
   link.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function onFile(event) {

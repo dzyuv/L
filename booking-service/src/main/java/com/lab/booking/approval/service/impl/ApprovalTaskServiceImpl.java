@@ -88,10 +88,10 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         }
         String normalizedComment = comment == null ? null : comment.trim();
         if ("reject".equals(action) && (normalizedComment == null || normalizedComment.isBlank())) {
-            throw new BusinessException("REJECTION_REASON_REQUIRED", "驳回时必须填写原因", HttpStatus.BAD_REQUEST);
+            throw new BusinessException("REJECTION_REASON_REQUIRED", "A rejection reason is required", HttpStatus.BAD_REQUEST);
         }
         if (normalizedComment != null && normalizedComment.length() > 500) {
-            throw new BusinessException("INVALID_ARGUMENT", "审批说明不能超过 500 个字符", HttpStatus.BAD_REQUEST);
+            throw new BusinessException("INVALID_ARGUMENT", "Approval comment must not exceed 500 characters", HttpStatus.BAD_REQUEST);
         }
         String decision = "approve".equals(action) ? "APPROVED" : "REJECTED";
         try {

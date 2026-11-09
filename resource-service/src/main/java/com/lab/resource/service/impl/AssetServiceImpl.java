@@ -362,7 +362,7 @@ public class AssetServiceImpl implements AssetService {
         if (phone.startsWith("+86")) phone = phone.substring(3);
         else if (phone.startsWith("86") && phone.length() == 13) phone = phone.substring(2);
         if (!phone.matches("1\\d{10}") && !phone.matches("\\d{7,12}")) {
-            throw new BusinessException("INVALID_PHONE", "请填写有效的维修负责人电话", HttpStatus.BAD_REQUEST);
+            throw new BusinessException("INVALID_PHONE", "A valid maintenance contact phone is required", HttpStatus.BAD_REQUEST);
         }
         return phone;
     }

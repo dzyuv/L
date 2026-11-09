@@ -25,30 +25,30 @@ public class GlobalExceptionHandler {
     }
     @ExceptionHandler({MethodArgumentNotValidException.class, ConstraintViolationException.class})
     ResponseEntity<ApiResponse<Void>> validation(Exception e,HttpServletRequest r){
-        return ResponseEntity.badRequest().body(ApiResponse.error("INVALID_ARGUMENT","提交的信息不完整或格式不正确",id(r)));
+        return ResponseEntity.badRequest().body(ApiResponse.error("INVALID_ARGUMENT","Submitted data is incomplete or invalid",id(r)));
     }
     @ExceptionHandler({HttpMessageNotReadableException.class, MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
     ResponseEntity<ApiResponse<Void>> malformed(Exception e,HttpServletRequest r){
-        return ResponseEntity.badRequest().body(ApiResponse.error("INVALID_ARGUMENT","请求格式不正确，请检查填写内容",id(r)));
+        return ResponseEntity.badRequest().body(ApiResponse.error("INVALID_ARGUMENT","Request format is invalid",id(r)));
     }
     @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
     ResponseEntity<ApiResponse<Void>> missing(Exception e, HttpServletRequest r) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("NOT_FOUND", "请求的数据不存在或已被删除", id(r)));
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("NOT_FOUND", "The requested data does not exist or has been removed", id(r)));
     }
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     ResponseEntity<ApiResponse<Void>> methodNotAllowed(Exception e, HttpServletRequest r) {
-        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(ApiResponse.error("INVALID_ACTION", "不支持该操作", id(r)));
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(ApiResponse.error("INVALID_ACTION", "This operation is not supported", id(r)));
     }
     @ExceptionHandler(ResourceAccessException.class)
     ResponseEntity<ApiResponse<Void>> upstreamUnavailable(ResourceAccessException e, HttpServletRequest r) {
         log.warn("Downstream service is unavailable: {} {}", r.getMethod(), r.getRequestURI(), e);
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(ApiResponse.error("SERVICE_UNAVAILABLE", "服务暂时不可用，请稍后重试", id(r)));
+                .body(ApiResponse.error("SERVICE_UNAVAILABLE", "Service is temporarily unavailable; please retry later", id(r)));
     }
 
     @ExceptionHandler(Exception.class) ResponseEntity<ApiResponse<Void>> other(Exception e, HttpServletRequest r){
         log.error("Unhandled request failure: {} {}", r.getMethod(), r.getRequestURI(), e);
-        return ResponseEntity.internalServerError().body(ApiResponse.error("INTERNAL_ERROR", "系统处理失败，请稍后重试", id(r)));
+        return ResponseEntity.internalServerError().body(ApiResponse.error("INTERNAL_ERROR", "Request processing failed; please retry later", id(r)));
     }
     private String id(HttpServletRequest r){
         Object id=r.getAttribute(RequestIdFilter.HEADER);

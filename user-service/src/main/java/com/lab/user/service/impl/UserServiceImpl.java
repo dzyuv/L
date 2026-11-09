@@ -8,6 +8,8 @@ import com.lab.user.controller.AuthController;
 import com.lab.user.service.UserService;
 import io.jsonwebtoken.Jwts;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -23,11 +25,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class UserServiceImpl implements UserService {
+    private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
     private final UserRepository users;
     private final RoleRepository roles;
     private final PasswordEncoder encoder;
     private final JwtKeyProvider jwtKeys;
     private final RefreshTokenRepository refreshTokens;
+    private final ApprovalReleaseClient approvals;
     private final SecureRandom random = new SecureRandom();
     private final long accessTokenMillis;
     private final long refreshTokenSeconds;
@@ -37,12 +41,14 @@ public class UserServiceImpl implements UserService {
 
     public UserServiceImpl(UserRepository users, RoleRepository roles, PasswordEncoder encoder,
                            JwtKeyProvider jwtKeys, RefreshTokenRepository refreshTokens,
+                           ApprovalReleaseClient approvals,
                            @Value("${security.jwt.access-token-hours:2}") int accessTokenHours,
                            @Value("${security.jwt.refresh-token-days:30}") int refreshTokenDays,
                            @Value("${security.login.max-failures:5}") int maxLoginFailures,
                            @Value("${security.login.lock-minutes:15}") int lockMinutes) {
         this.users = users; this.roles = roles; this.encoder = encoder;
         this.jwtKeys = jwtKeys; this.refreshTokens = refreshTokens;
+        this.approvals = approvals;
         this.accessTokenMillis = accessTokenHours * 60L * 60L * 1000L;
         this.refreshTokenSeconds = refreshTokenDays * 24L * 60L * 60L;
         this.maxLoginFailures = maxLoginFailures;
@@ -96,6 +102,7 @@ public class UserServiceImpl implements UserService {
                 user.status = "LOCKED";
                 user.lockedUntil = now.plusSeconds(lockMinutes * 60L);
                 users.updateLoginState(user.id, user.status, user.lockedUntil, user.failedLoginCount, user.lastLoginAt);
+                releaseApprovalsQuietly(user.id);
                 throw new BusinessException("USER_LOCKED", "account is temporarily locked", HttpStatus.LOCKED);
             }
             users.updateLoginState(user.id, user.status, user.lockedUntil, user.failedLoginCount, user.lastLoginAt);
@@ -186,8 +193,15 @@ public class UserServiceImpl implements UserService {
                 "user", profile(user));
     }
 
-    private String randomToken() {
-        byte[] bytes = new byte[48];
+    private void releaseApprovalsQuietly(Long userId) {
+        try {
+            approvals.release(userId);
+        } catch (RuntimeException exception) {
+            log.warn("Unable to release pending approvals for locked user {}: {}", userId, exception.getMessage());
+        }
+    }
+
+    private String randomToken() {        byte[] bytes = new byte[48];
         random.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }

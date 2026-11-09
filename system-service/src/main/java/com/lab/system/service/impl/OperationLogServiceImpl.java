@@ -76,6 +76,12 @@ public class OperationLogServiceImpl implements OperationLogService {
         logs.save(item);
     }
 
+    @Override
+    public List<String> operationTypes(HttpServletRequest request) {
+        roleGuard.requireSystemAdmin(request);
+        return logs.findDistinctOperationTypes();
+    }
+
     private Map<String, Object> view(OperationLog item) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", item.id);

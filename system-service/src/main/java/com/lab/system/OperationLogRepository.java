@@ -5,8 +5,10 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lab.common.persistence.CrudMapper;
+import org.apache.ibatis.annotations.Select;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public interface OperationLogRepository extends CrudMapper<OperationLog> {
     default IPage<OperationLog> search(String operationType, String result, String keyword, Page<OperationLog> page) {
@@ -29,4 +31,7 @@ public interface OperationLogRepository extends CrudMapper<OperationLog> {
     default long deleteByCreatedAtBefore(LocalDateTime cutoff) {
         return delete(Wrappers.<OperationLog>query().lt("created_at", cutoff));
     }
+
+    @Select("SELECT DISTINCT operation_type FROM operation_log WHERE operation_type IS NOT NULL AND operation_type <> '' ORDER BY operation_type")
+    List<String> findDistinctOperationTypes();
 }
