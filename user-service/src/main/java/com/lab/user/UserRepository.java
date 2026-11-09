@@ -10,6 +10,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.List;
 public interface UserRepository extends CrudMapper<User>{
@@ -29,6 +30,14 @@ public interface UserRepository extends CrudMapper<User>{
     }
     default boolean existsByUsername(String username) {
         return selectCount(Wrappers.<User>query().eq("username", username)) > 0;
+    }
+
+    default long countByDeletedFalse() {
+        return selectCount(Wrappers.<User>query().eq("deleted", false));
+    }
+
+    default long countByDeletedFalseAndStatus(String status) {
+        return selectCount(Wrappers.<User>query().eq("deleted", false).eq("status", status));
     }
     default List<User> findByDeletedFalseOrderByCreatedAtDesc() {
         return selectList(Wrappers.<User>query().eq("deleted", false).orderByDesc("created_at"))
@@ -66,6 +75,9 @@ public interface UserRepository extends CrudMapper<User>{
 
     @Select("SELECT r.* FROM role r JOIN user_role ur ON ur.role_id=r.id WHERE ur.user_id=#{userId} ORDER BY r.id")
     List<Role> selectRoles(@Param("userId") Long userId);
+
+    @Select("SELECT id, username, real_name AS realName FROM `user` WHERE deleted = 0 ORDER BY id")
+    List<Map<String, Object>> findAllDirectory();
 
     @Select("SELECT p.* FROM permission p JOIN role_permission rp ON rp.permission_id=p.id WHERE rp.role_id=#{roleId} ORDER BY p.id")
     List<Permission> selectPermissions(@Param("roleId") Long roleId);

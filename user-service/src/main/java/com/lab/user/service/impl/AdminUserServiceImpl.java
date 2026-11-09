@@ -63,6 +63,18 @@ public class AdminUserServiceImpl implements AdminUserService {
     }
 
     @Override
+    public Map<String, Object> stats(HttpServletRequest request) {
+        roleGuard.requireSystemAdmin(request);
+        return Map.of("total", users.countByDeletedFalse(), "active", users.countByDeletedFalseAndStatus("ACTIVE"));
+    }
+
+    @Override
+    public List<Map<String, Object>> directory(HttpServletRequest request) {
+        roleGuard.requireSystemAdmin(request);
+        return users.findAllDirectory();
+    }
+
+    @Override
     public Map<String, Object> teachers(HttpServletRequest request) {
         roleGuard.requireAny(request, Roles.LAB_ADMIN, Roles.SYSTEM_ADMIN);
         List<Map<String, Object>> items = users.findByDeletedFalseOrderByCreatedAtDesc().stream()

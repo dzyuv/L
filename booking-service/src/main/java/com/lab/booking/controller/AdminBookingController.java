@@ -26,6 +26,9 @@ public class AdminBookingController {
             @RequestParam(value="size", required=false) Integer size, HttpServletRequest request) {
         return ok(service.violations(PageQuery.of(page, size), request), request);
     }
+    @GetMapping("/violations/stats") public ApiResponse<?> violationStats(HttpServletRequest request) {
+        return ok(service.violationStats(request), request);
+    }
     @PutMapping("/violations/{id}") public ApiResponse<?> process(@PathVariable("id") Long id, @Valid @RequestBody ViolationRequest body,
             HttpServletRequest request) { return ok(service.processViolation(id, body.status(), body.comment(), request), request); }
     private <T> ApiResponse<T> ok(T data, HttpServletRequest request) { return ApiResponse.success(data, Objects.toString(request.getAttribute("X-Request-Id"), "")); }

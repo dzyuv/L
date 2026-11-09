@@ -30,6 +30,14 @@ public class AdminUserController {
                                 @RequestParam(value = "page", required = false) Integer page,
                                 @RequestParam(value = "size", required = false) Integer size,
                                 HttpServletRequest request) { return ok(service.list(query, status, PageQuery.of(page, size), request), request); }
+    @GetMapping("/users/stats")
+    public ApiResponse<?> userStats(HttpServletRequest request) {
+        return ok(service.stats(request), request);
+    }
+    @GetMapping("/users/directory")
+    public ApiResponse<?> userDirectory(HttpServletRequest request) {
+        return ok(service.directory(request), request);
+    }
     @GetMapping("/users/teachers")
     public ApiResponse<?> teachers(HttpServletRequest request) { return ok(service.teachers(request), request); }
     @GetMapping("/roles") public ApiResponse<?> roles(HttpServletRequest request) { return ok(service.roles(request), request); }

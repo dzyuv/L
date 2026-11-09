@@ -18,9 +18,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -118,5 +121,23 @@ class AdminUserServiceImplTest {
 
         verify(approvals).release(5L);
         verify(users).save(user);
+    }
+
+    @Test
+    void returnsUserStats() {
+        when(users.countByDeletedFalse()).thenReturn(12L);
+        when(users.countByDeletedFalseAndStatus("ACTIVE")).thenReturn(9L);
+
+        assertThat(service.stats(request))
+                .containsEntry("total", 12L)
+                .containsEntry("active", 9L);
+    }
+
+    @Test
+    void returnsUserDirectory() {
+        List<Map<String, Object>> entries = List.of(Map.of("id", 1L, "username", "u", "realName", "User"));
+        when(users.findAllDirectory()).thenReturn(entries);
+
+        assertThat(service.directory(request)).isEqualTo(entries);
     }
 }

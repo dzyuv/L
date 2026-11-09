@@ -21,6 +21,7 @@ public interface BookingService {
     void expirePendingApprovals();
     Map<String, Object> adminList(Long resourceId, Long userId, String status, PageQuery pageQuery, HttpServletRequest servletRequest);
     Map<String, Object> violations(PageQuery pageQuery, HttpServletRequest servletRequest);
+    Map<String, Object> violationStats(HttpServletRequest servletRequest);
     Object processViolation(Long violationId, String status, String comment, HttpServletRequest servletRequest);
     Map<String, Object> cancelOverlappingForClosure(Long resourceId, LocalDateTime start, LocalDateTime end, String reason, HttpServletRequest servletRequest);
     Map<String, Object> restoreOverlappingForClosure(Long resourceId, LocalDateTime start, LocalDateTime end, HttpServletRequest servletRequest);

@@ -365,6 +365,13 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
+    public Map<String, Object> violationStats(HttpServletRequest servletRequest) {
+        roleGuard.requireLabAdmin(servletRequest);
+        return Map.of("openCount", violations.countByStatus("OPEN"),
+                "userViolations", violations.countGroupedByUser(6));
+    }
+
+    @Override
     @Transactional
     public Object processViolation(Long violationId, String status, String comment, HttpServletRequest servletRequest) {
         roleGuard.requireLabAdmin(servletRequest);

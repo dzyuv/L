@@ -40,10 +40,12 @@ const rejectionTarget = ref(null);
 const rejectionReason = ref("");
 const rejectionSaving = ref(false);
 const violations = ref([]);
+const violationStats = ref({ openCount: 0, userViolations: [] });
 const dismissTarget = ref(null);
 const dismissReason = ref("");
 const dismissSaving = ref(false);
 const users = ref([]);
+const userDirectory = ref([]);
 const teachers = ref([]);
 const roles = ref([]);
 const userImportOpen = ref(false);
@@ -78,26 +80,32 @@ const availableTeachers = computed(() => {
   return teachers.value.filter((item) => !assigned.has(Number(item.id)));
 });
 const pendingBookings = computed(() => bookings.value.filter((item) => item.status === "PENDING_APPROVAL").length);
-const activeUsers = computed(() => users.value.filter((item) => item.status === "ACTIVE").length);
+const userStats = ref({ total: 0, active: 0 });
+const activeUsers = computed(() => userStats.value.active || 0);
 const openMaintenance = computed(() => maintenanceTickets.value.filter((item) => !["CLOSED", "REJECTED"].includes(item.status)).length);
 const repairingAssets = computed(() => assets.value.filter((item) => item.status === "MAINTENANCE").length);
 const highValueAssets = computed(() => {
   const highValueCategoryIds = new Set(assetCategories.value.filter((item) => item.highValue).map((item) => item.id));
   return assets.value.filter((item) => highValueCategoryIds.has(item.categoryId)).length;
 });
-const displayUsers = computed(() => {
-  const term = query.value.trim().toLowerCase();
-  if (!term) return users.value;
-  return users.value.filter((item) => [item.username, item.realName, item.email].some((value) => String(value || "").toLowerCase().includes(term)));
-});
 const operationTypes = ref([]);
-const { page: usersPage, items: pagedUsers, total: usersTotal } = usePagination(displayUsers, 10);
+const usersPage = ref(1);
+const usersTotal = ref(0);
+const lastLoadedUserPage = ref(1);
 const logsPage = ref(1);
 const logsTotal = ref(0);
 const lastLoadedLogPage = ref(1);
-const { page: violationsPage, items: pagedViolations, total: violationsTotal } = usePagination(violations, 10);
+const violationsPage = ref(1);
+const violationsTotal = ref(0);
+const lastLoadedViolationPage = ref(1);
 const { page: approvalsPage, items: pagedApprovals, total: approvalsTotal } = usePagination(approvals, 5);
-watch(query, () => { usersPage.value = 1; });
+let userReloadTimer;
+watch(query, () => {
+  clearTimeout(userReloadTimer);
+  userReloadTimer = setTimeout(reloadUsersFromFirstPage, 300);
+});
+watch(usersPage, (page) => { if (page !== lastLoadedUserPage.value) loadUsers(page); });
+watch(violationsPage, (page) => { if (page !== lastLoadedViolationPage.value) loadViolations(page); });
 let logReloadTimer;
 watch([logQuery, logTypeFilter, logResultFilter], () => {
   clearTimeout(logReloadTimer);
@@ -124,10 +132,9 @@ const labReport = computed(() => {
     { key: "EXPIRED", label: "审批超时", count: counts.EXPIRED || 0 },
   ].map((item) => ({ ...item, color: STATUS_PIE_COLORS[item.key] || PIE_COLORS[0] }));
   const upcoming = bookings.value.filter(item => item.startTime && new Date(item.startTime) >= new Date()).sort((a, b) => new Date(a.startTime) - new Date(b.startTime)).slice(0, 6);
-  const violationSource = violations.value.length
-    ? violations.value
-    : bookings.value.filter((item) => item.status === "NO_SHOW");
-  const userViolations = aggregateUserCounts(violationSource, (item) => item.applicantName || item.applicantNameSnapshot);
+  const userViolations = violationStats.value.userViolations?.length
+    ? violationStats.value.userViolations
+    : aggregateUserCounts(bookings.value.filter((item) => item.status === "NO_SHOW"), (item) => item.applicantName || item.applicantNameSnapshot);
   const statusPieItems = statusItems.filter((item) => item.count > 0);
   return {
     total: bookings.value.length,
@@ -200,8 +207,9 @@ function operationTarget(item) {
   return item.targetId ? `${label} #${item.targetId}` : label;
 }
 function operationOperator(item) {
-  const operator = users.value.find((user) => Number(user.id) === Number(item.operatorId));
-  return operator ? `${operator.realName}（${operator.username}）` : `管理员 #${item.operatorId}`;
+  const operator = userDirectory.value.find((entry) => Number(entry.id) === Number(item.operatorId))
+    || users.value.find((entry) => Number(entry.id) === Number(item.operatorId));
+  return operator ? `${operator.realName || operator.username}（${operator.username}）` : `管理员 #${item.operatorId}`;
 }
 function operationDetail(item) {
   const detail = item.detail || {};
@@ -215,6 +223,35 @@ function operationDetail(item) {
   return item.reason || "-";
 }
 
+async function loadUsers(page = usersPage.value) {
+  try {
+    const response = await axios.get("/api/v1/admin/users", {
+      params: { page, size: 10, query: query.value.trim() || undefined },
+    });
+    const data = response.data?.data || {};
+    users.value = data.items || [];
+    usersTotal.value = Number(data.total) || 0;
+    lastLoadedUserPage.value = Number(data.page) || page;
+  } catch (e) {
+    show(e.response?.data?.message || "用户列表加载失败", true);
+  }
+}
+function reloadUsersFromFirstPage() {
+  usersPage.value = 1;
+  lastLoadedUserPage.value = 1;
+  loadUsers(1);
+}
+async function loadViolations(page = violationsPage.value) {
+  try {
+    const response = await axios.get("/api/v1/admin/violations", { params: { page, size: 10 } });
+    const data = response.data?.data || {};
+    violations.value = data.items || [];
+    violationsTotal.value = Number(data.total) || 0;
+    lastLoadedViolationPage.value = Number(data.page) || page;
+  } catch (e) {
+    show(e.response?.data?.message || "违约记录加载失败", true);
+  }
+}
 async function loadOperationLogs(page = logsPage.value) {
   try {
     const response = await axios.get("/api/v1/admin/operation-logs", {
@@ -239,26 +276,26 @@ function reloadLogsFromFirstPage() {
   lastLoadedLogPage.value = 1;
   loadOperationLogs(1);
 }
-async function loadOperationTypes() {
-  try {
-    const response = await axios.get("/api/v1/admin/operation-logs/types");
-    operationTypes.value = response.data?.data || [];
-  } catch {
-    operationTypes.value = [];
-  }
-}
-
 async function loadAll() {
   loading.value = true;
   try {
     if (isSystemAdmin.value) {
-      const [userResponse, roleResponse, configResponse, logResponse, logTypeResponse] = await Promise.all([
-        axios.get("/api/v1/admin/users"), axios.get("/api/v1/admin/roles"),
+      const [userResponse, userStatsResponse, userDirectoryResponse, roleResponse, configResponse, logResponse, logTypeResponse] = await Promise.all([
+        axios.get("/api/v1/admin/users", { params: { page: 1, size: 10, query: query.value.trim() || undefined } }),
+        axios.get("/api/v1/admin/users/stats"),
+        axios.get("/api/v1/admin/users/directory"),
+        axios.get("/api/v1/admin/roles"),
         axios.get("/api/v1/admin/configs"),
         axios.get("/api/v1/admin/operation-logs", { params: { page: 1, size: 20 } }),
         axios.get("/api/v1/admin/operation-logs/types"),
       ]);
-      users.value = apiData(userResponse, {}).items || [];
+      const userData = apiData(userResponse, {});
+      users.value = userData.items || [];
+      usersTotal.value = Number(userData.total) || 0;
+      usersPage.value = 1;
+      lastLoadedUserPage.value = 1;
+      userStats.value = apiData(userStatsResponse, { total: 0, active: 0 });
+      userDirectory.value = apiData(userDirectoryResponse, []) || [];
       roles.value = apiData(roleResponse, {}).items || [];
       configs.value = apiData(configResponse, []);
       const logData = apiData(logResponse, {});
@@ -268,12 +305,13 @@ async function loadAll() {
       lastLoadedLogPage.value = 1;
       operationTypes.value = apiData(logTypeResponse, []) || [];
     } else {
-      const [resourceResponse, typeResponse, bookingResponse, approvalResponse, assetResponse, categoryResponse, ticketResponse, teacherResponse, violationResponse] = await Promise.all([
+      const [resourceResponse, typeResponse, bookingResponse, approvalResponse, assetResponse, categoryResponse, ticketResponse, teacherResponse, violationResponse, violationStatsResponse] = await Promise.all([
         axios.get("/api/v1/resources"), axios.get("/api/v1/admin/resource-types"),
         axios.get("/api/v1/admin/bookings"), axios.get("/api/v1/approvals/mine"),
         axios.get("/api/v1/admin/assets"), axios.get("/api/v1/admin/assets/categories"),
         axios.get("/api/v1/admin/maintenance/tickets"), axios.get("/api/v1/admin/users/teachers"),
-        axios.get("/api/v1/admin/violations"),
+        axios.get("/api/v1/admin/violations", { params: { page: 1, size: 10 } }),
+        axios.get("/api/v1/admin/violations/stats"),
       ]);
       resources.value = apiData(resourceResponse, []);
       resourceTypes.value = apiData(typeResponse, []);
@@ -283,7 +321,12 @@ async function loadAll() {
       assetCategories.value = apiData(categoryResponse, []);
       maintenanceTickets.value = apiData(ticketResponse, {}).items || [];
       teachers.value = apiData(teacherResponse, {}).items || [];
-      violations.value = apiData(violationResponse, {}).items || [];
+      const violationData = apiData(violationResponse, {});
+      violations.value = violationData.items || [];
+      violationsTotal.value = Number(violationData.total) || 0;
+      violationsPage.value = 1;
+      lastLoadedViolationPage.value = 1;
+      violationStats.value = apiData(violationStatsResponse, { openCount: 0, userViolations: [] });
     }
   } catch (e) { show(e.response?.data?.message || "管理数据加载失败", true); }
   finally { loading.value = false; }
@@ -581,11 +624,11 @@ onMounted(loadAll);
       <div v-if="notice" class="admin-notice" :class="{ error }" role="status" aria-live="polite"><AlertTriangle v-if="error" :size="18" /><Check v-else :size="18" /><span><b>{{ error ? '操作未完成' : '操作成功' }}</b><small>{{ notice }}</small></span><button title="关闭提示" @click="notice = ''"><X :size="15" /></button></div>
 
       <template v-if="activeTab === 'overview'">
-        <div class="metric-strip" v-if="isSystemAdmin"><div><span>用户总数</span><strong>{{ users.length }}</strong><small>{{ activeUsers }} 个正常账号</small></div><div><span>角色数量</span><strong>{{ roles.length }}</strong><small>基于角色的权限控制</small></div><div><span>系统配置</span><strong>{{ configs.length }}</strong><small>当前参数项</small></div><div><span>管理员日志</span><strong>{{ operationLogs.length }}</strong><small>最近操作记录</small></div></div>
+        <div class="metric-strip" v-if="isSystemAdmin"><div><span>用户总数</span><strong>{{ userStats.total }}</strong><small>{{ activeUsers }} 个正常账号</small></div><div><span>角色数量</span><strong>{{ roles.length }}</strong><small>基于角色的权限控制</small></div><div><span>系统配置</span><strong>{{ configs.length }}</strong><small>当前参数项</small></div><div><span>管理员日志</span><strong>{{ logsTotal }}</strong><small>最近操作记录</small></div></div>
         <div class="metric-strip metric-strip-links" v-else>
           <button type="button" @click="activeTab = 'assets'"><span>资产总数</span><strong>{{ assets.length }}</strong><small>{{ highValueAssets }} 件贵重资产</small></button>
           <button type="button" @click="activeTab = 'maintenance'"><span>待处理报修</span><strong>{{ openMaintenance }}</strong><small>尚未关闭的维修工单</small></button>
-          <button type="button" @click="activeTab = 'violations'"><span>待处理违约</span><strong>{{ violations.filter((item) => item.status === 'OPEN').length }}</strong><small>未签到待确认或撤销</small></button>
+          <button type="button" @click="activeTab = 'violations'"><span>待处理违约</span><strong>{{ violationStats.openCount }}</strong><small>未签到待确认或撤销</small></button>
           <button type="button" @click="activeTab = 'bookings'"><span>待审批预约</span><strong>{{ approvals.length || pendingBookings }}</strong><small>需要管理员关注</small></button>
         </div>
         <div class="overview-body">
@@ -622,7 +665,7 @@ onMounted(loadAll);
 
       <template v-else-if="activeTab === 'users'">
         <div class="toolbar user-toolbar"><label class="search"><Search :size="16" /><input v-model="query" placeholder="搜索姓名、账号或邮箱" /></label><div class="toolbar-actions"><span>{{ usersTotal }} 位用户</span><button class="command" type="button" @click="userImportOpen = true"><Upload :size="16" />导入用户</button></div></div>
-        <section class="admin-section data-table"><div class="data-row user-grid table-head"><span>用户</span><span>联系方式</span><span>角色</span><span>状态</span><span>操作</span></div><div v-for="item in pagedUsers" :key="item.id" class="data-row user-grid"><span class="user-cell"><i class="avatar">{{ item.realName?.slice(0, 1) }}</i><span><b>{{ item.realName }}</b><small>{{ item.username }}</small></span></span><span><b>{{ item.email || '-' }}</b><small>{{ item.phone || '-' }}</small></span><span class="role-tags"><i v-for="role in item.roles" :key="role">{{ roleName(role) }}</i></span><span class="status" :class="item.status.toLowerCase()">{{ statusText(item.status) }}</span><span class="row-actions"><button @click="editUser(item)">角色与密码</button><button :class="{ danger: item.status === 'ACTIVE' }" @click="updateUserStatus(item)">{{ item.status === 'ACTIVE' ? '禁用' : '启用' }}</button><button class="danger" :disabled="Number(item.id) === Number(user.id)" @click="deleteUser(item)">删除</button></span></div><div v-if="!displayUsers.length" class="admin-empty">没有匹配的用户</div><PaginationBar v-model:page="usersPage" :size="10" :total="usersTotal" /></section>
+        <section class="admin-section data-table"><div class="data-row user-grid table-head"><span>用户</span><span>联系方式</span><span>角色</span><span>状态</span><span>操作</span></div><div v-for="item in users" :key="item.id" class="data-row user-grid"><span class="user-cell"><i class="avatar">{{ item.realName?.slice(0, 1) }}</i><span><b>{{ item.realName }}</b><small>{{ item.username }}</small></span></span><span><b>{{ item.email || '-' }}</b><small>{{ item.phone || '-' }}</small></span><span class="role-tags"><i v-for="role in item.roles" :key="role">{{ roleName(role) }}</i></span><span class="status" :class="item.status.toLowerCase()">{{ statusText(item.status) }}</span><span class="row-actions"><button @click="editUser(item)">角色与密码</button><button :class="{ danger: item.status === 'ACTIVE' }" @click="updateUserStatus(item)">{{ item.status === 'ACTIVE' ? '禁用' : '启用' }}</button><button class="danger" :disabled="Number(item.id) === Number(user.id)" @click="deleteUser(item)">删除</button></span></div><div v-if="!users.length" class="admin-empty">没有匹配的用户</div><PaginationBar v-model:page="usersPage" :size="10" :total="usersTotal" /></section>
       </template>
 
       <template v-else-if="activeTab === 'configs'">
@@ -711,7 +754,7 @@ onMounted(loadAll);
       <template v-else-if="activeTab === 'violations'">
         <section class="admin-section data-table">
           <div class="data-row violation-grid table-head"><span>申请人</span><span>预约</span><span>类型</span><span>发生时间</span><span>状态</span><span>处理</span></div>
-          <div v-for="item in pagedViolations" :key="item.id" class="data-row violation-grid">
+          <div v-for="item in violations" :key="item.id" class="data-row violation-grid">
             <span><b>{{ item.applicantName || `用户 ${item.userId}` }}</b><small>用户 {{ item.userId }}</small></span>
             <span><b>{{ item.resourceName || '-' }}</b><small>{{ item.bookingNo || `预约 #${item.bookingId}` }} · {{ formatTime(item.startTime) }}</small></span>
             <span>{{ violationTypeText(item.violationType) }}</span>
