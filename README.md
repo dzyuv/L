@@ -108,6 +108,7 @@ mysql -h127.0.0.1 -P3306 -uroot -p < database/test-data.sql
 ```
 
 > `database/manual/schema.sql` 保留为手动创建完整表结构的参考脚本；运行时以 Flyway 迁移为准。
+> 不要先手动执行 `schema.sql` 再让 Flyway 以 baseline 方式接管：迁移脚本假定数据库处于上一版本状态，部分 `ADD KEY` 不是幂等的。请让空库由 Flyway 创建，或手动建表后保持 `spring.flyway.enabled=false`。
 > `database/manual/reset.sql` 包含 `DROP DATABASE/TABLE`，仅可在可丢弃的本地环境中手动执行。
 
 ### 4. 构建并启动后端

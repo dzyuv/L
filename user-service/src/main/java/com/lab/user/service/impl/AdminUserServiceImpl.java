@@ -5,6 +5,7 @@ import com.lab.common.api.PageQuery;
 import com.lab.common.api.RoleGuard;
 import com.lab.common.api.Roles;
 import com.lab.common.exception.BusinessException;
+import com.lab.user.ApprovalReleaseClient;
 import com.lab.user.RefreshTokenRepository;
 import com.lab.user.ResourceManagerLookupClient;
 import com.lab.user.Role;
@@ -40,13 +41,16 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final RoleGuard roleGuard;
     private final AdminOperationLogger operationLogger;
     private final ResourceManagerLookupClient resourceManagers;
+    private final ApprovalReleaseClient approvals;
 
     public AdminUserServiceImpl(UserRepository users, RoleRepository roles, RefreshTokenRepository refreshTokens,
                                 PasswordEncoder passwordEncoder, RoleGuard roleGuard,
-                                AdminOperationLogger operationLogger, ResourceManagerLookupClient resourceManagers) {
+                                AdminOperationLogger operationLogger, ResourceManagerLookupClient resourceManagers,
+                                ApprovalReleaseClient approvals) {
         this.users = users; this.roles = roles; this.refreshTokens = refreshTokens;
         this.passwordEncoder = passwordEncoder; this.roleGuard = roleGuard;
         this.operationLogger = operationLogger; this.resourceManagers = resourceManagers;
+        this.approvals = approvals;
     }
 
     @Override
@@ -95,6 +99,12 @@ public class AdminUserServiceImpl implements AdminUserService {
             throw new BusinessException("SELF_DISABLE_FORBIDDEN", "Current administrator cannot disable their own account", HttpStatus.CONFLICT);
         }
         User user = find(userId);
+        if (!"ACTIVE".equals(status)) {
+            if (resourceManagers.isResourceManager(userId)) {
+                throw new BusinessException("USER_IS_RESOURCE_MANAGER", "该用户是资源负责人，请先在资源管理中解除负责人后再停用账号", HttpStatus.CONFLICT);
+            }
+            approvals.release(userId);
+        }
         user.status = status;
         user.failedLoginCount = 0;
         user.lockedUntil = null;
@@ -122,6 +132,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         if (removingTeacher && resourceManagers.isResourceManager(userId)) {
             throw new BusinessException("USER_IS_RESOURCE_MANAGER", "该用户是资源负责人，请先在资源管理中解除负责人后再移除教师角色", HttpStatus.CONFLICT);
         }
+        if (removingTeacher) approvals.release(userId);
         user.roles.clear();
         roleCodes.forEach(code -> user.roles.add(roles.findByCode(code)
                 .orElseThrow(() -> new BusinessException("ROLE_NOT_FOUND", "Role does not exist: " + code, HttpStatus.NOT_FOUND))));
@@ -254,6 +265,10 @@ public class AdminUserServiceImpl implements AdminUserService {
             throw new BusinessException("SELF_DELETE_FORBIDDEN", "Current administrator cannot delete their own account", HttpStatus.CONFLICT);
         }
         User user = find(userId);
+        if (resourceManagers.isResourceManager(userId)) {
+            throw new BusinessException("USER_IS_RESOURCE_MANAGER", "该用户是资源负责人，请先在资源管理中解除负责人后再删除账号", HttpStatus.CONFLICT);
+        }
+        approvals.release(userId);
         user.deleted = true;
         user.status = "DISABLED";
         user.tokenVersion++;

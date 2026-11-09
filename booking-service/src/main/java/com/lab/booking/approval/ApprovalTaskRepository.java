@@ -3,6 +3,8 @@ package com.lab.booking.approval;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.lab.common.api.Roles;
 import com.lab.common.persistence.CrudMapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 import java.util.Optional;
@@ -43,4 +45,7 @@ public interface ApprovalTaskRepository extends CrudMapper<ApprovalTask> {
     default List<ApprovalTask> findByBookingIdAndStatusIn(Long bookingId, List<String> statuses) {
         return selectList(Wrappers.<ApprovalTask>query().eq("booking_id", bookingId).in("status", statuses));
     }
+
+    @Update("UPDATE approval_task SET assigned_user_id = NULL WHERE assigned_user_id = #{userId} AND status = 'PENDING'")
+    int releaseAssignedTo(@Param("userId") Long userId);
 }

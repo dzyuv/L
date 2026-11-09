@@ -52,6 +52,8 @@ services:
     base-url: ${SYSTEM_SERVICE_URL:http://localhost:8087}
   resource:
     base-url: ${RESOURCE_SERVICE_URL:http://localhost:8082}
+  booking:
+    base-url: ${BOOKING_SERVICE_URL:http://localhost:8083}
 
 management:
   endpoints:

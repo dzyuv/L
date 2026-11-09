@@ -104,6 +104,7 @@ services:
       <<: *common-env
       SYSTEM_SERVICE_URL: http://system-service:8087
       RESOURCE_SERVICE_URL: http://resource-service:8082
+      BOOKING_SERVICE_URL: http://booking-service:8083
 
   resource-service:
     <<: *common-deps

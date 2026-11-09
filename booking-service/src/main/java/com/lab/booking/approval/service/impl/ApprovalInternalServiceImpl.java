@@ -58,6 +58,12 @@ public class ApprovalInternalServiceImpl implements ApprovalInternalService {
         return closePendingInternal(bookingId, reason);
     }
 
+    @Override
+    @Transactional
+    public int releaseAssignedTo(Long userId) {
+        return tasks.releaseAssignedTo(userId);
+    }
+
     private ApprovalTask closePendingInternal(Long bookingId, String reason) {
         String status = normalizeCloseReason(reason);
         List<ApprovalTask> pending = tasks.findByBookingIdAndStatus(bookingId, "PENDING");

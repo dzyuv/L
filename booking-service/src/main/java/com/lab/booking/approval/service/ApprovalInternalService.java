@@ -18,4 +18,6 @@ public interface ApprovalInternalService {
     ApprovalTask closePendingInNewTransaction(Long bookingId, String reason);
 
     ApprovalTask reopenCanceled(Long bookingId, LocalDateTime deadline);
+
+    int releaseAssignedTo(Long userId);
 }

@@ -3,6 +3,7 @@ package com.lab.user.service.impl;
 import com.lab.common.api.AdminOperationLogger;
 import com.lab.common.api.RoleGuard;
 import com.lab.common.exception.BusinessException;
+import com.lab.user.ApprovalReleaseClient;
 import com.lab.user.RefreshTokenRepository;
 import com.lab.user.ResourceManagerLookupClient;
 import com.lab.user.Role;
@@ -35,6 +36,7 @@ class AdminUserServiceImplTest {
     @Mock RoleGuard roleGuard;
     @Mock AdminOperationLogger operationLogger;
     @Mock ResourceManagerLookupClient resourceManagers;
+    @Mock ApprovalReleaseClient approvals;
     @Mock HttpServletRequest request;
     @InjectMocks AdminUserServiceImpl service;
 
@@ -56,5 +58,65 @@ class AdminUserServiceImplTest {
                 .isEqualTo("USER_IS_RESOURCE_MANAGER");
 
         verify(users, never()).save(any());
+    }
+
+    @Test
+    void releasesPendingApprovalsWhenRemovingTeacherRole() {
+        User user = new User();
+        user.id = 5L;
+        user.username = "u";
+        Role teacher = new Role();
+        teacher.id = 2L;
+        teacher.code = "TEACHER";
+        user.roles.add(teacher);
+        Role student = new Role();
+        student.id = 1L;
+        student.code = "STUDENT";
+        when(users.findById(5L)).thenReturn(Optional.of(user));
+        when(roleGuard.currentUserId(request)).thenReturn(1L);
+        when(resourceManagers.isResourceManager(5L)).thenReturn(false);
+        when(roles.findByCode("STUDENT")).thenReturn(Optional.of(student));
+        when(users.save(user)).thenReturn(user);
+
+        service.updateRoles(5L, Set.of("STUDENT"), request);
+
+        verify(approvals).release(5L);
+        verify(users).save(user);
+    }
+
+    @Test
+    void rejectsDisablingResourceManager() {
+        User user = new User();
+        user.id = 5L;
+        user.username = "u";
+        user.status = "ACTIVE";
+        when(users.findById(5L)).thenReturn(Optional.of(user));
+        when(roleGuard.currentUserId(request)).thenReturn(1L);
+        when(resourceManagers.isResourceManager(5L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.updateStatus(5L, "DISABLED", request))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).code())
+                .isEqualTo("USER_IS_RESOURCE_MANAGER");
+
+        verify(approvals, never()).release(any());
+        verify(users, never()).save(any());
+    }
+
+    @Test
+    void releasesPendingApprovalsWhenDisablingTeacher() {
+        User user = new User();
+        user.id = 5L;
+        user.username = "u";
+        user.status = "ACTIVE";
+        when(users.findById(5L)).thenReturn(Optional.of(user));
+        when(roleGuard.currentUserId(request)).thenReturn(1L);
+        when(resourceManagers.isResourceManager(5L)).thenReturn(false);
+        when(users.save(user)).thenReturn(user);
+
+        service.updateStatus(5L, "DISABLED", request);
+
+        verify(approvals).release(5L);
+        verify(users).save(user);
     }
 }
