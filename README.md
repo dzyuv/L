@@ -166,7 +166,7 @@ docker run --rm -p 8081:8081 \
 docker compose up -d --build
 ```
 
-Compose 会启动 MySQL、Nacos、Redis、`db-init`、5 个应用服务、前端以及 Prometheus/Grafana/Jaeger。Redis 用于网关分布式限流。`db-init` 在 MySQL 健康后执行 `database/init-databases.sh` 创建数据库与最小权限应用账号；各服务启动时由 Flyway 创建/升级表结构。应用服务与前端都配置了健康检查，gateway 会等待业务服务和 Redis 健康后再启动。
+Compose 会启动 MySQL、Nacos、Redis、`db-init`、5 个应用服务、前端以及 Prometheus/Grafana/Jaeger。Redis 用于网关分布式限流，网关不强制依赖 Redis 启动，Redis 不可用时自动回退到单实例内存限流。`db-init` 在 MySQL 健康后执行 `database/init-databases.sh` 创建数据库与最小权限应用账号；各服务启动时由 Flyway 创建/升级表结构。应用服务与前端都配置了健康检查，gateway 会等待业务服务健康后再启动。
 
 > 从旧版本升级时，使用 `docker compose up -d --build --remove-orphans` 启动，以移除已合并的 `approval-service` 容器。Flyway V3 会把 `lab_approval` 中的审批数据复制到 `lab_booking`。
 

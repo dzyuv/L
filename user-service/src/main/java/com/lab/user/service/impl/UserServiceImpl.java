@@ -115,7 +115,7 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException("REFRESH_TOKEN_INVALID", "Refresh token is invalid", HttpStatus.UNAUTHORIZED);
         }
         Instant now = Instant.now();
-        RefreshToken stored = refreshTokens.findByTokenHashAndRevokedAtIsNullAndExpiresAtAfter(hash(refreshToken), now)
+        RefreshToken stored = refreshTokens.findByTokenHashAndRevokedAtIsNullAndExpiresAtAfterForUpdate(hash(refreshToken), now)
                 .orElseThrow(() -> new BusinessException("REFRESH_TOKEN_INVALID", "Refresh token is invalid or expired", HttpStatus.UNAUTHORIZED));
         User user = users.findById(stored.userId)
                 .orElseThrow(() -> new BusinessException("REFRESH_TOKEN_INVALID", "User does not exist", HttpStatus.UNAUTHORIZED));

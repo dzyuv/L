@@ -6,9 +6,9 @@ import java.time.Instant;
 import java.util.Optional;
 
 public interface RefreshTokenRepository extends CrudMapper<RefreshToken> {
-    default Optional<RefreshToken> findByTokenHashAndRevokedAtIsNullAndExpiresAtAfter(String tokenHash,Instant now) {
+    default Optional<RefreshToken> findByTokenHashAndRevokedAtIsNullAndExpiresAtAfterForUpdate(String tokenHash,Instant now) {
         return Optional.ofNullable(selectOne(Wrappers.<RefreshToken>query()
-                .eq("token_hash", tokenHash).isNull("revoked_at").gt("expires_at", now)));
+                .eq("token_hash", tokenHash).isNull("revoked_at").gt("expires_at", now).last("FOR UPDATE")));
     }
     default Optional<RefreshToken> findByTokenHash(String tokenHash) {
         return Optional.ofNullable(selectOne(Wrappers.<RefreshToken>query().eq("token_hash", tokenHash)));
