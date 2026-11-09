@@ -253,7 +253,7 @@ public class AssetServiceImpl implements AssetService {
 
     @Transactional
     public MaintenanceTicket report(AssetController.ReportRequest body, HttpServletRequest request) {
-        Long userId = roles.currentUserId(request); Asset asset = body.assetId() == null ? null : findAsset(body.assetId());
+        Long userId = roles.currentUserId(request); Asset asset = body.assetId() == null ? null : assets.findByIdForUpdate(body.assetId()).filter(x -> !x.deleted).orElseThrow(() -> notFound("Asset does not exist"));
         if (asset == null && body.resourceId() == null && (body.location() == null || body.location().isBlank())) throw new BusinessException("LOCATION_REQUIRED", "Select a resource or provide the problem location", HttpStatus.BAD_REQUEST);
         if (asset != null && Set.of("SCRAPPED", "LOST").contains(asset.status)) throw new BusinessException("ASSET_UNAVAILABLE", "This asset cannot receive a maintenance report", HttpStatus.UNPROCESSABLE_ENTITY);
         if (body.resourceId() != null) validateResource(body.resourceId());
@@ -276,7 +276,7 @@ public class AssetServiceImpl implements AssetService {
         MaintenanceTicket ticket = tickets.findById(id).orElseThrow(() -> notFound("Maintenance ticket does not exist"));
         validateTransition(ticket.status, body.status());
         if (ticket.assetId == null && body.assetId() != null) {
-            Asset selected = findAsset(body.assetId());
+            Asset selected = assets.findByIdForUpdate(body.assetId()).filter(x -> !x.deleted).orElseThrow(() -> notFound("Asset does not exist"));
             if (tickets.existsByAssetIdAndStatusIn(selected.id, Set.of("REPORTED", "TRIAGED", "REPAIRING", "WAITING_ACCEPTANCE"))) {
                 throw new BusinessException("OPEN_TICKET_EXISTS", "This asset already has an open maintenance ticket", HttpStatus.CONFLICT);
             }

@@ -24,8 +24,10 @@ public class ResourceController {
 
     public record TypeUpdateRequest(@NotBlank @Size(max = 100) String name, @Min(0) int defaultApprovalLevel, boolean enabled) {
     }
-    public record ResourceRequest(@NotNull Long typeId, @NotBlank String name, @NotBlank String location, @Min(1) int capacity,
-                                  String description, @Size(max = 500) String imageUrl, @Min(1) int maxDurationMinutes,
+    public record ResourceRequest(@NotNull Long typeId, @NotBlank @Size(max = 255) String name,
+                                  @NotBlank @Size(max = 255) String location, @Min(1) int capacity,
+                                  @Size(max = 500) String description, @Size(max = 500) String imageUrl,
+                                  @Min(1) int maxDurationMinutes,
                                   boolean needCheckin, @Min(0) Integer approvalLevelOverride) {
 
     }

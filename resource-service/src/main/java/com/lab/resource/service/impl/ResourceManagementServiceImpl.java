@@ -22,9 +22,10 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
     private final ResourceManagerRepository managers;
     private final RoleGuard roleGuard;
     private final InternalServiceGuard internalServices;
+    private final UserLookupClient userLookup;
 
-    public ResourceManagementServiceImpl(ResourceRepository resources, ResourceTypeRepository types, ScheduleRepository schedules, ClosureRepository closures, ResourceManagerRepository managers, RoleGuard roleGuard, InternalServiceGuard internalServices) {
-        this.resources=resources; this.types=types; this.schedules=schedules; this.closures=closures; this.managers=managers; this.roleGuard=roleGuard; this.internalServices=internalServices;
+    public ResourceManagementServiceImpl(ResourceRepository resources, ResourceTypeRepository types, ScheduleRepository schedules, ClosureRepository closures, ResourceManagerRepository managers, RoleGuard roleGuard, InternalServiceGuard internalServices, UserLookupClient userLookup) {
+        this.resources=resources; this.types=types; this.schedules=schedules; this.closures=closures; this.managers=managers; this.roleGuard=roleGuard; this.internalServices=internalServices; this.userLookup=userLookup;
     }
     public List<Resource> list() {
         Set<Long> enabledTypes = types.findAll().stream()
@@ -52,6 +53,7 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
     }
     public Object createType(ResourceController.TypeRequest request, HttpServletRequest servletRequest) {
         roleGuard.requireLabAdmin(servletRequest);
+        types.findAll().stream().filter(item -> !item.deleted && item.name.equalsIgnoreCase(request.name())).findFirst().ifPresent(item -> { throw new BusinessException("TYPE_EXISTS", "Resource type already exists", HttpStatus.CONFLICT); });
         ResourceType type=new ResourceType();
         type.name=request.name();
         type.defaultApprovalLevel=request.defaultApprovalLevel();
@@ -99,6 +101,10 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
     }
     public Object addManager(Long id, ResourceController.ManagerRequest request, HttpServletRequest servletRequest) {
         roleGuard.requireLabAdmin(servletRequest); resource(id);
+        UserLookupClient.UserSummary managerUser = userLookup.find(request.userId());
+        if (managerUser.deleted() || !"ACTIVE".equals(managerUser.status()) || !managerUser.roles().contains(Roles.TEACHER)) {
+            throw new BusinessException("MANAGER_MUST_BE_TEACHER", "资源负责人必须是启用状态的教师", HttpStatus.BAD_REQUEST);
+        }
         boolean exists=managers.findByResourceIdOrderByIdAsc(id).stream()
                 .anyMatch(item->"OWNER".equals(item.managerType)&&Objects.equals(item.userId, request.userId()));
         if (exists) throw new BusinessException("MANAGER_EXISTS", "该用户已经是此资源的负责人", HttpStatus.CONFLICT);
@@ -119,6 +125,7 @@ public class ResourceManagementServiceImpl implements ResourceManagementService 
     }
     public Map<String,Object> calendar(Long id, LocalDate start, LocalDate end) {
         if (start == null || end == null || start.isAfter(end)) throw new BusinessException("INVALID_DATE_RANGE", "Calendar start must not be after end", HttpStatus.BAD_REQUEST);
+        if (start.plusDays(62).isBefore(end)) throw new BusinessException("INVALID_DATE_RANGE", "日历查询范围不能超过 63 天", HttpStatus.BAD_REQUEST);
         Resource resource=resource(id); List<Map<String,Object>> days=new ArrayList<>();
         List<ResourceClosure> activeClosures=closures.findByResourceIdAndStatusNot(id,"CANCELED");
         for(LocalDate date=start;!date.isAfter(end);date=date.plusDays(1)) {

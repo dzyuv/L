@@ -4,7 +4,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -40,8 +39,7 @@ public class AdminOperationLogger {
                 clientIp(request),
                 detail == null ? Map.of() : detail
         );
-        String authorization = Objects.toString(request.getHeader(HttpHeaders.AUTHORIZATION), "");
-        Runnable send = () -> send(body, authorization);
+        Runnable send = () -> send(body);
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
@@ -54,10 +52,9 @@ public class AdminOperationLogger {
         }
     }
 
-    private void send(OperationLogRequest body, String authorization) {
+    private void send(OperationLogRequest body) {
         try {
             client.post().uri("/api/v1/internal/operation-logs")
-                    .header(HttpHeaders.AUTHORIZATION, authorization)
                     .header(InternalServiceGuard.HEADER, internalToken)
                     .body(body).retrieve().toBodilessEntity();
         } catch (RuntimeException exception) {

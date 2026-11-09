@@ -65,6 +65,12 @@ public class ResourceClosureServiceImpl implements ResourceClosureService {
     public Map<String, Object> cancel(Long id, HttpServletRequest servletRequest) {
         roleGuard.requireLabAdmin(servletRequest);
         ResourceClosure closure=closures.findById(id).orElseThrow(()->new BusinessException("NOT_FOUND","Closure does not exist",HttpStatus.NOT_FOUND));
+        if ("CANCELED".equals(closure.status)) {
+            Map<String, Object> result=new LinkedHashMap<>();
+            result.put("closure", closure);
+            result.put("restoredCount", 0);
+            return result;
+        }
         int restored=bookingClosures.restoreOverlapping(closure.resourceId, closure.startTime, closure.endTime);
         closure.status="CANCELED";
         ResourceClosure saved=closures.save(closure);

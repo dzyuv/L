@@ -39,10 +39,12 @@ class JwtUserFilterTest {
     }
 
     @Test
-    void acceptsTokenWhenVersionCannotBeResolved() throws Exception {
+    void rejectsTokenWhenVersionCannotBeResolved() throws Exception {
         when(versions.currentVersion(7L)).thenReturn(null);
 
-        assertThat(filter(token(7L, 2)).getStatus()).isEqualTo(200);
+        MockHttpServletResponse response = filter(token(7L, 2));
+        assertThat(response.getStatus()).isEqualTo(503);
+        assertThat(response.getContentAsString()).contains("SERVICE_UNAVAILABLE");
     }
 
     private MockHttpServletResponse filter(String token) throws Exception {

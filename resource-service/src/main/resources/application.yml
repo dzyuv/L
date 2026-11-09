@@ -38,6 +38,8 @@ security:
 services:
   booking:
     base-url: ${BOOKING_SERVICE_URL:http://localhost:8083}
+  user:
+    base-url: ${USER_SERVICE_URL:http://localhost:8081}
 
 management:
   endpoints:

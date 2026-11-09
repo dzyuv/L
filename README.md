@@ -260,7 +260,7 @@ docker compose down -v            # 停止并删除数据卷（会清空数据�
 ## 安全说明
 
 - 不要把 `.env` 提交到版本库；如果历史提交中曾包含真实密钥，请立即轮换 `MYSQL_PASSWORD`、`JWT_SECRET`、`INTERNAL_SERVICE_TOKEN`。
-- 访问令牌包含 `ver` 声明，各服务通过 user-service 校验当前令牌版本（30 秒缓存）；禁用用户或调整角色后旧令牌立即失效。升级后不带 `ver` 的旧令牌会被拒绝，需要重新登录。
+- 访问令牌包含 `ver` 声明，各服务通过 user-service 校验当前令牌版本（30 秒缓存）；禁用用户或调整角色后旧令牌立即失效。升级后不带 `ver` 的旧令牌会被拒绝，需要重新登录。user-service 不可用时，业务服务返回 503 而不是放行旧令牌。
 - 网关默认按客户端限流 120 请求/分钟，可通过 `GATEWAY_RATE_LIMIT_PER_MINUTE` 调整，并返回 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy`、`Content-Security-Policy` 等安全响应头。
 - 网关限流只信任来自私有网段/回环代理的 `X-Forwarded-For`；前端 Nginx 会覆盖该头。不要把网关直接暴露给不可信网络。
 - 容器内应用使用 `lab_app` 账号，仅授权五个业务库，不再使用 root；`MYSQL_PASSWORD` 同时作为 Compose 中 root 和应用账号密码，生产环境应拆分为不同密码。

@@ -264,17 +264,20 @@ public class BookingServiceImpl implements BookingService {
         LocalDateTime now = LocalDateTime.now();
         List<Long> expiredIds = new ArrayList<>();
         bookings.findByStatus("PENDING_APPROVAL").forEach(booking -> {
+            boolean changed = false;
             if (booking.approvalDeadline == null) {
                 LocalDateTime createdDeadline = booking.createdAt.plusMinutes(settings.approvalTimeoutMinutes());
                 booking.approvalDeadline = createdDeadline.isBefore(booking.startTime)
                         ? createdDeadline : booking.startTime;
+                changed = true;
             }
             if (!booking.approvalDeadline.isAfter(now)) {
                 lifecycle.transition(booking, "EXPIRED", null, "Approval hold expired", null);
                 lifecycle.releaseSlots(booking.id, "APPROVAL_TIMEOUT");
                 expiredIds.add(booking.id);
+                changed = true;
             }
-            bookings.save(booking);
+            if (changed) bookings.save(booking);
         });
         expiredIds.forEach(id -> approvals.closePending(id, "EXPIRED"));
     }

@@ -33,6 +33,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     public Map<String, String> update(String key, String value, HttpServletRequest request) {
         roleGuard.requireSystemAdmin(request);
         if (key == null || key.isBlank() || key.length() > 100 || value == null) throw new BusinessException("INVALID_ARGUMENT", "Config key and value are required", HttpStatus.BAD_REQUEST);
+        if (value.length() > 500) throw new BusinessException("INVALID_ARGUMENT", "配置值不能超过 500 个字符", HttpStatus.BAD_REQUEST);
         SystemConfig item = configs.findByConfigKey(key).orElseGet(SystemConfig::new);
         String normalized = value.trim();
         if ("INT".equalsIgnoreCase(item.valueType) || key.endsWith("_minutes") || key.endsWith("_days") || key.endsWith("_count") || key.endsWith("_duration")) {

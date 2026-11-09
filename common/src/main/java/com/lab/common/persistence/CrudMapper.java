@@ -3,6 +3,8 @@ package com.lab.common.persistence;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfo;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.lab.common.exception.BusinessException;
+import org.springframework.http.HttpStatus;
 
 import java.lang.reflect.Field;
 import java.util.List;
@@ -11,9 +13,13 @@ import java.util.Optional;
 /** Compatibility facade that keeps service code concise while using MyBatis-Plus mappers. */
 public interface CrudMapper<T> extends BaseMapper<T> {
     default T save(T entity) {
-        int affected = entityId(entity) == null ? insert(entity) : updateById(entity);
+        Object id = entityId(entity);
+        int affected = id == null ? insert(entity) : updateById(entity);
         if (affected != 1) {
-            throw new IllegalStateException("Persistence update was rejected, possibly because the record changed concurrently");
+            if (id == null) {
+                throw new BusinessException("PERSISTENCE_FAILED", "Persistence insert was rejected", HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+            throw new BusinessException("CONCURRENT_UPDATE", "The record was modified by someone else, please retry", HttpStatus.CONFLICT);
         }
         return entity;
     }

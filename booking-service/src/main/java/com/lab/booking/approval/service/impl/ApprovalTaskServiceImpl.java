@@ -74,6 +74,8 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         if (Objects.equals(task.applicantUserId, userId)) {
             throw new BusinessException("SELF_APPROVAL_FORBIDDEN", "Approver cannot approve own booking", HttpStatus.FORBIDDEN);
         }
+        String requestId = Objects.toString(request.getAttribute("X-Request-Id"), "");
+        if (!requestId.isBlank() && records.findByRequestIdAndTaskId(requestId, task.id).isPresent()) return task;
         if (!"PENDING".equals(task.status)) {
             throw new BusinessException("INVALID_STATUS", "Approval task has already been processed", HttpStatus.UNPROCESSABLE_ENTITY);
         }
@@ -91,8 +93,6 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         if (normalizedComment != null && normalizedComment.length() > 500) {
             throw new BusinessException("INVALID_ARGUMENT", "审批说明不能超过 500 个字符", HttpStatus.BAD_REQUEST);
         }
-        String requestId = Objects.toString(request.getAttribute("X-Request-Id"), "");
-        if (!requestId.isBlank() && records.findByRequestIdAndTaskId(requestId, task.id).isPresent()) return task;
         String decision = "approve".equals(action) ? "APPROVED" : "REJECTED";
         try {
             Booking booking = bookings.apply(task.bookingId,

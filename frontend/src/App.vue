@@ -171,6 +171,13 @@ function formatDateTime(date) {
   const timePart = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:00`;
   return `${datePart}T${timePart}`;
 }
+function newIdempotencyKey() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(bytes);
+  else for (let index = 0; index < bytes.length; index++) bytes[index] = Math.floor(Math.random() * 256);
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+}
 function slotDateTime(date, time) {
   const clock = String(time || "").length === 5 ? `${time}:00` : time;
   return `${date}T${clock}`;
@@ -714,7 +721,7 @@ async function createBooking() {
   }
   try {
     await axios.post("/api/v1/bookings", bookingForm.value, {
-      headers: { "Idempotency-Key": crypto.randomUUID() },
+      headers: { "Idempotency-Key": newIdempotencyKey() },
     });
     notice.value = "预约提交成功";
     bookingModalOpen.value = false;
@@ -729,7 +736,7 @@ async function cancel(id) {
     await axios.post(
       `/api/v1/bookings/${id}/cancel`,
       {},
-      { headers: { "Idempotency-Key": crypto.randomUUID() } },
+      { headers: { "Idempotency-Key": newIdempotencyKey() } },
     );
     notice.value = "预约已取消";
     await load();

@@ -41,7 +41,11 @@ public class JwtUserFilter extends OncePerRequestFilter {
                 return;
             }
             Integer currentVersion = tokenVersions.currentVersion(userId);
-            if (currentVersion != null && currentVersion.intValue() != number.intValue()) {
+            if (currentVersion == null) {
+                serviceUnavailable(request, response, "登录状态暂时无法校验，请稍后重试");
+                return;
+            }
+            if (currentVersion.intValue() != number.intValue()) {
                 unauthorized(request, response, "登录已失效，请重新登录");
                 return;
             }
@@ -49,20 +53,29 @@ public class JwtUserFilter extends OncePerRequestFilter {
             request.setAttribute("username", claims.get("username", String.class));
             request.setAttribute("realName", claims.get("realName", String.class));
             request.setAttribute("roles", claims.get("roles"));
-            chain.doFilter(request, response);
         }
         catch (Exception ex) {
             unauthorized(request, response, "登录已失效，请重新登录");
+            return;
         }
+        chain.doFilter(request, response);
     }
 
     private void unauthorized(HttpServletRequest request, HttpServletResponse response, String message) throws IOException {
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        write(request, response, HttpServletResponse.SC_UNAUTHORIZED, "UNAUTHORIZED", message);
+    }
+
+    private void serviceUnavailable(HttpServletRequest request, HttpServletResponse response, String message) throws IOException {
+        write(request, response, HttpServletResponse.SC_SERVICE_UNAVAILABLE, "SERVICE_UNAVAILABLE", message);
+    }
+
+    private void write(HttpServletRequest request, HttpServletResponse response, int status, String code, String message) throws IOException {
+        response.setStatus(status);
         response.setCharacterEncoding("UTF-8");
         response.setContentType("application/json");
         String requestId = Objects.toString(request.getAttribute(RequestIdFilter.HEADER), request.getHeader(RequestIdFilter.HEADER));
         if (requestId == null) requestId = "";
-        response.getWriter().write("{\"code\":\"UNAUTHORIZED\",\"message\":\"" + escape(message)
+        response.getWriter().write("{\"code\":\"" + escape(code) + "\",\"message\":\"" + escape(message)
                 + "\",\"data\":null,\"requestId\":\"" + escape(requestId) + "\"}");
     }
 

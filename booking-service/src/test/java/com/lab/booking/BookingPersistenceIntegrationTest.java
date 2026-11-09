@@ -1,5 +1,7 @@
 package com.lab.booking;
 
+import com.lab.booking.approval.ApprovalRecord;
+import com.lab.booking.approval.ApprovalRecordRepository;
 import com.lab.booking.approval.ApprovalTask;
 import com.lab.booking.approval.ApprovalTaskRepository;
 import org.junit.jupiter.api.Test;
@@ -49,6 +51,8 @@ class BookingPersistenceIntegrationTest {
     @Autowired BookingRepository bookings;
     @Autowired BookingSlotRepository slots;
     @Autowired ApprovalTaskRepository approvalTasks;
+    @Autowired ApprovalRecordRepository approvalRecords;
+    @Autowired BookingStatusHistoryRepository histories;
 
     @Test
     void enforcesUniqueActiveSlotPerResourceAndTime() {
@@ -96,6 +100,47 @@ class BookingPersistenceIntegrationTest {
 
         assertThat(task.id).isNotNull();
         assertThat(approvalTasks.findByBookingIdAndLevel(9L, 1)).isPresent();
+    }
+
+    @Test
+    void persistsApprovalCommentUpToValidationLimit() {
+        String comment = "a".repeat(300);
+
+        ApprovalTask task = new ApprovalTask();
+        task.bookingId = 11L;
+        task.applicantUserId = 1L;
+        task.applicantName = "Tester";
+        task.resourceId = 2L;
+        task.resourceName = "Lab";
+        task.startTime = LocalDateTime.of(2026, 2, 4, 9, 0);
+        task.endTime = LocalDateTime.of(2026, 2, 4, 10, 0);
+        task.level = 1;
+        task.totalLevels = 1;
+        task.approverRole = "TEACHER";
+        task.status = "APPROVED";
+        task.deadline = LocalDateTime.of(2026, 2, 3, 18, 0);
+        task.comment = comment;
+        approvalTasks.save(task);
+
+        ApprovalRecord record = new ApprovalRecord();
+        record.taskId = task.id;
+        record.bookingId = task.bookingId;
+        record.approverId = 9L;
+        record.result = "APPROVED";
+        record.comment = comment;
+        approvalRecords.save(record);
+
+        BookingStatusHistory history = new BookingStatusHistory();
+        history.bookingId = task.bookingId;
+        history.fromStatus = "PENDING_APPROVAL";
+        history.toStatus = "APPROVED";
+        history.operatorId = 9L;
+        history.reason = comment;
+        histories.save(history);
+
+        assertThat(approvalTasks.selectById(task.id).comment).isEqualTo(comment);
+        assertThat(approvalRecords.selectById(record.id).comment).isEqualTo(comment);
+        assertThat(histories.selectById(history.id).reason).isEqualTo(comment);
     }
 
     private Booking booking(Long resourceId, String bookingNo, String requestId, LocalDateTime start, LocalDateTime end) {
