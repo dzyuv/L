@@ -1,14 +1,13 @@
 package com.lab.resource.service.impl;
-import com.lab.resource.entity.*;
-import com.lab.resource.repository.*;
-import com.lab.resource.client.*;
-import com.lab.resource.seed.*;
-import com.lab.resource.controller.*;
-import com.lab.resource.service.*;
+import com.lab.resource.client.BookingClosureClient;
+import com.lab.resource.controller.ClosureController;
+import com.lab.resource.repository.ClosureRepository;
+import com.lab.resource.entity.Resource;
+import com.lab.resource.entity.ResourceClosure;
+import com.lab.resource.repository.ResourceRepository;
 
 import com.lab.common.api.RoleGuard;
 import com.lab.common.exception.BusinessException;
-import com.lab.resource.*;
 import com.lab.resource.controller.ClosureController.ResourceClosureRequest;
 import com.lab.resource.service.ResourceClosureService;
 import jakarta.servlet.http.HttpServletRequest;

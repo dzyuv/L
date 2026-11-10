@@ -1,11 +1,5 @@
 package com.lab.system.repository;
-import com.lab.system.entity.*;
-import com.lab.system.seed.*;
-import com.lab.system.scheduler.*;
-import com.lab.system.config.*;
-import com.lab.system.controller.*;
-import com.lab.system.service.*;
-import com.lab.system.service.impl.*;
+import com.lab.system.entity.OperationLog;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;

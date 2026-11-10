@@ -1,10 +1,12 @@
 package com.lab.resource.seed;
-import com.lab.resource.entity.*;
-import com.lab.resource.repository.*;
-import com.lab.resource.client.*;
-import com.lab.resource.controller.*;
-import com.lab.resource.service.*;
-import com.lab.resource.service.impl.*;
+import com.lab.resource.entity.AssetCategory;
+import com.lab.resource.repository.AssetCategoryRepository;
+import com.lab.resource.entity.Resource;
+import com.lab.resource.repository.ResourceRepository;
+import com.lab.resource.entity.ResourceSchedule;
+import com.lab.resource.entity.ResourceType;
+import com.lab.resource.repository.ResourceTypeRepository;
+import com.lab.resource.repository.ScheduleRepository;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

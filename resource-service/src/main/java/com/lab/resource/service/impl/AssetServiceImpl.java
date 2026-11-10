@@ -1,15 +1,20 @@
 package com.lab.resource.service.impl;
-import com.lab.resource.entity.*;
-import com.lab.resource.repository.*;
-import com.lab.resource.client.*;
-import com.lab.resource.seed.*;
-import com.lab.resource.controller.*;
-import com.lab.resource.service.*;
+import com.lab.resource.entity.Asset;
+import com.lab.resource.entity.AssetCategory;
+import com.lab.resource.repository.AssetCategoryRepository;
+import com.lab.resource.entity.AssetPurchase;
+import com.lab.resource.repository.AssetPurchaseRepository;
+import com.lab.resource.repository.AssetRepository;
+import com.lab.resource.entity.AssetStatusHistory;
+import com.lab.resource.repository.AssetStatusHistoryRepository;
+import com.lab.resource.entity.MaintenanceTicket;
+import com.lab.resource.repository.MaintenanceTicketRepository;
+import com.lab.resource.entity.Resource;
+import com.lab.resource.repository.ResourceRepository;
 
 import com.lab.common.api.RoleGuard;
 import com.lab.common.api.PageQuery;
 import com.lab.common.exception.BusinessException;
-import com.lab.resource.*;
 import com.lab.resource.controller.AssetController;
 import com.lab.resource.service.AssetService;
 import com.baomidou.mybatisplus.core.metadata.IPage;

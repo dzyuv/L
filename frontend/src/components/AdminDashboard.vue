@@ -170,6 +170,18 @@ function show(message, failed = false) {
   noticeTimer = setTimeout(() => { notice.value = ""; }, 5000);
 }
 function apiData(response, fallback = []) { return response.data?.data ?? fallback; }
+function settle(result, apply) {
+  if (result.status !== "fulfilled") return 1;
+  apply(result.value);
+  return 0;
+}
+function showLoadFailures(results) {
+  const failures = results.filter((result) => result.status === "rejected").length;
+  if (failures === 0) return;
+  const firstError = results.find((result) => result.status === "rejected")?.reason;
+  const message = firstError?.response?.data?.message || "管理数据加载失败";
+  show(failures === results.length ? message : "部分管理数据加载失败，已展示其余内容", failures === results.length);
+}
 function statusText(value) {
   return ({ ACTIVE: "正常", DISABLED: "已禁用", LOCKED: "已锁定", PENDING_APPROVAL: "待审批", APPROVED: "已通过", REJECTED: "已驳回", CANCELED: "已取消", CHECKED_IN: "已签到", COMPLETED: "已完成", NO_SHOW: "未签到", EXPIRED: "审批超时", OPEN: "待处理", RESOLVED: "已解决", CONFIRMED: "已确认", DISMISSED: "已撤销", LIFTED: "已解除" })[value] || value;
 }
@@ -280,7 +292,7 @@ async function loadAll() {
   loading.value = true;
   try {
     if (isSystemAdmin.value) {
-      const [userResponse, userStatsResponse, userDirectoryResponse, roleResponse, configResponse, logResponse, logTypeResponse] = await Promise.all([
+      const results = await Promise.allSettled([
         axios.get("/api/v1/admin/users", { params: { page: 1, size: 10, query: query.value.trim() || undefined } }),
         axios.get("/api/v1/admin/users/stats"),
         axios.get("/api/v1/admin/users/directory"),
@@ -289,23 +301,28 @@ async function loadAll() {
         axios.get("/api/v1/admin/operation-logs", { params: { page: 1, size: 20 } }),
         axios.get("/api/v1/admin/operation-logs/types"),
       ]);
-      const userData = apiData(userResponse, {});
-      users.value = userData.items || [];
-      usersTotal.value = Number(userData.total) || 0;
-      usersPage.value = 1;
-      lastLoadedUserPage.value = 1;
-      userStats.value = apiData(userStatsResponse, { total: 0, active: 0 });
-      userDirectory.value = apiData(userDirectoryResponse, []) || [];
-      roles.value = apiData(roleResponse, {}).items || [];
-      configs.value = apiData(configResponse, []);
-      const logData = apiData(logResponse, {});
-      operationLogs.value = logData.items || [];
-      logsTotal.value = Number(logData.total) || 0;
-      logsPage.value = 1;
-      lastLoadedLogPage.value = 1;
-      operationTypes.value = apiData(logTypeResponse, []) || [];
+      settle(results[0], (response) => {
+        const data = apiData(response, {});
+        users.value = data.items || [];
+        usersTotal.value = Number(data.total) || 0;
+        usersPage.value = 1;
+        lastLoadedUserPage.value = 1;
+      });
+      settle(results[1], (response) => { userStats.value = apiData(response, { total: 0, active: 0 }); });
+      settle(results[2], (response) => { userDirectory.value = apiData(response, []) || []; });
+      settle(results[3], (response) => { roles.value = apiData(response, {}).items || []; });
+      settle(results[4], (response) => { configs.value = apiData(response, []); });
+      settle(results[5], (response) => {
+        const data = apiData(response, {});
+        operationLogs.value = data.items || [];
+        logsTotal.value = Number(data.total) || 0;
+        logsPage.value = 1;
+        lastLoadedLogPage.value = 1;
+      });
+      settle(results[6], (response) => { operationTypes.value = apiData(response, []) || []; });
+      showLoadFailures(results);
     } else {
-      const [resourceResponse, typeResponse, bookingResponse, approvalResponse, assetResponse, categoryResponse, ticketResponse, teacherResponse, violationResponse, violationStatsResponse] = await Promise.all([
+      const results = await Promise.allSettled([
         axios.get("/api/v1/resources"), axios.get("/api/v1/admin/resource-types"),
         axios.get("/api/v1/admin/bookings"), axios.get("/api/v1/approvals/mine"),
         axios.get("/api/v1/admin/assets"), axios.get("/api/v1/admin/assets/categories"),
@@ -313,20 +330,23 @@ async function loadAll() {
         axios.get("/api/v1/admin/violations", { params: { page: 1, size: 10 } }),
         axios.get("/api/v1/admin/violations/stats"),
       ]);
-      resources.value = apiData(resourceResponse, []);
-      resourceTypes.value = apiData(typeResponse, []);
-      bookings.value = apiData(bookingResponse, {}).items || [];
-      approvals.value = apiData(approvalResponse, []);
-      assets.value = apiData(assetResponse, {}).items || [];
-      assetCategories.value = apiData(categoryResponse, []);
-      maintenanceTickets.value = apiData(ticketResponse, {}).items || [];
-      teachers.value = apiData(teacherResponse, {}).items || [];
-      const violationData = apiData(violationResponse, {});
-      violations.value = violationData.items || [];
-      violationsTotal.value = Number(violationData.total) || 0;
-      violationsPage.value = 1;
-      lastLoadedViolationPage.value = 1;
-      violationStats.value = apiData(violationStatsResponse, { openCount: 0, userViolations: [] });
+      settle(results[0], (response) => { resources.value = apiData(response, []); });
+      settle(results[1], (response) => { resourceTypes.value = apiData(response, []); });
+      settle(results[2], (response) => { bookings.value = apiData(response, {}).items || []; });
+      settle(results[3], (response) => { approvals.value = apiData(response, []); });
+      settle(results[4], (response) => { assets.value = apiData(response, {}).items || []; });
+      settle(results[5], (response) => { assetCategories.value = apiData(response, []); });
+      settle(results[6], (response) => { maintenanceTickets.value = apiData(response, {}).items || []; });
+      settle(results[7], (response) => { teachers.value = apiData(response, {}).items || []; });
+      settle(results[8], (response) => {
+        const data = apiData(response, {});
+        violations.value = data.items || [];
+        violationsTotal.value = Number(data.total) || 0;
+        violationsPage.value = 1;
+        lastLoadedViolationPage.value = 1;
+      });
+      settle(results[9], (response) => { violationStats.value = apiData(response, { openCount: 0, userViolations: [] }); });
+      showLoadFailures(results);
     }
   } catch (e) { show(e.response?.data?.message || "管理数据加载失败", true); }
   finally { loading.value = false; }

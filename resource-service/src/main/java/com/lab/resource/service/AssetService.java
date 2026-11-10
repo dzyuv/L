@@ -1,12 +1,9 @@
 package com.lab.resource.service;
-import com.lab.resource.entity.*;
-import com.lab.resource.repository.*;
-import com.lab.resource.client.*;
-import com.lab.resource.seed.*;
-import com.lab.resource.controller.*;
-import com.lab.resource.service.impl.*;
+import com.lab.resource.entity.Asset;
+import com.lab.resource.entity.AssetCategory;
+import com.lab.resource.entity.AssetStatusHistory;
+import com.lab.resource.entity.MaintenanceTicket;
 
-import com.lab.resource.*;
 import com.lab.resource.controller.AssetController;
 import com.lab.common.api.PageQuery;
 import jakarta.servlet.http.HttpServletRequest;

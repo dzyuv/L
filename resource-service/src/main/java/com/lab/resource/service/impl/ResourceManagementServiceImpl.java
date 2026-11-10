@@ -1,14 +1,18 @@
 package com.lab.resource.service.impl;
-import com.lab.resource.entity.*;
-import com.lab.resource.repository.*;
-import com.lab.resource.client.*;
-import com.lab.resource.seed.*;
-import com.lab.resource.controller.*;
-import com.lab.resource.service.*;
+import com.lab.resource.repository.ClosureRepository;
+import com.lab.resource.entity.Resource;
+import com.lab.resource.entity.ResourceClosure;
+import com.lab.resource.entity.ResourceManager;
+import com.lab.resource.repository.ResourceManagerRepository;
+import com.lab.resource.repository.ResourceRepository;
+import com.lab.resource.entity.ResourceSchedule;
+import com.lab.resource.entity.ResourceType;
+import com.lab.resource.repository.ResourceTypeRepository;
+import com.lab.resource.repository.ScheduleRepository;
+import com.lab.resource.client.UserLookupClient;
 
 import com.lab.common.api.*;
 import com.lab.common.exception.BusinessException;
-import com.lab.resource.*;
 import com.lab.resource.controller.ResourceController;
 import com.lab.resource.service.ResourceManagementService;
 import jakarta.servlet.http.HttpServletRequest;
