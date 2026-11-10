@@ -1,0 +1,23 @@
+package com.lab.resource.entity;
+import com.lab.resource.repository.*;
+import com.lab.resource.client.*;
+import com.lab.resource.seed.*;
+import com.lab.resource.controller.*;
+import com.lab.resource.service.*;
+import com.lab.resource.service.impl.*;
+
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
+import java.time.LocalDateTime;
+
+@TableName("asset_status_history")
+public class AssetStatusHistory {
+    @TableId(type=IdType.AUTO) public Long id;
+    public Long assetId;
+    public String fromStatus;
+    public String toStatus;
+    public String reason;
+    public Long operatorId;
+    public LocalDateTime createdAt = LocalDateTime.now();
+}

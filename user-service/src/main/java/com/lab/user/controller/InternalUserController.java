@@ -1,11 +1,20 @@
 package com.lab.user.controller;
+import com.lab.user.entity.*;
+import com.lab.user.repository.*;
+import com.lab.user.client.*;
+import com.lab.user.seed.*;
+import com.lab.user.scheduler.*;
+import com.lab.user.security.*;
+import com.lab.user.config.*;
+import com.lab.user.service.*;
+import com.lab.user.service.impl.*;
 
 import com.lab.common.api.ApiResponse;
 import com.lab.common.api.InternalServiceGuard;
 import com.lab.common.api.RequestIdFilter;
 import com.lab.common.exception.BusinessException;
-import com.lab.user.User;
-import com.lab.user.UserRepository;
+import com.lab.user.entity.User;
+import com.lab.user.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;

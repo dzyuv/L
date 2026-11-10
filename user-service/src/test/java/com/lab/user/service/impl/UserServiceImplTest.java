@@ -1,12 +1,21 @@
 package com.lab.user.service.impl;
+import com.lab.user.entity.*;
+import com.lab.user.repository.*;
+import com.lab.user.client.*;
+import com.lab.user.seed.*;
+import com.lab.user.scheduler.*;
+import com.lab.user.security.*;
+import com.lab.user.config.*;
+import com.lab.user.controller.*;
+import com.lab.user.service.*;
 
 import com.lab.common.api.JwtKeyProvider;
 import com.lab.common.exception.BusinessException;
-import com.lab.user.ApprovalReleaseClient;
-import com.lab.user.RefreshTokenRepository;
-import com.lab.user.RoleRepository;
-import com.lab.user.User;
-import com.lab.user.UserRepository;
+import com.lab.user.client.ApprovalReleaseClient;
+import com.lab.user.repository.RefreshTokenRepository;
+import com.lab.user.repository.RoleRepository;
+import com.lab.user.entity.User;
+import com.lab.user.repository.UserRepository;
 import com.lab.user.controller.AuthController;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

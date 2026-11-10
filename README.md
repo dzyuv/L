@@ -25,6 +25,8 @@ deploy/               Dockerfile.service、Prometheus/Grafana 配置
 docs/                 需求、设计、数据流文档
 ```
 
+各服务源码按职责分包，根包只保留启动类：`controller`、`service`、`service/impl`、`repository`、`entity`、`client`、`scheduler`、`seed`、`config`（按需）。`booking-service` 的审批子域保留 `approval/{controller,service,entity,repository}`，Feign 接口与 Wrapper 统一放在 `client`。
+
 ## 环境要求
 
 - JDK 17 或 21（项目以 Java 17 为目标版本）

@@ -1,0 +1,23 @@
+package com.lab.resource.entity;
+import com.lab.resource.repository.*;
+import com.lab.resource.client.*;
+import com.lab.resource.seed.*;
+import com.lab.resource.controller.*;
+import com.lab.resource.service.*;
+import com.lab.resource.service.impl.*;
+import com.baomidou.mybatisplus.annotation.*;
+import java.time.LocalDate;
+import java.time.LocalTime;
+@TableName("resource_schedule") public class ResourceSchedule{
+    @TableId(type=IdType.AUTO) public Long id;
+    public Long resourceId;
+    public int weekday;
+    public LocalTime openTime;
+    public LocalTime closeTime;
+    public boolean enabled=true;
+    public int maxDurationMinutes=120;
+    public int slotMinutes=30;
+    public LocalDate effectiveFrom;
+    public LocalDate effectiveTo;
+    @Version public int version;
+}

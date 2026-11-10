@@ -1,6 +1,12 @@
 package com.lab.resource.controller;
+import com.lab.resource.entity.*;
+import com.lab.resource.repository.*;
+import com.lab.resource.client.*;
+import com.lab.resource.seed.*;
+import com.lab.resource.service.*;
+import com.lab.resource.service.impl.*;
 
-import com.lab.resource.Resource;
+import com.lab.resource.entity.Resource;
 import com.lab.resource.service.ResourceManagementService;
 import com.lab.common.api.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;

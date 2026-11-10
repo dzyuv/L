@@ -1,8 +1,15 @@
 package com.lab.system.service.impl;
+import com.lab.system.entity.*;
+import com.lab.system.repository.*;
+import com.lab.system.seed.*;
+import com.lab.system.scheduler.*;
+import com.lab.system.config.*;
+import com.lab.system.controller.*;
+import com.lab.system.service.*;
 
 import com.lab.system.service.SystemConfigService;
-import com.lab.system.SystemConfig;
-import com.lab.system.SystemConfigRepository;
+import com.lab.system.entity.SystemConfig;
+import com.lab.system.repository.SystemConfigRepository;
 import com.lab.system.service.OperationLogService;
 import com.lab.common.api.RoleGuard;
 import jakarta.servlet.http.HttpServletRequest;

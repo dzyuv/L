@@ -1,4 +1,11 @@
 package com.lab.system.service.impl;
+import com.lab.system.entity.*;
+import com.lab.system.repository.*;
+import com.lab.system.seed.*;
+import com.lab.system.scheduler.*;
+import com.lab.system.config.*;
+import com.lab.system.controller.*;
+import com.lab.system.service.*;
 
 import com.lab.common.api.AdminOperationLogger;
 import com.lab.common.api.InternalServiceGuard;
@@ -6,8 +13,8 @@ import com.lab.common.api.PageQuery;
 import com.lab.common.api.RequestIdFilter;
 import com.lab.common.api.RoleGuard;
 import com.lab.common.exception.BusinessException;
-import com.lab.system.OperationLog;
-import com.lab.system.OperationLogRepository;
+import com.lab.system.entity.OperationLog;
+import com.lab.system.repository.OperationLogRepository;
 import com.lab.system.service.OperationLogService;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import jakarta.servlet.http.HttpServletRequest;

@@ -1,0 +1,25 @@
+package com.lab.system.entity;
+import com.lab.system.repository.*;
+import com.lab.system.seed.*;
+import com.lab.system.scheduler.*;
+import com.lab.system.config.*;
+import com.lab.system.controller.*;
+import com.lab.system.service.*;
+import com.lab.system.service.impl.*;
+
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
+import java.time.LocalDateTime;
+
+@TableName("system_config")
+public class SystemConfig {
+    @TableId(type=IdType.AUTO) public Long id;
+    public String configKey;
+    public String configValue;
+    public String valueType = "STRING";
+    public String description;
+    public Long updatedBy;
+    public LocalDateTime updatedAt = LocalDateTime.now();
+    public int version;
+}
