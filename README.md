@@ -301,17 +301,25 @@ docker compose down -v            # 停止并删除数据卷（会清空数据�
 mvn test
 ```
 
-当前单元测试覆盖：鉴权、错误信息、预约生命周期，以及创建预约时的配额上限、时间冲突、日时长限制与资源占用冲突。
+当前测试覆盖：鉴权、错误信息、预约生命周期、创建预约时的配额上限/时间冲突/日时长限制/资源占用冲突，以及用户与违约分页统计、Feign 错误解码和内部令牌头。
 
 集成测试使用 Testcontainers + MySQL 验证真实 SQL 约束与持久化行为；Docker 不可用时自动跳过。
 
 > Windows + Docker Desktop 默认使用 `dockerDesktopLinuxEngine` 管道，Testcontainers 不会自动发现。运行集成测试前设置：
 > `DOCKER_HOST=npipe:////./pipe/dockerDesktopLinuxEngine`。项目已在 Surefire 中固定 docker-java API 版本，避免 Docker 29 拒绝旧版本请求。
 
+### 当前验证状态
+
+- `mvn -B test`（Docker 可用时）：84 个测试通过，0 失败，0 跳过；4 个 Testcontainers 集成测试真实执行。
+- 全服务 Compose 冒烟（2026-11-10）：所有后端服务健康；已验证学生登录、创建预约、闭馆取消、教师角色变更和管理员操作日志，以及 booking → resource、resource → booking、user → resource、user → booking 四个方向的 Feign 调用。
+- `npm run build`：通过。
+- 管理首页已使用 `Promise.allSettled`，单个统计、目录或日志类型接口失败时保留其余数据。
+
 ## 已知待办
 
-- 现有单元测试覆盖创建预约的配额/冲突规则；Testcontainers 集成测试覆盖预约持久化、时段唯一约束与审批任务持久化，审批状态机等跨服务流程仍需补充集成测试。
+- 现有单元测试覆盖创建预约的配额/冲突规则；Testcontainers 集成测试覆盖预约持久化、时段唯一约束与审批任务持久化，审批状态机等跨服务流程仍需补充自动化集成测试。
 - 列表接口支持 `page`/`size` 参数；管理页的用户表、管理员日志和违约记录已使用服务端分页，报修、资产分组和预约统计仍依赖一次加载最多 1000 条。
-- 预约创建仍在事务内调用 resource-service。
-- 资源闭馆到预约取消/恢复仍为同步调用。
+- 全服务 Compose 冒烟已通过，但浏览器内的分页、筛选和弹窗交互仍需人工点击验证。
+- 多标签页同时刷新会竞争同一个 refresh token；预约路由的负责人资格缓存 30 秒。
+- 预约创建仍在事务内调用 resource-service；资源闭馆到预约取消/恢复仍为同步调用。
 - 服务间调用默认指向 `localhost`，容器化部署时需要设置上表中的 `*_SERVICE_URL`。
