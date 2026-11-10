@@ -19,6 +19,7 @@ public interface OperationLogRepository extends CrudMapper<OperationLog> {
             String like = "%" + keyword + "%";
             wrapper.and(condition -> condition.like("operation_type", keyword)
                     .or().like("target_type", keyword)
+                    .or().like("target_id", keyword)
                     .or().like("operator_id", keyword)
                     .or().like("request_id", keyword)
                     .or().like("reason", keyword)

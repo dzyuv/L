@@ -21,6 +21,12 @@ spring:
       password: ${NACOS_PASSWORD:nacos}
       group: LAB_BOOKING
       file-extension: yaml
+  cloud.openfeign:
+    client:
+      config:
+        default:
+          connectTimeout: 2000
+          readTimeout: 5000
   datasource:
     url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/lab_user?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USERNAME:root}

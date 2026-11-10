@@ -4,7 +4,7 @@
 
 ## 技术栈
 
-- Java 17、Spring Boot 3.3.5、Spring Cloud 2023.0.3、Spring Cloud Alibaba 2023.0.3.2
+- Java 17、Spring Boot 3.3.5、Spring Cloud 2023.0.3、Spring Cloud Alibaba 2023.0.3.2、Spring Cloud OpenFeign
 - MyBatis-Plus、MySQL 8、Nacos
 - Vue 3 + Vite + Axios
 
@@ -220,9 +220,10 @@ docker compose down -v            # 停止并删除数据卷（会清空数据�
 
 ## 远程调用韧性
 
-- 所有服务间 `RestClient` 统一使用 2 秒连接超时、5 秒读取超时。
-- 网络类异常（`ResourceAccessException`）最多重试 1 次（总计 2 次尝试）。
-- 使用 Resilience4j 熔断器：10 次滑动窗口、失败率 50% 打开、打开 10 秒后进入半开放。
+- 业务服务间调用使用 OpenFeign（`@FeignClient`），公共的令牌版本、运行时配置和审计调用仍使用 `RestClient`。
+- OpenFeign 与 `RestClient` 统一使用 2 秒连接超时、5 秒读取超时。
+- 网络类异常（`feign.RetryableException` / `ResourceAccessException`）最多重试 1 次（总计 2 次尝试）。
+- 使用 Resilience4j 熔断器：10 次滑动窗口、失败率 50% 打开、打开 10 秒后进入半开放；下游业务异常不计入熔断。
 - 管理员审计日志在数据库事务提交后发送，避免远程调用拖长业务事务。
 
 > 资源闭馆到预约取消/恢复仍为同步调用。

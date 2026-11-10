@@ -25,6 +25,12 @@ spring:
       password: ${NACOS_PASSWORD:nacos}
       group: LAB_BOOKING
       file-extension: yaml
+  cloud.openfeign:
+    client:
+      config:
+        default:
+          connectTimeout: 2000
+          readTimeout: 5000
   datasource:
     url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/lab_booking?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USERNAME:root}
@@ -87,15 +93,16 @@ logging:
 
 resilience4j:
   retry:
-    retryAspectOrder: 1
+    retryAspectOrder: 2
     configs:
       default:
         maxAttempts: 2
         waitDuration: 200ms
         retryExceptions:
           - org.springframework.web.client.ResourceAccessException
+          - feign.RetryableException
   circuitbreaker:
-    circuitBreakerAspectOrder: 2
+    circuitBreakerAspectOrder: 1
     configs:
       default:
         slidingWindowSize: 10
@@ -103,3 +110,5 @@ resilience4j:
         failureRateThreshold: 50
         waitDurationInOpenState: 10s
         permittedNumberOfCallsInHalfOpenState: 3
+        ignoreExceptions:
+          - com.lab.common.exception.BusinessException
